@@ -1,0 +1,74 @@
+# ================================
+# Builder Stage
+# ================================
+FROM python:3.13-slim-bookworm AS builder
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libssl-dev \
+    libffi-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_PROJECT_ROOT=/opt/project \
+    UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+WORKDIR /opt/project
+COPY pyproject.toml README.md uv.lock alembic.ini ./
+COPY src ./src
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-dev
+COPY compose/app/dev.sh /tmp/dev.sh
+COPY compose/app/prod.py /tmp/prod.py
+
+# ================================
+# Development Runtime Stage
+# ================================
+FROM python:3.13-slim-bookworm AS dev
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:${PATH}" \
+    PYTHONPATH="/app/src"
+
+WORKDIR /app
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /opt/project /app
+COPY --from=builder /tmp/dev.sh /dev.sh
+RUN chmod +x /dev.sh
+
+CMD ["/dev.sh"]
+
+# ================================
+# Production Runtime Stage
+# ================================
+FROM gcr.io/distroless/cc-debian12:nonroot AS prod
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:${PATH}" \
+    PYTHONPATH="/app/src"
+
+COPY --from=builder /usr/local/bin/python3.13 /usr/local/bin/python3.13
+COPY --from=builder /usr/local/bin/python3 /usr/local/bin/python3
+COPY --from=builder /usr/local/lib/python3.13 /usr/local/lib/python3.13
+COPY --from=builder /usr/local/lib/libpython3.13.so.1.0 /usr/local/lib/libpython3.13.so.1.0
+
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libssl.so.3* /usr/lib/x86_64-linux-gnu/
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libcrypto.so.3* /usr/lib/x86_64-linux-gnu/
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libffi.so.8* /usr/lib/x86_64-linux-gnu/
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libz.so.1* /usr/lib/x86_64-linux-gnu/
+COPY --from=builder /lib/x86_64-linux-gnu/libgcc_s.so.1* /lib/x86_64-linux-gnu/
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libexpat.so.1* /usr/lib/x86_64-linux-gnu/
+
+COPY --from=builder /opt/venv /opt/venv
+COPY --from=builder /opt/project /app
+COPY --from=builder /tmp/prod.py /usr/local/bin/prod.py
+
+WORKDIR /app
+ENTRYPOINT ["python3", "/usr/local/bin/prod.py"]

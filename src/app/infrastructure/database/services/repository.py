@@ -1,0 +1,91 @@
+from typing import Any, AsyncGenerator, Generic
+
+from sqlalchemy import asc, delete, desc, func, select, update
+from sqlalchemy.engine import Result
+
+from ....infrastructure.application import (
+    DatabaseError,
+    NotFoundError,
+    UnprocessableError,
+)
+from ..tables import ConcreteTable
+from .session import Session
+
+
+class BaseRepository(Session, Generic[ConcreteTable]):
+    schema_class: type[ConcreteTable]
+
+    def __init__(self) -> None:
+        super().__init__()
+        if not getattr(self, "schema_class", None):
+            raise UnprocessableError(message="schema_class is required")
+
+    async def _update(
+        self, key: str, value: Any, payload: dict[str, Any]
+    ) -> ConcreteTable:
+        query = (
+            update(self.schema_class)
+            .where(getattr(self.schema_class, key) == value)
+            .values(payload)
+            .returning(self.schema_class)
+        )
+        result: Result = await self.execute(query)
+        await self._session.flush()
+
+        schema = result.scalar_one_or_none()
+        if not schema:
+            raise DatabaseError
+        return schema
+
+    async def _get(self, key: str, value: Any) -> ConcreteTable:
+        query = select(self.schema_class).where(
+            getattr(self.schema_class, key) == value
+        )
+        result: Result = await self.execute(query)
+        schema = result.scalars().one_or_none()
+        if not schema:
+            raise NotFoundError
+        return schema
+
+    async def count(self) -> int:
+        result: Result = await self.execute(func.count(self.schema_class.id))
+        value = result.scalar()
+        if not isinstance(value, int):  # pragma: no cover - sanity
+            raise UnprocessableError(message=f"Count returned {value}")
+        return value
+
+    async def _first(self, by: str = "id") -> ConcreteTable:
+        result: Result = await self.execute(
+            select(self.schema_class).order_by(asc(by)).limit(1)
+        )
+        schema = result.scalar_one_or_none()
+        if not schema:
+            raise NotFoundError
+        return schema
+
+    async def _last(self, by: str = "id") -> ConcreteTable:
+        result: Result = await self.execute(
+            select(self.schema_class).order_by(desc(by)).limit(1)
+        )
+        schema = result.scalar_one_or_none()
+        if not schema:
+            raise NotFoundError
+        return schema
+
+    async def _save(self, payload: dict[str, Any]) -> ConcreteTable:
+        schema = self.schema_class(**payload)
+        self._session.add(schema)
+        await self._session.flush()
+        await self._session.refresh(schema)
+        return schema
+
+    async def _all(self) -> AsyncGenerator[ConcreteTable, None]:
+        result: Result = await self.execute(select(self.schema_class))
+        for schema in result.scalars().all():
+            yield schema
+
+    async def delete(self, id_: int) -> None:
+        await self.execute(
+            delete(self.schema_class).where(self.schema_class.id == id_)
+        )
+        await self._session.flush()
