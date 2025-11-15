@@ -28,6 +28,8 @@ dependencies = [
   "aiosmtplib>=3.0.1",
   "alembic>=1.13.2",
   "starlette>=0.37.2",
+  "tortoise-orm>=0.20.0",
+  "aerich[toml]>=0.9.2"
 ]
 
 [project.optional-dependencies]
@@ -203,3 +205,8 @@ omit = [
   "settings.py",
   "manage.py",
 ]
+
+[tool.aerich]
+tortoise_orm = "src.app.infrastructure.database.services.engine.TORTOISE_ORM"
+location = "./src/app/infrastructure/database/migrations"
+src_folder = "./."

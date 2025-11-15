@@ -39,7 +39,7 @@ services:
     build:
       context: .
       dockerfile: compose/app/Dockerfile
-      target: prod
+      target: dev
       platforms:
         - linux/amd64
     env_file:
@@ -56,6 +56,7 @@ services:
       - "8000:8000"
     volumes:
       - ./logs:/app/logs
+      - ./src/app:/app/src/app
 
 volumes:
   postgres-data:
