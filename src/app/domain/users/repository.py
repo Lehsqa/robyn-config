@@ -1,8 +1,5 @@
 from typing import Any, AsyncGenerator
 
-from tortoise.expressions import Q
-
-from ...infrastructure.application import NotFoundError
 from ...infrastructure.database import BaseRepository, UsersTable
 from .entities import UserFlat, UserUncommitted
 
@@ -19,12 +16,8 @@ class UsersRepository(BaseRepository[UsersTable]):
         return UserFlat.model_validate(instance)
 
     async def get_by_login(self, login: str) -> UserFlat:
-        schema = await self.schema_class.filter(
-            Q(username=login) | Q(email=login)
-        ).using_db(self._connection).first()
-        if not schema:
-            raise NotFoundError
-        return UserFlat.model_validate(schema)
+        instance = await self._get(key="username", value=login)
+        return UserFlat.model_validate(instance)
 
     async def create(self, schema: UserUncommitted) -> UserFlat:
         instance = await self._save(schema.model_dump())

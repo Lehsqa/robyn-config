@@ -3,7 +3,6 @@ set -euo pipefail
 
 export PYTHONPATH="src:${PYTHONPATH:-}"
 
-# alembic upgrade head
 if ! init_output=$(aerich init-db 2>&1); then
   if [[ "$init_output" != *"App 'models' is already initialized."* ]]; then
     printf '%s\n' "$init_output" >&2

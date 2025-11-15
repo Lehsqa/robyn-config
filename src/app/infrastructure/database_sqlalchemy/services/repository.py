@@ -19,6 +19,14 @@ class BaseRepository(Session, Generic[ConcreteTable]):
         super().__init__()
         if not getattr(self, "schema_class", None):
             raise UnprocessableError(message="schema_class is required")
+    
+    async def _filter(self, **filters: Any) -> ConcreteTable:
+        query = select(self.schema_class).filter_by(**filters)
+        result: Result = await self.execute(query)
+        schema = result.scalar_one_or_none()
+        if not schema:
+            raise NotFoundError
+        return schema
 
     async def _update(
         self, key: str, value: Any, payload: dict[str, Any]

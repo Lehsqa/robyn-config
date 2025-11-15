@@ -37,7 +37,6 @@ def _run(cmd: list[str], *, ignore_existing: bool = False) -> None:
 
 
 def main() -> None:
-    # _run(["alembic", "upgrade", "head"])
     _run(["aerich", "init-db"], ignore_existing=True)
     _run(["aerich", "upgrade"])
 

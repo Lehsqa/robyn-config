@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, AsyncGenerator, Generic
 
+from tortoise.expressions import Q
 from tortoise.queryset import QuerySet
 
 from ....infrastructure.application import (
@@ -24,8 +25,12 @@ class BaseRepository(Session, Generic[ConcreteTable]):
     def _query(self) -> QuerySet[ConcreteTable]:
         return self.schema_class.all().using_db(self._connection)
 
-    def _filter(self, **filters: Any) -> QuerySet[ConcreteTable]:
-        return self.schema_class.filter(**filters).using_db(self._connection)
+    def _filter(
+        self, *expressions: Q, **filters: Any
+    ) -> QuerySet[ConcreteTable]:
+        return self.schema_class.filter(*expressions, **filters).using_db(
+            self._connection
+        )
 
     async def _update(
         self, key: str, value: Any, payload: dict[str, Any]
