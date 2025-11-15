@@ -1,8 +1,7 @@
-from __future__ import annotations
-
 from typing import Any, AsyncGenerator, Generic
 
-from tortoise.queryset import QuerySet
+from sqlalchemy import asc, delete, desc, func, select, update
+from sqlalchemy.engine import Result
 
 from ....infrastructure.application import (
     DatabaseError,
@@ -21,57 +20,72 @@ class BaseRepository(Session, Generic[ConcreteTable]):
         if not getattr(self, "schema_class", None):
             raise UnprocessableError(message="schema_class is required")
 
-    def _query(self) -> QuerySet[ConcreteTable]:
-        return self.schema_class.all().using_db(self._connection)
-
-    def _filter(self, **filters: Any) -> QuerySet[ConcreteTable]:
-        return self.schema_class.filter(**filters).using_db(self._connection)
-
     async def _update(
         self, key: str, value: Any, payload: dict[str, Any]
     ) -> ConcreteTable:
-        filters = {key: value}
-        updated = await self._filter(**filters).update(**payload)
-        if not updated:
-            raise DatabaseError
-        schema = await self._filter(**filters).first()
+        query = (
+            update(self.schema_class)
+            .where(getattr(self.schema_class, key) == value)
+            .values(payload)
+            .returning(self.schema_class)
+        )
+        result: Result = await self.execute(query)
+        await self._session.flush()
+
+        schema = result.scalar_one_or_none()
         if not schema:
             raise DatabaseError
         return schema
 
     async def _get(self, key: str, value: Any) -> ConcreteTable:
-        schema = await self._filter(**{key: value}).first()
+        query = select(self.schema_class).where(
+            getattr(self.schema_class, key) == value
+        )
+        result: Result = await self.execute(query)
+        schema = result.scalars().one_or_none()
         if not schema:
             raise NotFoundError
         return schema
 
     async def count(self) -> int:
-        value = await self._query().count()
+        result: Result = await self.execute(func.count(self.schema_class.id))
+        value = result.scalar()
         if not isinstance(value, int):  # pragma: no cover - sanity
             raise UnprocessableError(message=f"Count returned {value}")
         return value
 
     async def _first(self, by: str = "id") -> ConcreteTable:
-        schema = await self._query().order_by(by).first()
+        result: Result = await self.execute(
+            select(self.schema_class).order_by(asc(by)).limit(1)
+        )
+        schema = result.scalar_one_or_none()
         if not schema:
             raise NotFoundError
         return schema
 
     async def _last(self, by: str = "id") -> ConcreteTable:
-        schema = await self._query().order_by(f"-{by}").first()
+        result: Result = await self.execute(
+            select(self.schema_class).order_by(desc(by)).limit(1)
+        )
+        schema = result.scalar_one_or_none()
         if not schema:
             raise NotFoundError
         return schema
 
     async def _save(self, payload: dict[str, Any]) -> ConcreteTable:
         schema = self.schema_class(**payload)
-        await schema.save(using_db=self._connection)
-        await schema.refresh_from_db(using_db=self._connection)
+        self._session.add(schema)
+        await self._session.flush()
+        await self._session.refresh(schema)
         return schema
 
     async def _all(self) -> AsyncGenerator[ConcreteTable, None]:
-        async for schema in self._query():
+        result: Result = await self.execute(select(self.schema_class))
+        for schema in result.scalars().all():
             yield schema
 
     async def delete(self, id_: int) -> None:
-        await self._filter(id=id_).delete()
+        await self.execute(
+            delete(self.schema_class).where(self.schema_class.id == id_)
+        )
+        await self._session.flush()

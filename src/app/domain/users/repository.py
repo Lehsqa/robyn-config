@@ -1,8 +1,8 @@
 from typing import Any, AsyncGenerator
 
-from sqlalchemy import Result, select, update
+from tortoise.expressions import Q
 
-from ...infrastructure.application import DatabaseError, NotFoundError
+from ...infrastructure.application import NotFoundError
 from ...infrastructure.database import BaseRepository, UsersTable
 from .entities import UserFlat, UserUncommitted
 
@@ -19,12 +19,9 @@ class UsersRepository(BaseRepository[UsersTable]):
         return UserFlat.model_validate(instance)
 
     async def get_by_login(self, login: str) -> UserFlat:
-        query = select(self.schema_class).where(
-            (getattr(self.schema_class, "username") == login)
-            | (getattr(self.schema_class, "email") == login)
-        )
-        result: Result = await self.execute(query)
-        schema = result.scalars().one_or_none()
+        schema = await self.schema_class.filter(
+            Q(username=login) | Q(email=login)
+        ).using_db(self._connection).first()
         if not schema:
             raise NotFoundError
         return UserFlat.model_validate(schema)
@@ -36,15 +33,5 @@ class UsersRepository(BaseRepository[UsersTable]):
     async def update(
         self, attr: str, value: Any, payload: dict[str, Any]
     ) -> UserFlat:
-        query = (
-            update(self.schema_class)
-            .where(getattr(self.schema_class, attr) == value)
-            .values(payload)
-            .returning(self.schema_class)
-        )
-        result: Result = await self.execute(query)
-        await self._session.flush()
-        schema = result.scalar_one_or_none()
-        if not schema:
-            raise DatabaseError
+        schema = await self._update(attr, value, payload)
         return UserFlat.model_validate(schema)
