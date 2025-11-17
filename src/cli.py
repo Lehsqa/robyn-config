@@ -108,12 +108,12 @@ def _copy_template(destination: Path, orm_type: str) -> None:
     _copy_common_files(destination, orm_type)
 
 
-@click.group()
+@click.group(name="robyn-config")
 def cli() -> None:
-    """Robyn CLI."""
+    """Robyn configuration utilities."""
 
 
-@cli.command("robyn-init")
+@cli.command("create")
 @click.option(
     "-orm",
     "--orm",
@@ -123,7 +123,7 @@ def cli() -> None:
     help="Select the ORM implementation to copy (sqlalchemy or tortoise).",
 )
 @click.argument("destination", required=False)
-def robyn_init(destination: str | None, orm_type: str) -> None:
+def create(destination: str | None, orm_type: str) -> None:
     """Copy the template into DESTINATION with ORM-specific adjustments."""
     normalized_orm = orm_type.lower()
     if normalized_orm not in ORM_CHOICES:

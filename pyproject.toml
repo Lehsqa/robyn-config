@@ -29,8 +29,12 @@ dependencies = [
   "alembic>=1.13.2",
   "starlette>=0.37.2",
   "tortoise-orm>=0.20.0",
-  "aerich[toml]>=0.9.2"
+  "aerich[toml]>=0.9.2",
+  "click>=0.1.0"
 ]
+
+[project.scripts]
+robyn-config = "cli:cli"
 
 [project.optional-dependencies]
 dev = [
