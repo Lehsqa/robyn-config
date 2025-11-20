@@ -5,11 +5,11 @@ from robyn import Request, Response, Robyn
 from robyn.authentication import AuthenticationHandler, BearerGetter, Identity
 from starlette import status
 
-from ..authentication import AuthProvider
+from ..authentication import AuthProvider, pwd_context
 from ..config import settings
 from ..models import UsersRepository, transaction
-from ..utils import AuthenticationError, json_response
-from .contracts import LoginRequestBody, TokenResponse
+from ..utils import AuthenticationError, NotFoundError, json_response
+from .contracts import LoginRequestBody, TokenInfo, TokenResponse
 from .helpers import parse_body
 
 
@@ -43,6 +43,21 @@ def decode_access_token(token: str) -> dict:
     except jwt.PyJWTError as exc:
         raise AuthenticationError(message="Invalid token") from exc
     return payload
+
+
+def require_user_id(request: Request) -> int:
+    identity: Identity | None = getattr(request, "identity", None)
+    if identity is None:
+        raise AuthenticationError(message="Authentication required")
+
+    sub = identity.claims.get("sub")
+    if sub is None:
+        raise AuthenticationError(message="Subject claim missing")
+
+    try:
+        return int(sub)
+    except (TypeError, ValueError) as exc:
+        raise AuthenticationError(message="Subject claim invalid") from exc
 
 
 class JWTAuthenticationHandler(AuthenticationHandler):
@@ -83,15 +98,47 @@ def register(app: Robyn) -> None:
             repo = UsersRepository()
             try:
                 user = await repo.get_by_login(login=payload.login)
-            except Exception: # NotFoundError
+            except NotFoundError:
                 raise AuthenticationError(message="Invalid credentials")
-        
-        # Verify password (simplified, assuming plain text or handled elsewhere for this demo)
-        # In real app, use pwd_context.verify(payload.password, user.password)
+
+        if not user.is_active:
+            raise AuthenticationError(message="Account not activated")
+
+        if not user.password:
+            raise AuthenticationError(message="Password not set")
+        if not pwd_context.verify(
+            payload.password, user.password, scheme="bcrypt"
+        ):
+            raise AuthenticationError(message="Invalid credentials")
         
         token = create_access_token(user.id, user.email, user.username)
         response = TokenResponse(access_token=token)
         return json_response(
             payload=response.model_dump(by_alias=True),
+            status_code=status.HTTP_200_OK,
+        )
+
+    @app.get("/auth/me", auth_required=True)
+    async def me(request: Request) -> Response:
+        identity: Identity | None = getattr(request, "identity", None)
+        if identity is None:
+            raise AuthenticationError(message="Authentication required")
+
+        claims = identity.claims
+        issued_at = datetime.fromtimestamp(
+            float(claims.get("iat", "0")), tz=timezone.utc
+        )
+        expires_at = datetime.fromtimestamp(
+            float(claims.get("exp", "0")), tz=timezone.utc
+        )
+        info = TokenInfo(
+            subject=claims.get("sub", ""),
+            email=claims.get("email", ""),
+            username=claims.get("username", ""),
+            issued_at=issued_at,
+            expires_at=expires_at,
+        )
+        return json_response(
+            payload=info.model_dump(by_alias=True),
             status_code=status.HTTP_200_OK,
         )

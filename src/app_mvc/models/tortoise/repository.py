@@ -93,8 +93,13 @@ class UsersRepository(BaseRepository[UsersTable]):
         return UserFlat.model_validate(instance)
 
     async def get_by_login(self, login: str) -> UserFlat:
-        instance = await self._get(key="username", value=login)
-        return UserFlat.model_validate(instance)
+        for field in ("username", "email"):
+            try:
+                instance = await self._get(key=field, value=login)
+                return UserFlat.model_validate(instance)
+            except NotFoundError:
+                continue
+        raise NotFoundError
 
     async def create(self, schema: UserUncommitted) -> UserFlat:
         instance = await self._save(schema.model_dump())

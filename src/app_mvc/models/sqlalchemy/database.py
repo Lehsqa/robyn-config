@@ -59,3 +59,23 @@ async def transaction() -> AsyncGenerator[AsyncSession, None]:
         raise DatabaseError(message=str(exc)) from exc
     finally:
         await session.close()
+
+
+from contextvars import ContextVar
+
+CTX_SESSION: ContextVar[AsyncSession] = ContextVar(
+    "session", default=create_session()
+)
+
+
+class Session:
+    _ERRORS = (IntegrityError, InvalidRequestError)
+
+    def __init__(self) -> None:
+        self._session: AsyncSession = CTX_SESSION.get()
+
+    async def execute(self, query):
+        try:
+            return await self._session.execute(query)
+        except self._ERRORS as exc:
+            raise DatabaseError(message=str(exc)) from exc

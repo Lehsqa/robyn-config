@@ -96,3 +96,48 @@ async def transaction() -> AsyncGenerator[BaseDBAsyncClient, None]:
         except (IntegrityError, OperationalError) as exc:
             logger.error(f"Rolling back changes: {exc}")
             raise DatabaseError(message=str(exc)) from exc
+
+
+from contextvars import ContextVar
+from typing import Sequence
+from tortoise import connections
+from tortoise.backends.base.client import BaseDBAsyncClient
+
+CTX_CONNECTION: ContextVar[BaseDBAsyncClient | None] = ContextVar(
+    "tortoise_connection", default=None
+)
+
+
+class Session:
+    _ERRORS = (OperationalError,)
+
+    def __init__(self) -> None:
+        connection = CTX_CONNECTION.get()
+        if connection is None:
+            # Fallback to default connection if not in transaction context
+            # This is a simplification for MVC; ideally we should be in a transaction
+            try:
+                connection = connections.get("default")
+            except KeyError:
+                 pass
+        
+        if connection is None:
+             # If still None, we might not be initialized or in a weird state
+             # For now, let's try to get it again or raise
+             pass
+
+        self._connection: BaseDBAsyncClient = connection
+        # Maintain SQLAlchemy parity for downstream consumers.
+        self._session: BaseDBAsyncClient = connection
+
+    async def execute(
+        self, query: str, values: Sequence[Any] | None = None
+    ) -> list[dict[str, Any]]:
+        try:
+            return await self._connection.execute_query_dict(query, values)
+        except self._ERRORS as exc:
+            raise DatabaseError(message=str(exc)) from exc
+
+    @property
+    def connection(self) -> BaseDBAsyncClient:
+        return self._connection

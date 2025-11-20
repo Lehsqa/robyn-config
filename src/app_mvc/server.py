@@ -5,6 +5,7 @@ from loguru import logger
 from robyn import Robyn
 
 from app.config import settings
+from app.middlewares import cors, sessions
 from app.utils import error_response
 from app.urls import register_routes
 from app.views.authentication import JWTAuthenticationHandler
@@ -25,12 +26,16 @@ if not settings.debug:
 
 app = Robyn(__file__)
 
+# Configure app
+app.exception(error_response)
+app.configure_authentication(JWTAuthenticationHandler())
+
+# Middlewares
+sessions.register(app)
+cors.register(app)
+
 # Register routes
 register_routes(app)
-
-# Configure app
-app.exception_handler(error_response)
-app.authentication_handler(JWTAuthenticationHandler())
 
 if __name__ == "__main__":
     app.start(host="0.0.0.0", port=8000)

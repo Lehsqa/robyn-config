@@ -135,6 +135,22 @@ def _copy_template(destination: Path, orm_type: str, design: str) -> None:
             "script_location = src/app/models/migrations",
         )
         alembic_ini.write_text(content)
+    elif design == "mvc" and orm_type == "tortoise":
+        pyproject = destination / "pyproject.toml"
+        content = pyproject.read_text()
+        content = content.replace(
+            "tortoise_orm = \"src.app.infrastructure.database.services.engine.TORTOISE_ORM\"",
+            "tortoise_orm = \"app.models.database.TORTOISE_ORM\"",
+        )
+        content = content.replace(
+            "location = \"./src/app/infrastructure/database/migrations\"",
+            "location = \"./src/app/models/migrations\"",
+        )
+        pyproject.write_text(content)
+
+        migrations_dir = destination / "src" / "app" / "models" / "migrations"
+        migrations_dir.mkdir(parents=True, exist_ok=True)
+        (migrations_dir / "__init__.py").touch(exist_ok=True)
 
 
 @click.group(name="robyn-config")
