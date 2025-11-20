@@ -10,18 +10,21 @@ import click
 
 
 ORM_CHOICES: Sequence[str] = ("sqlalchemy", "tortoise")
+DESIGN_CHOICES: Sequence[str] = ("ddd", "mvc")
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SRC_APP_DIR = (REPO_ROOT / "src" / "app").resolve()
+SRC_DIR = (REPO_ROOT / "src").resolve()
 COMPOSE_APP_DIR = (REPO_ROOT / "compose" / "app").resolve()
-INFRASTRUCTURE_DIR = (SRC_APP_DIR / "infrastructure").resolve()
 
 COMMON_FILES: Sequence[str] = (
     ".dockerignore",
     ".env.example",
     ".gitignore",
     "Makefile",
+    "README.md",
+    "alembic.ini",
     "docker-compose.yml",
     "pyproject.toml",
+    "uv.lock",
 )
 
 
@@ -44,26 +47,43 @@ def _copy_common_files(destination: Path, orm_type: str) -> None:
         source = REPO_ROOT / relative
         shutil.copy2(source, destination / relative)
 
-    if orm_type == "sqlalchemy":
-        shutil.copy2(REPO_ROOT / "alembic.ini", destination / "alembic.ini")
 
-
-def _copy_src_app(destination: Path, orm_type: str) -> None:
+def _copy_src_app(destination: Path, orm_type: str, design: str) -> None:
     target_dir = destination / "src" / "app"
     target_dir.parent.mkdir(parents=True, exist_ok=True)
+    
+    source_app_dir = SRC_DIR / f"app_{design}"
 
-    def ignore(source: str, names: Iterable[str]) -> Iterable[str]:
-        source_path = Path(source).resolve()
-        if source_path == INFRASTRUCTURE_DIR:
-            database_folders = {f"database_{choice}" for choice in ORM_CHOICES}
-            return [name for name in names if name in database_folders]
-        return []
+    if design == "ddd":
+        infrastructure_dir = (source_app_dir / "infrastructure").resolve()
+        
+        def ignore(source: str, names: Iterable[str]) -> Iterable[str]:
+            source_path = Path(source).resolve()
+            if source_path == infrastructure_dir:
+                database_folders = {f"database_{choice}" for choice in ORM_CHOICES}
+                return [name for name in names if name in database_folders]
+            return []
 
-    shutil.copytree(SRC_APP_DIR, target_dir, dirs_exist_ok=True, ignore=ignore)
+        shutil.copytree(source_app_dir, target_dir, dirs_exist_ok=True, ignore=ignore)
 
-    source_database = INFRASTRUCTURE_DIR / f"database_{orm_type}"
-    target_database = target_dir / "infrastructure" / "database"
-    shutil.copytree(source_database, target_database, dirs_exist_ok=True)
+        source_database = infrastructure_dir / f"database_{orm_type}"
+        target_database = target_dir / "infrastructure" / "database"
+        shutil.copytree(source_database, target_database, dirs_exist_ok=True)
+
+    elif design == "mvc":
+        models_dir = (source_app_dir / "models").resolve()
+
+        def ignore(source: str, names: Iterable[str]) -> Iterable[str]:
+            source_path = Path(source).resolve()
+            if source_path == source_app_dir:
+                return [name for name in names if name == "models"]
+            return []
+
+        shutil.copytree(source_app_dir, target_dir, dirs_exist_ok=True, ignore=ignore)
+
+        source_models = models_dir / orm_type
+        target_models = target_dir / "models"
+        shutil.copytree(source_models, target_models, dirs_exist_ok=True)
 
 
 def _resolve_compose_file(base: str, extension: str, orm_type: str) -> Path:
@@ -102,10 +122,35 @@ def _copy_compose_app(destination: Path, orm_type: str) -> None:
     shutil.copy2(prod_source, target_dir / "prod.py")
 
 
-def _copy_template(destination: Path, orm_type: str) -> None:
-    _copy_src_app(destination, orm_type)
+def _copy_template(destination: Path, orm_type: str, design: str) -> None:
+    _copy_src_app(destination, orm_type, design)
     _copy_compose_app(destination, orm_type)
     _copy_common_files(destination, orm_type)
+
+    if design == "mvc" and orm_type == "sqlalchemy":
+        alembic_ini = destination / "alembic.ini"
+        content = alembic_ini.read_text()
+        content = content.replace(
+            "script_location = src/app/infrastructure/database/migrations",
+            "script_location = src/app/models/migrations",
+        )
+        alembic_ini.write_text(content)
+    elif design == "mvc" and orm_type == "tortoise":
+        pyproject = destination / "pyproject.toml"
+        content = pyproject.read_text()
+        content = content.replace(
+            "tortoise_orm = \"src.app.infrastructure.database.services.engine.TORTOISE_ORM\"",
+            "tortoise_orm = \"app.models.database.TORTOISE_ORM\"",
+        )
+        content = content.replace(
+            "location = \"./src/app/infrastructure/database/migrations\"",
+            "location = \"./src/app/models/migrations\"",
+        )
+        pyproject.write_text(content)
+
+        migrations_dir = destination / "src" / "app" / "models" / "migrations"
+        migrations_dir.mkdir(parents=True, exist_ok=True)
+        (migrations_dir / "__init__.py").touch(exist_ok=True)
 
 
 @click.group(name="robyn-config")
@@ -122,17 +167,30 @@ def cli() -> None:
     required=True,
     help="Select the ORM implementation to copy (sqlalchemy or tortoise).",
 )
+@click.option(
+    "-design",
+    "--design",
+    "design",
+    type=str,
+    required=True,
+    help="Select the design pattern (ddd or mvc)",
+)
 @click.argument("destination", required=False)
-def create(destination: str | None, orm_type: str) -> None:
+def create(destination: str | None, orm_type: str, design: str) -> None:
     """Copy the template into DESTINATION with ORM-specific adjustments."""
     normalized_orm = orm_type.lower()
     if normalized_orm not in ORM_CHOICES:
         print(f"Unsupported ORM '{orm_type}'. Valid options: {', '.join(ORM_CHOICES)}.")
         raise SystemExit(1)
 
+    normalized_design = design.lower()
+    if normalized_design not in DESIGN_CHOICES:
+        print(f"Unsupported design '{design}'. Valid options: {', '.join(DESIGN_CHOICES)}.")
+        raise SystemExit(1)
+
     target_dir = _prepare_destination(destination)
-    _copy_template(target_dir, normalized_orm)
-    print(f"Robyn template copied to {target_dir}")
+    _copy_template(target_dir, normalized_orm, normalized_design)
+    print(f"Robyn template ({normalized_design}) copied to {target_dir}")
 
 
 if __name__ == "__main__":

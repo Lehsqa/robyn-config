@@ -39,7 +39,7 @@ services:
     build:
       context: .
       dockerfile: compose/app/Dockerfile
-      target: dev
+      target: prod
       platforms:
         - linux/amd64
     env_file:
