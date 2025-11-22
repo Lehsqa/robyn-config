@@ -35,13 +35,10 @@ TEMPLATE_CONFIGS: Mapping[str, dict[str, str]] = {
         "design": "ddd",
         "orm": "sqlalchemy",
         "alembic_script_location": "src/app/infrastructure/database/migrations",
-        # "tortoise_orm_path": "src.app.infrastructure.database.services.engine.TORTOISE_ORM",
-        # "tortoise_migrations_location": "./src/app/infrastructure/database/migrations",
     },
     "ddd:tortoise": {
         "design": "ddd",
         "orm": "tortoise",
-        # "alembic_script_location": "src/app/infrastructure/database/migrations",
         "tortoise_orm_path": "src.app.infrastructure.database.services.engine.TORTOISE_ORM",
         "tortoise_migrations_location": "./src/app/infrastructure/database/migrations",
     },
@@ -49,13 +46,10 @@ TEMPLATE_CONFIGS: Mapping[str, dict[str, str]] = {
         "design": "mvc",
         "orm": "sqlalchemy",
         "alembic_script_location": "src/app/models/migrations",
-        # "tortoise_orm_path": "app.models.database.TORTOISE_ORM",
-        # "tortoise_migrations_location": "./src/app/models/migrations",
     },
     "mvc:tortoise": {
         "design": "mvc",
         "orm": "tortoise",
-        # "alembic_script_location": "src/app/models/migrations",
         "tortoise_orm_path": "app.models.database.TORTOISE_ORM",
         "tortoise_migrations_location": "./src/app/models/migrations",
     },
@@ -118,34 +112,33 @@ def _copy_src_app(destination: Path, orm_type: str, design: str) -> None:
     target_dir = destination / "src" / "app"
     target_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    source_app_dir = SRC_DIR / f"app_{design}"
+    source_app_dir = SRC_DIR / design
+    infra_dir = (source_app_dir / "infrastructure").resolve()
+    models_dir = (source_app_dir / "models").resolve()
 
-    if design == "ddd":
-        infrastructure_dir = (source_app_dir / "infrastructure").resolve()
-
-        def ignore(source: str, names: Iterable[str]) -> Iterable[str]:
-            source_path = Path(source).resolve()
-            if source_path == infrastructure_dir:
-                database_folders = {f"database_{choice}" for choice in ORM_CHOICES}
-                return [name for name in names if name in database_folders]
+    def copy_tree_with_skip(
+        source: Path, target: Path, skip_map: Mapping[Path, set[str]]
+    ) -> None:
+        def ignore(current: str, names: Iterable[str]) -> Iterable[str]:
+            current_path = Path(current).resolve()
+            for root, skip_names in skip_map.items():
+                if current_path == root:
+                    return [name for name in names if name in skip_names]
             return []
 
-        shutil.copytree(source_app_dir, target_dir, dirs_exist_ok=True, ignore=ignore)
+        shutil.copytree(source, target, dirs_exist_ok=True, ignore=ignore)
 
-        source_database = infrastructure_dir / f"database_{orm_type}"
+    if design == "ddd":
+        skip = {infra_dir: set(ORM_CHOICES)}
+        copy_tree_with_skip(source_app_dir, target_dir, skip)
+
+        source_database = infra_dir / orm_type
         target_database = target_dir / "infrastructure" / "database"
         shutil.copytree(source_database, target_database, dirs_exist_ok=True)
 
     elif design == "mvc":
-        models_dir = (source_app_dir / "models").resolve()
-
-        def ignore(source: str, names: Iterable[str]) -> Iterable[str]:
-            source_path = Path(source).resolve()
-            if source_path == source_app_dir:
-                return [name for name in names if name == "models"]
-            return []
-
-        shutil.copytree(source_app_dir, target_dir, dirs_exist_ok=True, ignore=ignore)
+        skip = {source_app_dir.resolve(): {"models"}}
+        copy_tree_with_skip(source_app_dir, target_dir, skip)
 
         source_models = models_dir / orm_type
         target_models = target_dir / "models"
@@ -194,34 +187,11 @@ def _copy_compose_app(
     _render_template(dockerfile_source, target_dir / "Dockerfile", context)
 
 
-# def _strip_alembic_from_dockerfile(destination: Path) -> None:
-#     dockerfile = destination / "compose" / "app" / "Dockerfile"
-#     if not dockerfile.exists():
-#         return
-
-#     updated: list[str] = []
-#     for line in dockerfile.read_text().splitlines():
-#         if line.strip().startswith("COPY") and "alembic.ini" in line:
-#             parts = [part for part in line.split() if part != "alembic.ini"]
-#             line = " ".join(parts)
-#         updated.append(line)
-
-#     dockerfile.write_text("\n".join(updated) + "\n")
-
-
 def _copy_template(destination: Path, orm_type: str, design: str) -> None:
     context = _get_template_config(design, orm_type)
     _copy_src_app(destination, orm_type, design)
     _copy_compose_app(destination, orm_type, context)
     _copy_common_files(destination, orm_type, context)
-
-    # if orm_type == "tortoise":
-    #     _strip_alembic_from_dockerfile(destination)
-
-    # if design == "mvc" and orm_type == "tortoise":
-    #     migrations_dir = destination / "src" / "app" / "models" / "migrations"
-    #     migrations_dir.mkdir(parents=True, exist_ok=True)
-    #     (migrations_dir / "__init__.py").touch(exist_ok=True)
 
 
 @click.group(name="robyn-config")
