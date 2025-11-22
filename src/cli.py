@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Mapping, Sequence
 
 import click
+from jinja2 import Environment, StrictUndefined
 
 
 ORM_CHOICES: Sequence[str] = ("sqlalchemy", "tortoise")
 DESIGN_CHOICES: Sequence[str] = ("ddd", "mvc")
-REPO_ROOT = Path(__file__).resolve().parent.parent
-SRC_DIR = (REPO_ROOT / "src").resolve()
-COMPOSE_APP_DIR = (REPO_ROOT / "compose" / "app").resolve()
+PACKAGE_ROOT = Path(__file__).resolve().parent
+SRC_DIR = PACKAGE_ROOT.resolve()
+COMMON_DIR = (SRC_DIR / "common").resolve()
+COMPOSE_APP_DIR = (COMMON_DIR / "compose" / "app").resolve()
 
 COMMON_FILES: Sequence[str] = (
     ".dockerignore",
@@ -26,6 +28,40 @@ COMMON_FILES: Sequence[str] = (
     "pyproject.toml",
     "uv.lock",
 )
+TEMPLATE_FILES = {"alembic.ini", "pyproject.toml"}
+
+TEMPLATE_CONFIGS: Mapping[str, dict[str, str]] = {
+    "ddd:sqlalchemy": {
+        "design": "ddd",
+        "orm": "sqlalchemy",
+        "alembic_script_location": "src/app/infrastructure/database/migrations",
+        # "tortoise_orm_path": "src.app.infrastructure.database.services.engine.TORTOISE_ORM",
+        # "tortoise_migrations_location": "./src/app/infrastructure/database/migrations",
+    },
+    "ddd:tortoise": {
+        "design": "ddd",
+        "orm": "tortoise",
+        # "alembic_script_location": "src/app/infrastructure/database/migrations",
+        "tortoise_orm_path": "src.app.infrastructure.database.services.engine.TORTOISE_ORM",
+        "tortoise_migrations_location": "./src/app/infrastructure/database/migrations",
+    },
+    "mvc:sqlalchemy": {
+        "design": "mvc",
+        "orm": "sqlalchemy",
+        "alembic_script_location": "src/app/models/migrations",
+        # "tortoise_orm_path": "app.models.database.TORTOISE_ORM",
+        # "tortoise_migrations_location": "./src/app/models/migrations",
+    },
+    "mvc:tortoise": {
+        "design": "mvc",
+        "orm": "tortoise",
+        # "alembic_script_location": "src/app/models/migrations",
+        "tortoise_orm_path": "app.models.database.TORTOISE_ORM",
+        "tortoise_migrations_location": "./src/app/models/migrations",
+    },
+}
+
+JINJA_ENV = Environment(undefined=StrictUndefined)
 
 
 def _prepare_destination(path_arg: str | None) -> Path:
@@ -42,21 +78,51 @@ def _prepare_destination(path_arg: str | None) -> Path:
     return destination
 
 
-def _copy_common_files(destination: Path, orm_type: str) -> None:
+def _get_template_config(design: str, orm_type: str) -> dict[str, str]:
+    key = f"{design}:{orm_type}"
+    config = TEMPLATE_CONFIGS.get(key)
+    if config is None:
+        print(
+            f"Unsupported configuration '{key}'. "
+            f"Valid options: {', '.join(TEMPLATE_CONFIGS.keys())}."
+        )
+        raise SystemExit(1)
+    return dict(config)
+
+
+def _render_template(source: Path, target: Path, context: Mapping[str, str]) -> None:
+    template = JINJA_ENV.from_string(source.read_text())
+    rendered = template.render(**context)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(rendered)
+
+
+def _copy_common_files(
+    destination: Path, orm_type: str, context: Mapping[str, str]
+) -> None:
     for relative in COMMON_FILES:
-        source = REPO_ROOT / relative
-        shutil.copy2(source, destination / relative)
+        if orm_type == "tortoise" and relative == "alembic.ini":
+            continue
+
+        source = COMMON_DIR / relative
+        target = destination / relative
+
+        if relative in TEMPLATE_FILES:
+            _render_template(source, target, context)
+        else:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, target)
 
 
 def _copy_src_app(destination: Path, orm_type: str, design: str) -> None:
     target_dir = destination / "src" / "app"
     target_dir.parent.mkdir(parents=True, exist_ok=True)
-    
+
     source_app_dir = SRC_DIR / f"app_{design}"
 
     if design == "ddd":
         infrastructure_dir = (source_app_dir / "infrastructure").resolve()
-        
+
         def ignore(source: str, names: Iterable[str]) -> Iterable[str]:
             source_path = Path(source).resolve()
             if source_path == infrastructure_dir:
@@ -99,7 +165,9 @@ def _resolve_compose_file(base: str, extension: str, orm_type: str) -> Path:
     )
 
 
-def _copy_compose_app(destination: Path, orm_type: str) -> None:
+def _copy_compose_app(
+    destination: Path, orm_type: str, context: Mapping[str, str]
+) -> None:
     target_dir = destination / "compose" / "app"
 
     def ignore(source: str, names: Iterable[str]) -> Iterable[str]:
@@ -110,6 +178,7 @@ def _copy_compose_app(destination: Path, orm_type: str) -> None:
                 "dev.tortoise.sh",
                 "prod.sqlalchemy.py",
                 "prod.tortoise.py",
+                "Dockerfile",
             }
             return [name for name in names if name in templates]
         return []
@@ -121,36 +190,38 @@ def _copy_compose_app(destination: Path, orm_type: str) -> None:
     shutil.copy2(dev_source, target_dir / "dev.sh")
     shutil.copy2(prod_source, target_dir / "prod.py")
 
+    dockerfile_source = COMPOSE_APP_DIR / "Dockerfile"
+    _render_template(dockerfile_source, target_dir / "Dockerfile", context)
+
+
+# def _strip_alembic_from_dockerfile(destination: Path) -> None:
+#     dockerfile = destination / "compose" / "app" / "Dockerfile"
+#     if not dockerfile.exists():
+#         return
+
+#     updated: list[str] = []
+#     for line in dockerfile.read_text().splitlines():
+#         if line.strip().startswith("COPY") and "alembic.ini" in line:
+#             parts = [part for part in line.split() if part != "alembic.ini"]
+#             line = " ".join(parts)
+#         updated.append(line)
+
+#     dockerfile.write_text("\n".join(updated) + "\n")
+
 
 def _copy_template(destination: Path, orm_type: str, design: str) -> None:
+    context = _get_template_config(design, orm_type)
     _copy_src_app(destination, orm_type, design)
-    _copy_compose_app(destination, orm_type)
-    _copy_common_files(destination, orm_type)
+    _copy_compose_app(destination, orm_type, context)
+    _copy_common_files(destination, orm_type, context)
 
-    if design == "mvc" and orm_type == "sqlalchemy":
-        alembic_ini = destination / "alembic.ini"
-        content = alembic_ini.read_text()
-        content = content.replace(
-            "script_location = src/app/infrastructure/database/migrations",
-            "script_location = src/app/models/migrations",
-        )
-        alembic_ini.write_text(content)
-    elif design == "mvc" and orm_type == "tortoise":
-        pyproject = destination / "pyproject.toml"
-        content = pyproject.read_text()
-        content = content.replace(
-            "tortoise_orm = \"src.app.infrastructure.database.services.engine.TORTOISE_ORM\"",
-            "tortoise_orm = \"app.models.database.TORTOISE_ORM\"",
-        )
-        content = content.replace(
-            "location = \"./src/app/infrastructure/database/migrations\"",
-            "location = \"./src/app/models/migrations\"",
-        )
-        pyproject.write_text(content)
+    # if orm_type == "tortoise":
+    #     _strip_alembic_from_dockerfile(destination)
 
-        migrations_dir = destination / "src" / "app" / "models" / "migrations"
-        migrations_dir.mkdir(parents=True, exist_ok=True)
-        (migrations_dir / "__init__.py").touch(exist_ok=True)
+    # if design == "mvc" and orm_type == "tortoise":
+    #     migrations_dir = destination / "src" / "app" / "models" / "migrations"
+    #     migrations_dir.mkdir(parents=True, exist_ok=True)
+    #     (migrations_dir / "__init__.py").touch(exist_ok=True)
 
 
 @click.group(name="robyn-config")
