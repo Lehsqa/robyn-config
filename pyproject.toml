@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "robyn-config"
-version = "0.1.0"
+version = "0.1.1"
 description = "CLI for scaffolding Robyn backend templates (DDD/MVC with SQLAlchemy or Tortoise)."
 readme = "README.md"
 license = {text = "MIT"}
@@ -14,7 +14,7 @@ authors = [
 ]
 dependencies = [
   "click>=8.1.7",
-  "Jinja2>=3.1",
+  "Jinja2>=3.1"
 ]
 
 [project.optional-dependencies]
@@ -23,6 +23,7 @@ dev = [
   "black>=24.10.0",
   "pytest>=7.4.0",
   "build>=1.2.1",
+  "twine>=1.6.0",
 ]
 
 [project.scripts]

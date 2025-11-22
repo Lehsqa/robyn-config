@@ -16,3 +16,7 @@ htmlcov/
 
 # OS
 .DS_Store
+
+# PyPI
+.pypirc
+dist/

@@ -38,7 +38,7 @@ The shipped templates live alongside the CLI:
 
 - Root-level files sit under `src/common`.
 - Compose files are under `src/common/compose/app`.
-- Application code is under `src/app_ddd` and `src/app_mvc`.
+- Application code is under `src/ddd` and `src/mvc`.
 
 Feel free to modify these in-place to customize the generated projects.
 
