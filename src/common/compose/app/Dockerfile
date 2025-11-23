@@ -19,10 +19,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /opt/project
-COPY pyproject.toml README.md uv.lock alembic.ini ./
+COPY pyproject.toml README.md uv.lock{% if orm == "sqlalchemy" %} alembic.ini{% endif %} ./
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --no-dev
 COPY compose/app/dev.sh /tmp/dev.sh
 COPY compose/app/prod.py /tmp/prod.py
 

@@ -1,17 +1,33 @@
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic.alias_generators import to_camel
 
 from .authentication import AuthProvider
 from .constants import Role
 
 
 class InternalEntity(BaseModel):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        validate_assignment=True,
+        arbitrary_types_allowed=True,
+        from_attributes=True,
+    )
 
 
 class PublicEntity(BaseModel):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(
+        extra="ignore",
+        use_enum_values=True,
+        validate_assignment=True,
+        populate_by_name=True,
+        arbitrary_types_allowed=True,
+        from_attributes=True,
+        loc_by_alias=True,
+        alias_generator=to_camel,
+    )
 
 
 class TimeStampMixin(BaseModel):

@@ -23,13 +23,23 @@ lock:
 # ************************************************
 MIGRATION_MESSAGE ?= "automated migration"
 
-.PHONY: migration.revision
-migration.revision:
+{%- if orm == "sqlalchemy" %}
+.PHONY: makemigration
+makemigration:
 	uv run alembic revision -m "$(MIGRATION_MESSAGE)"
 
-.PHONY: migration.upgrade
-migration.upgrade:
+.PHONY: migrate
+migrate:
 	uv run alembic upgrade head
+{%- else %}
+.PHONY: makemigration
+makemigration:
+	uv run aerich migrate --name "$(MIGRATION_MESSAGE)"
+
+.PHONY: migrate
+migrate:
+	uv run aerich upgrade
+{%- endif %}
 
 
 # ************************************************

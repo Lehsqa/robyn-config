@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 IGNORABLE_WARNINGS = ("App 'models' is already initialized.",)
-APP_MODULE = os.environ.get("ROBYN_APP_MODULE", "app_ddd.server")
+APP_MODULE = os.environ.get("ROBYN_APP_MODULE", "app.server")
 
 
 def _run(cmd: list[str], *, ignore_existing: bool = False) -> None:

@@ -1,0 +1,5 @@
+recursive-include src/common *
+include src/common/.dockerignore
+include src/common/.env.example
+include src/common/.gitignore
+global-exclude __pycache__ *.py[cod] .DS_Store
