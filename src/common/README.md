@@ -1,10 +1,12 @@
-# Robyn DDD Template
+# {{ name|capitalize }}
 
-A Robyn-based service that follows a classic DDD layering
-(config ➜ infrastructure ➜ domain ➜ operational ➜ presentation) while using
-`msgspec` for fast JSON, SQLAlchemy 2.x async sessions, Valkey (Redis-compatible) caching, Loguru logging,
-and Passlib password hashing. The code lives under `src/app` and ships with a Docker
-Compose stack for PostgreSQL, Redis, a local SMTP sink, and the app container.
+A Robyn-based service scaffolded with the {{ design.upper() }} layout and {{ "SQLAlchemy" if orm == "sqlalchemy" else "Tortoise ORM" }}.
+{%- if design == "ddd" %}
+It follows a DDD layering (config ➜ infrastructure ➜ domain ➜ operational ➜ presentation) while using `msgspec` for fast JSON, async database sessions, Valkey (Redis-compatible) caching, Loguru logging, and Passlib password hashing.
+{%- else %}
+It follows an MVC-style layout (config ➜ models ➜ views/controllers) while using `msgspec` for fast JSON, async database sessions, Valkey (Redis-compatible) caching, Loguru logging, and Passlib password hashing.
+{%- endif %}
+The code lives under `src/app` and ships with a Docker Compose stack for PostgreSQL, Redis, a local SMTP sink, and the app container.
 
 ## Project layout
 
@@ -18,10 +20,17 @@ Compose stack for PostgreSQL, Redis, a local SMTP sink, and the app container.
 ├── pyproject.toml
 └── src/app
     ├── config/                    # Pydantic settings (env-driven)
+{%- if design == "ddd" %}
     ├── infrastructure/            # DB/cache/mail/auth abstractions
     ├── domain/                    # Entities, constants, repository, services
     ├── operational/               # Application workflows (user flows, etc.)
     ├── presentation/              # Robyn route registrations
+{%- else %}
+    ├── models/                    # DB layer with {{ "SQLAlchemy" if orm == "sqlalchemy" else "Tortoise" }}
+    ├── views/                     # Route handlers/controllers
+    ├── middlewares/               # Cross-cutting middleware
+    ├── utils.py                   # Shared helpers
+{%- endif %}
     └── server.py                  # Robyn entrypoint (logs + route wiring)
 ```
 
@@ -42,11 +51,15 @@ Copy `.env.example` to `.env` before running the app locally or via Compose; `.e
 
 ## Makefile shortcuts
 
-The repository ships with a Makefile that wraps the most common `uv`, Alembic, and Docker commands described throughout this README:
+The repository ships with a Makefile that wraps the most common `uv`, {{ "Alembic" if orm == "sqlalchemy" else "Aerich" }}, and Docker commands described throughout this README:
 
 - `make install` / `make install.dev` – install the project (with or without the `[dev]` extras) into the active virtual environment.
 - `make sync` / `make lock` – sync or lock dependencies via `uv`.
-- `make migration.revision MIGRATION_MESSAGE="add table"` – create an Alembic revision; `make migration.upgrade` – upgrade to the latest migration.
+- {%- if orm == "sqlalchemy" -%}
+`make migration.revision MIGRATION_MESSAGE="add table"` – create an Alembic revision; `make migration.upgrade` – upgrade to the latest migration.
+  {%- else -%}
+`make migration.upgrade` – apply the latest Aerich migrations; `make migration.downgrade` – roll back one step.
+  {%- endif %}
 - `make run` – start `app.server` in production mode; `make run.dev` – run Robyn with `--dev`; `make run.compose` – build and run the entire Docker Compose stack.
 - `make tests` / `make tests.coverage` – run pytest, optionally with coverage output.
 - `make fix` – run `black`, `isort`, and `ruff --fix`; `make check` – run the full lint/type/test suite; `make check.types` – run mypy only.
@@ -96,7 +109,7 @@ You can use the Makefile equivalents instead of invoking the module manually:
 - `make run` wraps `uv run -- python -m app.server --fast --log-level WARNING`.
 - `make run.dev` uses the Robyn CLI to start `src/app/server.py` with `--dev`.
 
-Set `SETTINGS__DEBUG=false` in production to silence Alembic/SQLAlchemy info logs before the log file is written (`compose/app/dev.sh` still applies migrations first).
+Set `SETTINGS__DEBUG=false` in production to silence {{ "Alembic/SQLAlchemy" if orm == "sqlalchemy" else "Aerich/Tortoise" }} info logs before the log file is written (`compose/app/dev.sh` still applies migrations first).
 
 Endpoints currently wired up in `presentation/healthcheck.py` and
 `presentation/users.py` include:
@@ -162,7 +175,7 @@ Services:
 - `mailhog` – SMTP sink (`1025`) with web UI at <http://localhost:8025> for captured mail.
 - `app` – Robyn service (`python -m app.server`) exposed on <http://localhost:8000>. The `environment` block in `docker-compose.yml` overrides only the database/cache driver and host entries; the rest load from `.env` so the same file works for both Docker and local runs.
 
-The `app` service builds from `compose/app/Dockerfile`, copies the `dev.sh` helper into the image, and runs it so Alembic upgrades happen before `python -m app.server --reload` executes.
+The `app` service builds from `compose/app/Dockerfile`, copies the `dev.sh` helper into the image, and runs it so {{ "Alembic" if orm == "sqlalchemy" else "Aerich" }} upgrades happen before `python -m app.server --reload` executes.
 
 The Dockerfile also exposes a production target:
 
@@ -170,10 +183,11 @@ The Dockerfile also exposes a production target:
 docker build -f compose/app/Dockerfile --target prod -t robyn-app:prod .
 ```
 
-That image is based on distroless Debian, bundles the virtual environment created via `uv sync --frozen --no-dev`, and uses `compose/app/prod.py` to apply migrations before starting the server.
+That image is based on distroless Debian, bundles the virtual environment created via `uv sync --frozen --no-dev`, and uses `compose/app/prod.py` to apply {{ "Alembic" if orm == "sqlalchemy" else "Aerich" }} migrations before starting the server.
 
-### Database migrations (Alembic)
+### Database migrations ({{ "Alembic" if orm == "sqlalchemy" else "Aerich" }})
 
+{%- if orm == "sqlalchemy" %}
 Alembic is configured with async engines and uses the Pydantic settings (so the same
 `SETTINGS__*` overrides apply). Generate and apply migrations with the commands below. The container entrypoint (`compose/app/dev.sh`) already runs `alembic upgrade head` before launching `python -m app.server --reload`, so you only need to run those commands when the schema changes.
 
@@ -185,8 +199,22 @@ alembic upgrade head
 
 Equivalent Makefile commands:
 
-- `make migration.revision MIGRATION_MESSAGE="describe change"`
-- `make migration.upgrade`
+- `make makemigration MIGRATION_MESSAGE="describe change"`
+- `make migrate`
+{%- else %}
+Aerich is configured via `tool.aerich` in `pyproject.toml` and picks up the Pydantic settings. Apply migrations with:
+
+```bash
+export PYTHONPATH=src  # ensure `app` package is importable
+aerich init-db  # safe to rerun; ignored if already initialized
+aerich upgrade
+```
+
+Useful Makefile commands:
+
+- `make makemigration MIGRATION_MESSAGE="describe change"` – create a new migration.
+- `make migrate` – apply the latest migrations.
+{%- endif %}
 
 If you run inside Docker, execute the same commands through `docker compose exec app ...`.
 
@@ -204,8 +232,6 @@ above. Valkey listens on `localhost:6379` (compatible with any Redis client).
 
 ## Notes
 
-- Schema creation now happens through Alembic migrations (`alembic upgrade head` must be run before starting the service,
-  and `compose/app/dev.sh` runs the same upgrade before the container launches `python -m app.server --reload`).
-- Outbound mail is delivered through the async SMTP client in
-  `infrastructure/mailing/services.py`; in Docker it targets MailHog, while in local dev
-  you can point the settings at any SMTP server.
+- Schema creation happens through {{ "Alembic" if orm == "sqlalchemy" else "Aerich" }} migrations; `compose/app/dev.sh` runs `{{ "alembic upgrade head" if orm == "sqlalchemy" else "aerich upgrade" }}` before starting Robyn.
+- Outbound mail is delivered through the async SMTP client in `{{ "infrastructure/mailing/services.py" if design == "ddd" else "mailing.py" }}`; in Docker it targets MailHog, while in local dev you can point the settings at any SMTP server.
+- The Makefile wraps the common commands for installs, migrations, linting, tests, and Docker; see “Makefile shortcuts” above for the ORM-specific targets.

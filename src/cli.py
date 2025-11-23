@@ -29,7 +29,7 @@ COMMON_FILES: Sequence[str] = (
     "pyproject.toml",
     "uv.lock",
 )
-TEMPLATE_FILES = {"alembic.ini", "pyproject.toml"}
+TEMPLATE_FILES = {"alembic.ini", "pyproject.toml", "README.md"}
 
 TEMPLATE_CONFIGS: Mapping[str, dict[str, str]] = {
     "ddd:sqlalchemy": {
@@ -252,8 +252,11 @@ def _copy_compose_app(
     _render_template(dockerfile_source, target_dir / "Dockerfile", context)
 
 
-def _copy_template(destination: Path, orm_type: str, design: str) -> None:
+def _copy_template(
+    destination: Path, orm_type: str, design: str, project_name: str
+) -> None:
     context = _get_template_config(design, orm_type)
+    context["name"] = project_name
     _copy_src_app(destination, orm_type, design)
     _copy_compose_app(destination, orm_type, context)
     _copy_common_files(destination, orm_type, context)
@@ -265,6 +268,7 @@ def cli() -> None:
 
 
 @cli.command("create")
+@click.argument("name")
 @click.option(
     "-orm",
     "--orm",
@@ -282,7 +286,9 @@ def cli() -> None:
     help="Select the design pattern (ddd or mvc)",
 )
 @click.argument("destination", required=False)
-def create(destination: str | None, orm_type: str, design: str) -> None:
+def create(
+    name: str, destination: str | None, orm_type: str, design: str
+) -> None:
     """Copy the template into DESTINATION with ORM-specific adjustments."""
     normalized_orm = orm_type.lower()
     if normalized_orm not in ORM_CHOICES:
@@ -295,8 +301,8 @@ def create(destination: str | None, orm_type: str, design: str) -> None:
         raise SystemExit(1)
 
     target_dir = _prepare_destination(destination, normalized_orm, normalized_design)
-    _copy_template(target_dir, normalized_orm, normalized_design)
-    print(f"Robyn template ({normalized_design}) copied to {target_dir}")
+    _copy_template(target_dir, normalized_orm, normalized_design, name)
+    print(f"Robyn template ({normalized_design}/{normalized_orm}) copied to {target_dir}")
 
 
 if __name__ == "__main__":
