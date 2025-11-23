@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "robyn-config"
-version = "0.1.1"
+version = "0.1.0"
 description = "CLI for scaffolding Robyn backend templates (DDD/MVC with SQLAlchemy or Tortoise)."
 readme = "README.md"
 license = {text = "MIT"}
