@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
@@ -58,15 +59,79 @@ TEMPLATE_CONFIGS: Mapping[str, dict[str, str]] = {
 JINJA_ENV = Environment(undefined=StrictUndefined)
 
 
-def _prepare_destination(path_arg: str | None) -> Path:
+def _collect_existing_items(destination: Path) -> set[Path]:
+    items: set[Path] = set()
+    for current, dirs, files in os.walk(destination):
+        rel_base = Path(current).relative_to(destination)
+        for name in dirs:
+            items.add(rel_base / name)
+        for name in files:
+            items.add(rel_base / name)
+    return items
+
+
+def _collect_common_items(orm_type: str) -> set[Path]:
+    items: set[Path] = set()
+    for relative in COMMON_FILES:
+        if orm_type == "tortoise" and relative == "alembic.ini":
+            continue
+        items.add(Path(relative))
+    return items
+
+
+def _collect_compose_items(_orm_type: str) -> set[Path]:
+    items: set[Path] = set()
+    target_dir = Path("compose") / "app"
+
+    items.update(
+        {
+            target_dir / "dev.sh",
+            target_dir / "prod.py",
+            target_dir / "Dockerfile",
+        }
+    )
+
+    return items
+
+
+def _collect_generated_items(orm_type: str, design: str) -> set[Path]:
+    items: set[Path] = set()
+    items.update(_collect_common_items(orm_type))
+    items.update({Path("src")})
+    items.update(_collect_compose_items(orm_type))
+    return items
+
+
+def _prepare_destination(path_arg: str | None, orm_type: str, design: str) -> Path:
     destination = Path(path_arg or ".").expanduser().resolve()
+    generated_items = _collect_generated_items(orm_type, design)
+
     if destination.exists():
         if not destination.is_dir():
             print(f"Target path '{destination}' is not a directory.")
             raise SystemExit(1)
-        if any(destination.iterdir()):
-            print(f"Target directory '{destination}' must be empty.")
-            raise SystemExit(1)
+        existing_items = _collect_existing_items(destination)
+        if existing_items:
+            overlapping_items = existing_items & generated_items
+
+            if overlapping_items:
+                print(f"Target directory '{destination}' is not empty.")
+                print("The following items will be replaced:")
+                for item in sorted(overlapping_items):
+                    print(f"- {item.as_posix()}")
+            else:
+                print(
+                    f"Target directory '{destination}' is not empty, "
+                    "but no existing items conflict with the template."
+                )
+
+            proceed = click.confirm(
+                "Proceed with applying the template to this directory?",
+                default=False,
+            )
+            if not proceed:
+                print("Operation cancelled by user.")
+                raise SystemExit(1)
     else:
         destination.mkdir(parents=True, exist_ok=True)
     return destination
@@ -229,7 +294,7 @@ def create(destination: str | None, orm_type: str, design: str) -> None:
         print(f"Unsupported design '{design}'. Valid options: {', '.join(DESIGN_CHOICES)}.")
         raise SystemExit(1)
 
-    target_dir = _prepare_destination(destination)
+    target_dir = _prepare_destination(destination, normalized_orm, normalized_design)
     _copy_template(target_dir, normalized_orm, normalized_design)
     print(f"Robyn template ({normalized_design}) copied to {target_dir}")
 
