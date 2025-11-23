@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
+from pydantic.alias_generators import to_camel
 
 from .authentication import AuthProvider
 from .constants import Role
