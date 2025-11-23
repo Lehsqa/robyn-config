@@ -15,15 +15,16 @@ uv tool install .
 Create a project with your preferred ORM and architecture:
 
 ```bash
-robyn-config create --orm sqlalchemy --design ddd ./my-service
-robyn-config create --orm tortoise --design mvc ~/projects/newsletter
+robyn-config create my-service --orm sqlalchemy --design ddd ./my-service
+robyn-config create newsletter --orm tortoise --design mvc ~/projects/newsletter
 ```
 
 Options:
 
+- `name` sets the project name used in templated files like `pyproject.toml` and `README.md`.
 - `--orm` (`sqlalchemy`|`tortoise`) selects the database layer.
 - `--design` (`ddd`|`mvc`) toggles between the Domain-Driven and MVC templates.
-- `destination` is the target directory (defaults to `.`) and must be empty.
+- `destination` is the target directory (defaults to `.`); if it is not empty, you will be prompted before overwriting conflicts.
 
 The command copies:
 
