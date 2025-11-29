@@ -6,12 +6,15 @@ from typing import Any
 from pydantic import EmailStr
 
 from ..config import settings
-from ..domain.users import EmailChange, UserFlat, UsersRepository
+from ..domain.users import EmailChange, UserFlat
 from ..domain.users import services as users_services
 from ..infrastructure.application import NotFoundError, UnprocessableError
 from ..infrastructure.authentication import AuthProvider, pwd_context
 from ..infrastructure.cache import CacheRepository
 from ..infrastructure.database import transaction
+from ..infrastructure.database.repository import (
+    UsersRepository as InfrastructureUsersRepository,
+)
 from ..infrastructure.mailing import EmailMessage, mailing_service
 
 __all__ = (
@@ -30,7 +33,10 @@ __all__ = (
 async def create(payload: dict[str, Any]) -> UserFlat:
     plain_password = payload.pop("password")
     payload["password"] = pwd_context.hash(plain_password, scheme="bcrypt")
-    user = await users_services.create(payload=payload)
+    user = await users_services.create(
+        payload=payload,
+        repository_factory=InfrastructureUsersRepository,
+    )
 
     activation_key = users_services.generate_key(user.email)
     activation_link = users_services.create_activation_link(activation_key)
@@ -55,27 +61,39 @@ async def create(payload: dict[str, Any]) -> UserFlat:
 
 
 async def create_external(payload: dict[str, Any]) -> UserFlat:
-    return await users_services.create(payload=payload)
+    return await users_services.create(
+        payload=payload,
+        repository_factory=InfrastructureUsersRepository,
+    )
 
 
 async def update_partial(user: UserFlat, payload: dict[str, Any]) -> UserFlat:
-    return await users_services.update_partial(id_=user.id, payload=payload)
+    return await users_services.update_partial(
+        id_=user.id,
+        payload=payload,
+        repository_factory=InfrastructureUsersRepository,
+    )
 
 
 async def get_by_login(login: str) -> UserFlat:
     async with transaction():
-        return await UsersRepository().get_by_login(login=login)
+        return await InfrastructureUsersRepository().get_by_login(
+            login=login
+        )
 
 
 async def get(user_id: int) -> UserFlat:
     async with transaction():
-        return await UsersRepository().get(id_=user_id)
+        return await InfrastructureUsersRepository().get(id_=user_id)
 
 
 async def activate(key: uuid.UUID) -> UserFlat:
     async with CacheRepository[UserFlat]() as cache:
         cache_entry = await cache.get(namespace="activation", key=key)
-        user = await users_services.activate(cache_entry.instance.id)
+        user = await users_services.activate(
+            cache_entry.instance.id,
+            repository_factory=InfrastructureUsersRepository,
+        )
         await cache.delete(namespace="activation", key=key)
         return user
 
@@ -88,14 +106,17 @@ async def password_change(
 
     password_hash = pwd_context.hash(new_password, scheme="bcrypt")
     return await users_services.password_update(
-        id_=user.id, password_hash=password_hash
+        id_=user.id,
+        password_hash=password_hash,
+        repository_factory=InfrastructureUsersRepository,
     )
 
 
 async def password_reset(email: EmailStr) -> None:
     try:
         async with transaction():
-            user = await UsersRepository().get_by_login(login=email)
+            repository = InfrastructureUsersRepository()
+            user = await repository.get_by_login(login=email)
     except NotFoundError:
         return
 
@@ -130,6 +151,7 @@ async def password_reset_change(key: uuid.UUID, new_password: str) -> UserFlat:
         user = await users_services.password_update(
             id_=cache_entry.instance.id,
             password_hash=password_hash,
+            repository_factory=InfrastructureUsersRepository,
         )
         await cache.delete(namespace="password-reset", key=key)
         return user
@@ -163,7 +185,8 @@ async def email_change_confirmation(key: uuid.UUID) -> UserFlat:
             raise UnprocessableError(message="Invalid key") from exc
 
         async with transaction():
-            user = await UsersRepository().update(
+            repository = InfrastructureUsersRepository()
+            user = await repository.update(
                 attr="id",
                 value=cache_entry.instance.user_id,
                 payload={

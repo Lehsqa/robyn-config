@@ -10,7 +10,7 @@ from robyn import Request
 from robyn.authentication import AuthenticationHandler, BearerGetter, Identity
 
 from ..config import settings
-from ..domain.users import UserFlat, UsersRepository
+from ..domain.users import UserFlat
 from ..infrastructure.application import (
     AuthenticationError,
     NotFoundError,
@@ -19,13 +19,17 @@ from ..infrastructure.application import (
 from ..infrastructure.application.entities.response import ErrorResponse
 from ..infrastructure.authentication import pwd_context
 from ..infrastructure.database import transaction
+from ..infrastructure.database.repository import (
+    UsersRepository as InfrastructureUsersRepository,
+)
 
 
 async def authenticate_user(login: str, password: str) -> UserFlat:
     """Validate credentials and return the matching active user."""
     try:
         async with transaction():
-            user = await UsersRepository().get_by_login(login=login)
+            repository = InfrastructureUsersRepository()
+            user = await repository.get_by_login(login=login)
     except NotFoundError as exc:
         raise AuthenticationError(message="Invalid credentials") from exc
 

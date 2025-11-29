@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, AsyncGenerator, Generic
+from typing import Any, AsyncGenerator, Generic, get_args, get_origin
 
 from tortoise.expressions import Q
 from tortoise.queryset import QuerySet
@@ -11,15 +11,29 @@ from ....infrastructure.application import (
     UnprocessableError,
 )
 from ..tables import ConcreteTable
-from .session import Session
+from ..services.session import Session
 
 
 class BaseRepository(Session, Generic[ConcreteTable]):
-    schema_class: type[ConcreteTable]
+    schema_class: type[ConcreteTable] | None = None
 
     def __init__(self) -> None:
         super().__init__()
         if not getattr(self, "schema_class", None):
+            raise UnprocessableError(message="schema_class is required")
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        if cls is BaseRepository:
+            return
+        if cls.schema_class is None:
+            for base in getattr(cls, "__orig_bases__", ()):
+                if get_origin(base) is BaseRepository:
+                    args = get_args(base)
+                    if args:
+                        cls.schema_class = args[0]
+                        break
+        if cls.schema_class is None:
             raise UnprocessableError(message="schema_class is required")
 
     def _query(self) -> QuerySet[ConcreteTable]:
