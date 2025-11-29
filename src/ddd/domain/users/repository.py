@@ -1,30 +1,32 @@
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator
 
-from ...infrastructure.database import BaseRepository, UsersTable
 from .entities import UserFlat, UserUncommitted
 
 
-class UsersRepository(BaseRepository[UsersTable]):
-    schema_class = UsersTable
+class UsersRepository(ABC):
+    """Contract that captures user persistence operations."""
 
+    @abstractmethod
     async def all(self) -> AsyncGenerator[UserFlat, None]:
-        async for instance in self._all():
-            yield UserFlat.model_validate(instance)
+        """Return every user instance."""
 
+    @abstractmethod
     async def get(self, id_: int) -> UserFlat:
-        instance = await self._get(key="id", value=id_)
-        return UserFlat.model_validate(instance)
+        """Return a specific user by identifier."""
 
+    @abstractmethod
     async def get_by_login(self, login: str) -> UserFlat:
-        instance = await self._get(key="username", value=login)
-        return UserFlat.model_validate(instance)
+        """Return a user matching a login credential."""
 
+    @abstractmethod
     async def create(self, schema: UserUncommitted) -> UserFlat:
-        instance = await self._save(schema.model_dump())
-        return UserFlat.model_validate(instance)
+        """Persist a new user from the provided schema."""
 
+    @abstractmethod
     async def update(
         self, attr: str, value: Any, payload: dict[str, Any]
     ) -> UserFlat:
-        schema = await self._update(attr, value, payload)
-        return UserFlat.model_validate(schema)
+        """Update an existing user."""
