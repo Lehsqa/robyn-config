@@ -3,11 +3,12 @@ version: "3.9"
 services:
   postgres:
     image: postgres:16
+    container_name: database
     restart: unless-stopped
     env_file:
       - .env.example
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U app -d robyn_users"]
+      test: ["CMD-SHELL", "pg_isready -U app -d database"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -16,8 +17,9 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
-  cache:
+  valkey:
     image: valkey/valkey:7.2-alpine
+    container_name: cache
     restart: unless-stopped
     command: ["valkey-server", "--save", "", "--appendonly", "no"]
     ports:
@@ -30,6 +32,7 @@ services:
 
   mailhog:
     image: mailhog/mailhog:v1.0.1
+    container_name: mailing
     restart: unless-stopped
     ports:
       - "1025:1025"
@@ -42,13 +45,14 @@ services:
       target: prod
       platforms:
         - linux/amd64
+    container_name: app
     env_file:
       - .env.example
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-      cache:
+      valkey:
         condition: service_healthy
       mailhog:
         condition: service_started
