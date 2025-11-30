@@ -29,7 +29,7 @@ COMMON_FILES: Sequence[str] = (
     "pyproject.toml",
     "uv.lock",
 )
-TEMPLATE_FILES = {"alembic.ini", "pyproject.toml", "README.md"}
+TEMPLATE_FILES = {"alembic.ini", "pyproject.toml", "README.md", "Makefile"}
 
 TEMPLATE_CONFIGS: Mapping[str, dict[str, str]] = {
     "ddd:sqlalchemy": {
