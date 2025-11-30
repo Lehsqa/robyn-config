@@ -24,6 +24,7 @@ lock:
 MIGRATION_MESSAGE ?= "automated migration"
 
 {%- if orm == "sqlalchemy" %}
+
 .PHONY: makemigration
 makemigration:
 	uv run alembic revision -m "$(MIGRATION_MESSAGE)"
@@ -31,7 +32,8 @@ makemigration:
 .PHONY: migrate
 migrate:
 	uv run alembic upgrade head
-{%- else %}
+{%- elif orm == "tortoise" %}
+
 .PHONY: makemigration
 makemigration:
 	uv run aerich migrate --name "$(MIGRATION_MESSAGE)"
