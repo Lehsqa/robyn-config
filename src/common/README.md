@@ -76,7 +76,7 @@ export SETTINGS__DATABASE__HOST=localhost
 export SETTINGS__DATABASE__PORT=5432
 export SETTINGS__DATABASE__USER=app
 export SETTINGS__DATABASE__PASSWORD=app
-export SETTINGS__DATABASE__NAME=robyn_users
+export SETTINGS__DATABASE__NAME=database
 export SETTINGS__CACHE__HOST=localhost  # Valkey/Redis host
 export SETTINGS__CACHE__PORT=6379
 export SETTINGS__CACHE__DB=0
@@ -84,7 +84,7 @@ export SETTINGS__CACHE__USE_FAKE=true  # use fakeredis from the [dev] extras
 export SETTINGS__MAILING__HOST=localhost
 export SETTINGS__MAILING__PORT=1025
 export SETTINGS__MAILING__SENDER_EMAIL=no-reply@example.com
-export SETTINGS__MAILING__SENDER_NAME="Robyn Demo"
+export SETTINGS__MAILING__SENDER_NAME="Robyn App"
 ```
 
 Installing the `[dev]` extras gives you `fakeredis` so you can keep `SETTINGS__CACHE__USE_FAKE=true` and avoid provisioning a Redis server during local development or tests.

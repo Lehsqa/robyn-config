@@ -9,7 +9,7 @@ class Settings(BaseModel):
     port: int = 5432
     user: str = "sqlite"
     password: str = "sqlite"
-    name: str = "robyn_backend_template"
+    name: str = "database"
 
     @property
     def url(self) -> str:
