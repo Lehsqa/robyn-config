@@ -1,0 +1,233 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>robyn-config &mdash; robyn-config 0.1.1 documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=a58bc63e"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="prev" title="robyn-config documentation" href="index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search"  style="background: #2980B9" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            robyn-config
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">README</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#installation">📦 Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#usage">🤔 Usage</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#create-a-project">🚀 Create a Project</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#cli-options">🏃 CLI Options</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#python-version-support">🐍 Python Version Support</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#features">💡 Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#how-to-contribute">🗒️ How to contribute</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#get-started">🏁 Get started</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#to-develop-locally">⚙️ To Develop Locally</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#prerequisites">Prerequisites</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#setup">Setup</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#special-thanks">✨ Special thanks</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu"  style="background: #2980B9" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">robyn-config</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">robyn-config</li>
+      <li class="wy-breadcrumbs-aside">
+              <a href="https://github.com/Lehsqa/robyn-config/blob/main/docs/source/README.md" class="fa fa-github"> Edit on GitHub</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="robyn-config">
+<h1>robyn-config<a class="headerlink" href="#robyn-config" title="Link to this heading"></a></h1>
+<p><a class="reference external" href="https://pepy.tech/project/robyn-config"><img alt="Downloads" src="https://static.pepy.tech/personalized-badge/robyn-config?period=total&amp;units=international_system&amp;left_color=grey&amp;right_color=blue&amp;left_text=Downloads" /></a>
+<a class="reference external" href="https://badge.fury.io/py/robyn-config"><img alt="PyPI version" src="https://badge.fury.io/py/robyn-config.svg" /></a>
+<a class="reference external" href="https://github.com/Lehsqa/robyn-config/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/License-MIT-black" /></a>
+<img alt="Python" src="https://img.shields.io/badge/Support-Version%20%E2%89%A5%203.11-brightgreen" /></p>
+<p><code class="docutils literal notranslate"><span class="pre">robyn-config</span></code> is a CLI tool designed to scaffold <a class="reference external" href="https://robyn.tech">Robyn</a> backend projects. It provides templates for <strong>Domain-Driven Design (DDD)</strong> and <strong>Model-View-Controller (MVC)</strong> architectures, with support for <strong>SQLAlchemy</strong> and <strong>Tortoise ORM</strong>.</p>
+<section id="installation">
+<h2>📦 Installation<a class="headerlink" href="#installation" title="Link to this heading"></a></h2>
+<p>You can simply use Pip for installation.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>pip<span class="w"> </span>install<span class="w"> </span>robyn-config
+</pre></div>
+</div>
+</section>
+<section id="usage">
+<h2>🤔 Usage<a class="headerlink" href="#usage" title="Link to this heading"></a></h2>
+<section id="create-a-project">
+<h3>🚀 Create a Project<a class="headerlink" href="#create-a-project" title="Link to this heading"></a></h3>
+<p>To create a new project with your preferred architecture and ORM, run:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>robyn-config<span class="w"> </span>create<span class="w"> </span>my-service<span class="w"> </span>--orm<span class="w"> </span>sqlalchemy<span class="w"> </span>--design<span class="w"> </span>ddd<span class="w"> </span>./my-service
+</pre></div>
+</div>
+<p>Or for an MVC layout with Tortoise ORM:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>robyn-config<span class="w"> </span>create<span class="w"> </span>newsletter<span class="w"> </span>--orm<span class="w"> </span>tortoise<span class="w"> </span>--design<span class="w"> </span>mvc<span class="w"> </span>~/projects/newsletter
+</pre></div>
+</div>
+</section>
+<section id="cli-options">
+<h3>🏃 CLI Options<a class="headerlink" href="#cli-options" title="Link to this heading"></a></h3>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">Usage</span><span class="p">:</span> <span class="n">robyn</span><span class="o">-</span><span class="n">config</span> <span class="p">[</span><span class="n">OPTIONS</span><span class="p">]</span> <span class="n">COMMAND</span> <span class="p">[</span><span class="n">ARGS</span><span class="p">]</span><span class="o">...</span>
+
+<span class="n">Options</span><span class="p">:</span>
+  <span class="o">--</span><span class="n">help</span>  <span class="n">Show</span> <span class="n">this</span> <span class="n">message</span> <span class="ow">and</span> <span class="n">exit</span><span class="o">.</span>
+
+<span class="n">Commands</span><span class="p">:</span>
+  <span class="n">create</span>  <span class="n">Scaffold</span> <span class="n">a</span> <span class="n">new</span> <span class="n">Robyn</span> <span class="n">project</span><span class="o">.</span>
+</pre></div>
+</div>
+<p><strong><code class="docutils literal notranslate"><span class="pre">create</span></code> command options:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">name</span></code>: Sets the project name used in templated files like <code class="docutils literal notranslate"><span class="pre">pyproject.toml</span></code> and <code class="docutils literal notranslate"><span class="pre">README.md</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--orm</span></code>: Selects the database layer. Options: <code class="docutils literal notranslate"><span class="pre">sqlalchemy</span></code>, <code class="docutils literal notranslate"><span class="pre">tortoise</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">--design</span></code>: Toggles between the architecture templates. Options: <code class="docutils literal notranslate"><span class="pre">ddd</span></code>, <code class="docutils literal notranslate"><span class="pre">mvc</span></code>.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">destination</span></code>: The target directory. Defaults to <code class="docutils literal notranslate"><span class="pre">.</span></code>.</p></li>
+</ul>
+</section>
+</section>
+<section id="python-version-support">
+<h2>🐍 Python Version Support<a class="headerlink" href="#python-version-support" title="Link to this heading"></a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">robyn-config</span></code> is compatible with the following Python versions:</p>
+<blockquote>
+<div><p>Python &gt;= 3.11</p>
+</div></blockquote>
+<p>Please make sure you have the correct version of Python installed before starting to use this project.</p>
+</section>
+<section id="features">
+<h2>💡 Features<a class="headerlink" href="#features" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Scaffolding</strong>: Quickly generate Robyn backend projects.</p></li>
+<li><p><strong>Architecture Choices</strong>: Support for DDD and MVC patterns.</p></li>
+<li><p><strong>ORM Flexibility</strong>: Choose between SQLAlchemy and Tortoise ORM.</p></li>
+<li><p><strong>Docker Ready</strong>: Includes Docker and Docker Compose configurations.</p></li>
+<li><p><strong>Development Tools</strong>: Comes with <code class="docutils literal notranslate"><span class="pre">ruff</span></code>, <code class="docutils literal notranslate"><span class="pre">pytest</span></code>, and <code class="docutils literal notranslate"><span class="pre">black</span></code> configured.</p></li>
+</ul>
+</section>
+<section id="how-to-contribute">
+<h2>🗒️ How to contribute<a class="headerlink" href="#how-to-contribute" title="Link to this heading"></a></h2>
+<section id="get-started">
+<h3>🏁 Get started<a class="headerlink" href="#get-started" title="Link to this heading"></a></h3>
+<p>Feel free to open an issue for any clarifications or suggestions.</p>
+</section>
+<section id="to-develop-locally">
+<h3>⚙️ To Develop Locally<a class="headerlink" href="#to-develop-locally" title="Link to this heading"></a></h3>
+<section id="prerequisites">
+<h4>Prerequisites<a class="headerlink" href="#prerequisites" title="Link to this heading"></a></h4>
+<ul class="simple">
+<li><p>Python &gt;= 3.11</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">uv</span></code> (recommended) or <code class="docutils literal notranslate"><span class="pre">pip</span></code></p></li>
+</ul>
+</section>
+<section id="setup">
+<h4>Setup<a class="headerlink" href="#setup" title="Link to this heading"></a></h4>
+<ol class="arabic">
+<li><p>Clone the repository:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/Lehsqa/robyn-config.git
+</pre></div>
+</div>
+</li>
+<li><p>Setup a virtual environment and install dependencies:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>uv<span class="w"> </span>venv<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">source</span><span class="w"> </span>.venv/bin/activate
+uv<span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.<span class="o">[</span>dev<span class="o">]</span>
+</pre></div>
+</div>
+</li>
+<li><p>Run linters and tests:</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>ruff<span class="w"> </span>check<span class="w"> </span>src
+pytest
+</pre></div>
+</div>
+</li>
+</ol>
+</section>
+</section>
+</section>
+<section id="special-thanks">
+<h2>✨ Special thanks<a class="headerlink" href="#special-thanks" title="Link to this heading"></a></h2>
+<p>Special thanks to the <a class="reference external" href="https://github.com/sparckles/Robyn">Robyn</a> team for creating such an amazing framework!</p>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="index.html" class="btn btn-neutral float-left" title="robyn-config documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Leshqa.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
