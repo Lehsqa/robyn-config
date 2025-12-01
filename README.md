@@ -1,61 +1,106 @@
 # robyn-config
 
-`robyn-config` is a small CLI that scaffolds Robyn backend projects from the bundled templates. It can generate either DDD or MVC layouts and swaps between SQLAlchemy and Tortoise implementations on demand.
+[![Downloads](https://static.pepy.tech/personalized-badge/robyn-config?period=total&units=international_system&left_color=grey&right_color=blue&left_text=Downloads)](https://pepy.tech/project/robyn-config)
+[![PyPI version](https://badge.fury.io/py/robyn-config.svg)](https://badge.fury.io/py/robyn-config)
+[![License](https://img.shields.io/badge/License-MIT-black)](https://github.com/Lehsqa/robyn-config/blob/main/LICENSE)
+![Python](https://img.shields.io/badge/Support-Version%20%E2%89%A5%203.11-brightgreen)
 
-## Installation
+`robyn-config` is a CLI tool designed to scaffold [Robyn](https://robyn.tech) backend projects. It provides templates for **Domain-Driven Design (DDD)** and **Model-View-Controller (MVC)** architectures, with support for **SQLAlchemy** and **Tortoise ORM**.
+
+## 📦 Installation
+
+You can simply use Pip for installation.
 
 ```bash
-pip install .
-# or
-uv tool install .
+pip install robyn-config
 ```
 
-## Usage
+## 🤔 Usage
 
-Create a project with your preferred ORM and architecture:
+### 🚀 Create a Project
+
+To create a new project with your preferred architecture and ORM, run:
 
 ```bash
 robyn-config create my-service --orm sqlalchemy --design ddd ./my-service
+```
+
+Or for an MVC layout with Tortoise ORM:
+
+```bash
 robyn-config create newsletter --orm tortoise --design mvc ~/projects/newsletter
 ```
 
+### 🏃 CLI Options
+
+```
+Usage: robyn-config [OPTIONS] COMMAND [ARGS]...
+
 Options:
+  --help  Show this message and exit.
 
-- `name` sets the project name used in templated files like `pyproject.toml` and `README.md`.
-- `--orm` (`sqlalchemy`|`tortoise`) selects the database layer.
-- `--design` (`ddd`|`mvc`) toggles between the Domain-Driven and MVC templates.
-- `destination` is the target directory (defaults to `.`); if it is not empty, you will be prompted before overwriting conflicts.
-
-The command copies:
-
-- Common project files (docker-compose, Makefile, env templates, README, pyproject, uv.lock).
-- Application code from `src/app_ddd` or `src/app_mvc` into `src/app`.
-- Compose helpers from `src/common/compose/app` with ORM-specific dev/prod runners.
-- For Tortoise projects, Alembic artifacts are omitted from the Docker image.
-
-## Template contents
-
-The shipped templates live alongside the CLI:
-
-- Root-level files sit under `src/common`.
-- Compose files are under `src/common/compose/app`.
-- Application code is under `src/ddd` and `src/mvc`.
-
-Feel free to modify these in-place to customize the generated projects.
-
-## Development
-
-Run the linters/tests locally:
-
-```bash
-uv venv && source .venv/bin/activate
-uv pip install -e .[dev]
-ruff check src
-pytest
+Commands:
+  create  Scaffold a new Robyn project.
 ```
 
-Build a wheel for distribution:
+**`create` command options:**
 
-```bash
-python -m build
-```
+- `name`: Sets the project name used in templated files like `pyproject.toml` and `README.md`.
+- `--orm`: Selects the database layer. Options: `sqlalchemy`, `tortoise`.
+- `--design`: Toggles between the architecture templates. Options: `ddd`, `mvc`.
+- `destination`: The target directory. Defaults to `.`.
+
+## 🐍 Python Version Support
+
+`robyn-config` is compatible with the following Python versions:
+
+> Python >= 3.11
+
+Please make sure you have the correct version of Python installed before starting to use this project.
+
+## 💡 Features
+
+- **Scaffolding**: Quickly generate Robyn backend projects.
+- **Architecture Choices**: Support for DDD and MVC patterns.
+- **ORM Flexibility**: Choose between SQLAlchemy and Tortoise ORM.
+- **Docker Ready**: Includes Docker and Docker Compose configurations.
+- **Development Tools**: Comes with `ruff`, `pytest`, and `black` configured.
+
+## 🗒️ How to contribute
+
+### 🏁 Get started
+
+Feel free to open an issue for any clarifications or suggestions.
+
+### ⚙️ To Develop Locally
+
+#### Prerequisites
+
+- Python >= 3.11
+- `uv` (recommended) or `pip`
+
+#### Setup
+
+1.  Clone the repository:
+
+    ```bash
+    git clone https://github.com/Lehsqa/robyn-config.git
+    ```
+
+2.  Setup a virtual environment and install dependencies:
+
+    ```bash
+    uv venv && source .venv/bin/activate
+    uv pip install -e .[dev]
+    ```
+
+3.  Run linters and tests:
+
+    ```bash
+    ruff check src
+    pytest
+    ```
+
+## ✨ Special thanks
+
+Special thanks to the [Robyn](https://github.com/sparckles/Robyn) team for creating such an amazing framework!
