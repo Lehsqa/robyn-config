@@ -1,0 +1,51 @@
+"""{{ Name }} operational services."""
+
+from typing import Any
+
+from ..domain.{{ name }} import {{ Name }}Flat, {{ Name }}Uncommitted
+from ..infrastructure.database import transaction
+from ..infrastructure.database.repository import {{ Name }}Repository
+
+__all__ = (
+    "get_all",
+    "get",
+    "create",
+    "update",
+    "delete",
+)
+
+
+async def get_all() -> list[{{ Name }}Flat]:
+    """Get all {{ name }} instances."""
+    async with transaction():
+        repository = {{ Name }}Repository()
+        return [item async for item in repository.all()]
+
+
+async def get(id_: int) -> {{ Name }}Flat:
+    """Get a {{ name }} by ID."""
+    async with transaction():
+        repository = {{ Name }}Repository()
+        return await repository.get(id_=id_)
+
+
+async def create(payload: dict[str, Any]) -> {{ Name }}Flat:
+    """Create a new {{ name }}."""
+    async with transaction():
+        repository = {{ Name }}Repository()
+        schema = {{ Name }}Uncommitted(**payload)
+        return await repository.create(schema)
+
+
+async def update(id_: int, payload: dict[str, Any]) -> {{ Name }}Flat:
+    """Update an existing {{ name }}."""
+    async with transaction():
+        repository = {{ Name }}Repository()
+        return await repository.update(attr="id", value=id_, payload=payload)
+
+
+async def delete(id_: int) -> None:
+    """Delete a {{ name }} by ID."""
+    async with transaction():
+        repository = {{ Name }}Repository()
+        await repository.delete(id_=id_)

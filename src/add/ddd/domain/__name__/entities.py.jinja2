@@ -1,0 +1,16 @@
+"""{{ Name }} domain entities."""
+
+from ...infrastructure.application import InternalEntity, TimeStampMixin
+
+
+class {{ Name }}Uncommitted(InternalEntity):
+    """Entity for creating a new {{ name }}."""
+
+    name: str
+    # Add your fields here
+
+
+class {{ Name }}Flat({{ Name }}Uncommitted, TimeStampMixin):
+    """Full {{ name }} entity with database fields."""
+
+    id: int

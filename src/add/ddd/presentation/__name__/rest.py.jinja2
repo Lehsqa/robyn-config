@@ -1,0 +1,68 @@
+"""{{ Name }} REST API routes."""
+
+from robyn import Request, Response, Robyn
+from starlette import status
+
+from ...domain.{{ name }} import {{ Name }}Flat
+from ...infrastructure.application import json_response
+from ...operational import {{ name }} as {{ name }}_ops
+from .._helpers import parse_body
+from .contracts import {{ Name }}CreateBody, {{ Name }}UpdateBody, {{ Name }}Public
+
+
+def _serialize(instance: {{ Name }}Flat) -> dict:
+    return {{ Name }}Public.model_validate(instance).model_dump(by_alias=True)
+
+
+def register(app: Robyn) -> None:
+    """Register {{ name }} routes."""
+
+    @app.get("/{{ name }}s")
+    async def {{ name }}_list(request: Request) -> Response:
+        """Get all {{ name }}s."""
+        items = await {{ name }}_ops.get_all()
+        return json_response(
+            payload=[_serialize(item) for item in items],
+            status_code=status.HTTP_200_OK,
+        )
+
+    @app.get("/{{ name }}s/:id")
+    async def {{ name }}_get(request: Request) -> Response:
+        """Get a {{ name }} by ID."""
+        id_ = int(request.path_params["id"])
+        item = await {{ name }}_ops.get(id_=id_)
+        return json_response(
+            payload=_serialize(item),
+            status_code=status.HTTP_200_OK,
+        )
+
+    @app.post("/{{ name }}s")
+    async def {{ name }}_create(request: Request) -> Response:
+        """Create a new {{ name }}."""
+        payload = await parse_body(request, {{ Name }}CreateBody)
+        item = await {{ name }}_ops.create(payload=payload.model_dump())
+        return json_response(
+            payload=_serialize(item),
+            status_code=status.HTTP_201_CREATED,
+        )
+
+    @app.put("/{{ name }}s/:id")
+    async def {{ name }}_update(request: Request) -> Response:
+        """Update a {{ name }}."""
+        id_ = int(request.path_params["id"])
+        payload = await parse_body(request, {{ Name }}UpdateBody)
+        item = await {{ name }}_ops.update(id_=id_, payload=payload.model_dump(exclude_unset=True))
+        return json_response(
+            payload=_serialize(item),
+            status_code=status.HTTP_200_OK,
+        )
+
+    @app.delete("/{{ name }}s/:id")
+    async def {{ name }}_delete(request: Request) -> Response:
+        """Delete a {{ name }}."""
+        id_ = int(request.path_params["id"])
+        await {{ name }}_ops.delete(id_=id_)
+        return json_response(
+            payload={},
+            status_code=status.HTTP_200_OK,
+        )

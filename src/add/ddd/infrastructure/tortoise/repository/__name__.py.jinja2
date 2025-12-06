@@ -1,0 +1,33 @@
+"""Tortoise ORM repository implementation for {{ Name }}."""
+
+from typing import Any, AsyncGenerator
+
+from ....domain.{{ name }} import {{ Name }}Repository as {{ Name }}RepositoryInterface
+from ....domain.{{ name }}.entities import {{ Name }}Flat, {{ Name }}Uncommitted
+from .base import BaseRepository
+from ..tables import {{ Name }}Table
+
+
+class {{ Name }}Repository(BaseRepository[{{ Name }}Table], {{ Name }}RepositoryInterface):
+    """Tortoise ORM implementation of {{ Name }}Repository."""
+
+    async def all(self) -> AsyncGenerator[{{ Name }}Flat, None]:
+        async for instance in self._all():
+            yield {{ Name }}Flat.model_validate(instance)
+
+    async def get(self, id_: int) -> {{ Name }}Flat:
+        instance = await self._get(key="id", value=id_)
+        return {{ Name }}Flat.model_validate(instance)
+
+    async def create(self, schema: {{ Name }}Uncommitted) -> {{ Name }}Flat:
+        instance = await self._save(schema.model_dump())
+        return {{ Name }}Flat.model_validate(instance)
+
+    async def update(
+        self, attr: str, value: Any, payload: dict[str, Any]
+    ) -> {{ Name }}Flat:
+        schema = await self._update(attr, value, payload)
+        return {{ Name }}Flat.model_validate(schema)
+
+    async def delete(self, id_: int) -> None:
+        await super().delete(id_=id_)

@@ -1,0 +1,34 @@
+"""{{ Name }} repository interface."""
+
+from __future__ import annotations
+
+from abc import ABC, abstractmethod
+from typing import Any, AsyncGenerator
+
+from .entities import {{ Name }}Flat, {{ Name }}Uncommitted
+
+
+class {{ Name }}Repository(ABC):
+    """Abstract repository contract for {{ name }} persistence operations."""
+
+    @abstractmethod
+    async def all(self) -> AsyncGenerator[{{ Name }}Flat, None]:
+        """Return all {{ name }} instances."""
+
+    @abstractmethod
+    async def get(self, id_: int) -> {{ Name }}Flat:
+        """Return a specific {{ name }} by identifier."""
+
+    @abstractmethod
+    async def create(self, schema: {{ Name }}Uncommitted) -> {{ Name }}Flat:
+        """Create a new {{ name }} from the provided schema."""
+
+    @abstractmethod
+    async def update(
+        self, attr: str, value: Any, payload: dict[str, Any]
+    ) -> {{ Name }}Flat:
+        """Update an existing {{ name }}."""
+
+    @abstractmethod
+    async def delete(self, id_: int) -> None:
+        """Delete a {{ name }} by identifier."""

@@ -1,0 +1,36 @@
+"""{{ Name }} request/response contracts."""
+
+from pydantic import Field
+
+from app.infrastructure.application import PublicEntity
+
+
+class {{ Name }}CreateBody(PublicEntity):
+    """Request body for creating a {{ name }}."""
+
+    name: str = Field(
+        description="{{ Name }} name",
+        min_length=1,
+        max_length=255,
+    )
+    # Add your fields here
+
+
+class {{ Name }}UpdateBody(PublicEntity):
+    """Request body for updating a {{ name }}."""
+
+    name: str | None = Field(
+        default=None,
+        description="{{ Name }} name",
+        min_length=1,
+        max_length=255,
+    )
+    # Add your fields here
+
+
+class {{ Name }}Public(PublicEntity):
+    """Public {{ name }} response model."""
+
+    id: int = Field(description="{{ Name }} ID")
+    name: str = Field(description="{{ Name }} name")
+    # Add your fields here
