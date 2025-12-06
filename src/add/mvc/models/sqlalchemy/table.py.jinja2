@@ -1,0 +1,6 @@
+
+class {{ Name }}Table(BaseTable):
+    __tablename__ = "{{ name }}s"
+
+    name: Mapped[str] = mapped_column(nullable=False)
+    # Add your columns here

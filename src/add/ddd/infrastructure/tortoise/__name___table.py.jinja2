@@ -1,0 +1,16 @@
+"""{{ Name }} Tortoise table definition."""
+
+from tortoise import fields
+
+from .tables import BaseTable
+
+
+class {{ Name }}Table(BaseTable):
+    """{{ Name }} database table."""
+
+    name = fields.CharField(max_length=255)
+    # Add your fields here
+
+    class Meta:
+        table = "{{ name }}s"
+        ordering = ("id",)

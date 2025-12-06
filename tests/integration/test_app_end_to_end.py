@@ -45,6 +45,50 @@ def run_cli_create(destination: Path, design: str, orm: str) -> None:
     )
 
 
+def run_cli_add(project_path: Path, name: str) -> None:
+    """Add business logic to an existing project using the CLI."""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT / "src")
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "cli",
+            "add",
+            name,
+            "-p",
+            str(project_path),
+        ],
+        check=True,
+        env=env,
+    )
+
+
+def run_make_migration(project_dir: Path, design: str, orm: str) -> None:
+    """Run make makemigration in the project directory."""
+    try:
+        if orm == "sqlalchemy":
+            subprocess.run(
+                ["make", "migrate"],
+                cwd=project_dir,
+                check=True,
+                capture_output=True,
+            )
+
+            subprocess.run(
+                ["make", "makemigration"],
+                cwd=project_dir,
+                check=True,
+                capture_output=True,
+            )
+
+    except subprocess.CalledProcessError as e:
+        print(f"Command failed: {e.cmd}")
+        print(f"STDOUT: {e.stdout.decode()}")
+        print(f"STDERR: {e.stderr.decode()}")
+        raise e
+
+
 def docker_compose(project_dir: Path, *args: str) -> None:
     env = {**os.environ, "COMPOSE_HTTP_TIMEOUT": "200"}
     subprocess.run(
@@ -111,6 +155,8 @@ def test_generate_app_and_run_endpoints(
     project_dir = tmp_path / "robyn-app"
     shutil.rmtree(project_dir, ignore_errors=True)
     run_cli_create(project_dir, design=design, orm=orm)
+    run_cli_add(project_dir, "product")
+    run_make_migration(project_dir, design, orm)
     shutil.copy2(project_dir / ".env.example", project_dir / ".env")
 
     compose_started = False
@@ -125,7 +171,8 @@ def test_generate_app_and_run_endpoints(
             "email": "user@email.com",
             "password": "12Qwerty%",
         }
-        with httpx.Client(base_url=APP_BASE_URL, timeout=5.0) as client:
+        with httpx.Client(base_url=APP_BASE_URL, timeout=10.0) as client:
+            # === Test User endpoints ===
             create_response = client.post("/users", json=user_payload)
             create_response.raise_for_status()
 
@@ -152,6 +199,45 @@ def test_generate_app_and_run_endpoints(
             )
             me_response.raise_for_status()
             assert me_response.json().get("result", {}).get("username") == user_payload["username"]
+
+            # === Test Product endpoints (from add command) ===
+            # Test GET /products (list)
+            list_response = client.get("/products")
+            assert list_response.status_code == 200, f"GET /products failed: {list_response.text}"
+            result = list_response.json().get("result", [])
+            assert isinstance(result, list), "Expected list response"
+
+            # Test POST /products (create)
+            product_payload = {"name": "Test Product"}
+            create_product_response = client.post("/products", json=product_payload)
+            assert create_product_response.status_code == 201, f"POST /products failed: {create_product_response.text}"
+            created_product = create_product_response.json().get("result", {})
+            product_id = created_product.get("id")
+            assert product_id, "Created product should have an ID"
+            assert created_product.get("name") == "Test Product"
+
+            # Test GET /products/:id (get single)
+            get_response = client.get(f"/products/{product_id}")
+            assert get_response.status_code == 200, f"GET /products/{product_id} failed: {get_response.text}"
+            fetched_product = get_response.json().get("result", {})
+            assert fetched_product.get("id") == product_id
+            assert fetched_product.get("name") == "Test Product"
+
+            # Test PUT /products/:id (update)
+            update_payload = {"name": "Updated Product"}
+            update_response = client.put(f"/products/{product_id}", json=update_payload)
+            assert update_response.status_code == 200, f"PUT /products/{product_id} failed: {update_response.text}"
+            updated_product = update_response.json().get("result", {})
+            assert updated_product.get("name") == "Updated Product"
+
+            # Test DELETE /products/:id (delete)
+            delete_response = client.delete(f"/products/{product_id}")
+            assert delete_response.status_code in [200, 204], f"DELETE /products/{product_id} failed: {delete_response.text}"
+
+            # Verify deletion - GET should fail
+            get_deleted_response = client.get(f"/products/{product_id}")
+            assert get_deleted_response.status_code in [404, 500], "Deleted product should not be found"
+
     finally:
         if compose_started:
             docker_compose(
