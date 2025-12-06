@@ -1,9 +1,8 @@
 import uuid
 
-from pydantic import EmailStr, Field, field_validator, model_validator
-
 from app.domain.authentication import validators as auth_validators
 from app.infrastructure.application import PublicEntity, UnprocessableError
+from pydantic import EmailStr, Field, field_validator, model_validator
 
 
 class _BaseUser(PublicEntity):

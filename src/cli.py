@@ -6,13 +6,13 @@ from pathlib import Path
 
 import click
 
-from create import (
-    ORM_CHOICES,
-    DESIGN_CHOICES,
-    prepare_destination,
-    copy_template,
-)
 from add import add_business_logic
+from create import (
+    DESIGN_CHOICES,
+    ORM_CHOICES,
+    copy_template,
+    prepare_destination,
+)
 
 
 @click.group(name="robyn-config")
@@ -45,17 +45,25 @@ def create(
     """Copy the template into DESTINATION with ORM-specific adjustments."""
     normalized_orm = orm_type.lower()
     if normalized_orm not in ORM_CHOICES:
-        print(f"Unsupported ORM '{orm_type}'. Valid options: {', '.join(ORM_CHOICES)}.")
+        print(
+            f"Unsupported ORM '{orm_type}'. Valid options: {', '.join(ORM_CHOICES)}."
+        )
         raise SystemExit(1)
 
     normalized_design = design.lower()
     if normalized_design not in DESIGN_CHOICES:
-        print(f"Unsupported design '{design}'. Valid options: {', '.join(DESIGN_CHOICES)}.")
+        print(
+            f"Unsupported design '{design}'. Valid options: {', '.join(DESIGN_CHOICES)}."
+        )
         raise SystemExit(1)
 
-    target_dir = prepare_destination(destination, normalized_orm, normalized_design)
+    target_dir = prepare_destination(
+        destination, normalized_orm, normalized_design
+    )
     copy_template(target_dir, normalized_orm, normalized_design, name)
-    print(f"Robyn template ({normalized_design}/{normalized_orm}) copied to {target_dir}")
+    print(
+        f"Robyn template ({normalized_design}/{normalized_orm}) copied to {target_dir}"
+    )
 
 
 @cli.command("add")
@@ -64,7 +72,9 @@ def create(
     "-p",
     "--path",
     "project_path",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True, path_type=Path),
+    type=click.Path(
+        exists=True, file_okay=False, dir_okay=True, path_type=Path
+    ),
     default=".",
     help="Path to the project directory (default: current directory).",
 )
@@ -86,7 +96,9 @@ def add(name: str, project_path: Path) -> None:
         print("  ✓ Table added to tables.py")
         print("  ✓ Routes registered automatically")
         print("\nNext step:")
-        print("  - Create a database migration (alembic revision --autogenerate)")
+        print(
+            "  - Create a database migration (alembic revision --autogenerate)"
+        )
     except FileNotFoundError as e:
         print(f"Error: {e}")
         raise SystemExit(1)

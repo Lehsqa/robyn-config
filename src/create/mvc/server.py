@@ -1,14 +1,13 @@
 import logging
 from pathlib import Path
 
-from loguru import logger
-from robyn import Robyn
-
 from app.config import settings
 from app.middlewares import cors, sessions
-from app.utils import error_response
 from app.urls import register_routes
+from app.utils import error_response
 from app.views.authentication import JWTAuthenticationHandler
+from loguru import logger
+from robyn import Robyn
 
 log_path = Path(settings.root_dir) / "logs"
 log_path.mkdir(exist_ok=True)

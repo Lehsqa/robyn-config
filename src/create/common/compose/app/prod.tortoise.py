@@ -45,18 +45,20 @@ def main() -> None:
         _run(shlex.split(raw_cmd))
         return
 
-    _run([
-        sys.executable,
-        "-m",
-        APP_MODULE,
-        "--fast",
-        "--processes",
-        "4",
-        "--workers",
-        "3",
-        "--log-level",
-        "WARNING",
-    ])
+    _run(
+        [
+            sys.executable,
+            "-m",
+            APP_MODULE,
+            "--fast",
+            "--processes",
+            "4",
+            "--workers",
+            "3",
+            "--log-level",
+            "WARNING",
+        ]
+    )
 
 
 if __name__ == "__main__":

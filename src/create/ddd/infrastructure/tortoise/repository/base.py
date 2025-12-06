@@ -10,8 +10,8 @@ from ....infrastructure.application import (
     NotFoundError,
     UnprocessableError,
 )
-from ..tables import ConcreteTable
 from ..services.session import Session
+from ..tables import ConcreteTable
 
 
 class BaseRepository(Session, Generic[ConcreteTable]):

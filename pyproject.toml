@@ -41,6 +41,158 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.flake8]
+max-line-length = 88
+extend-ignore = "E203, E501"
+
 [tool.ruff]
-line-length = 88
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "__pycache__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "venv",
+    "migrations",
+]
+line-length = 79
 src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = ["E501", "F403", "F811"]
+fixable = [
+    "A",
+    "B",
+    "C",
+    "D",
+    "E",
+    "F",
+    "G",
+    "I",
+    "N",
+    "Q",
+    "S",
+    "T",
+    "W",
+    "ANN",
+    "ARG",
+    "BLE",
+    "COM",
+    "DJ",
+    "DTZ",
+    "EM",
+    "ERA",
+    "EXE",
+    "FBT",
+    "ICN",
+    "INP",
+    "ISC",
+    "NPY",
+    "PD",
+    "PGH",
+    "PIE",
+    "PL",
+    "PT",
+    "PTH",
+    "PYI",
+    "RET",
+    "RSE",
+    "RUF",
+    "SIM",
+    "SLF",
+    "TCH",
+    "TID",
+    "TRY",
+    "UP",
+    "YTT",
+]
+unfixable = []
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.black]
+target-version = ["py312"]
+line-length = 79
+exclude = '''
+(
+  /(
+      \.eggs         # exclude a few common directories in the
+    | \.git          # root of the project
+    | \.hg
+    | \.mypy_cache
+    | \.tox
+    | \.venv
+    | venv
+    | _build
+    | buck-out
+    | build
+    | dist
+    | .tox
+  )/
+                     # the root of the project
+)
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+line_length = 79
+skip = ["venv"]
+src_paths = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-s -vvv --cache-clear --cov=./src/app --cov-report=term-missing --cov-report=html"
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+cache_dir = "/tmp/pytest_cache"
+python_files = "test_*.py *_test.py"
+python_functions = "test_* *_test"
+filterwarnings = [
+  "ignore::RuntimeWarning",
+  "ignore::UserWarning",
+  "ignore::DeprecationWarning",
+]
+markers = [
+    "integration: marks tests as integration tests",
+]
+
+[tool.pyright]
+exclude = ["**/__pycache__", "**/venv/*", "**/.tox/*"]
+typeCheckingMode = "off"
+useLibraryCodeForTypes = true
+
+[tool.mypy]
+ignore_missing_imports = true
+explicit_package_bases = true
+exclude = "(^|/)(migrations)(/|$)"
+disable_error_code = ["no-redef"]
+
+[tool.coverage.report]
+omit = [
+  "*/tests.py",
+  "*/migrations/*",
+  "asgi.py",
+  "wsgi.py",
+  "settings.py",
+  "manage.py",
+]

@@ -9,7 +9,12 @@ from ..config import settings
 from ..mailing import EmailMessage, mailing_service
 from ..models import UsersRepository, transaction
 from ..schemas import EmailChange, UserFlat, UserUncommitted
-from ..utils import DatabaseError, NotFoundError, UnprocessableError, json_response
+from ..utils import (
+    DatabaseError,
+    NotFoundError,
+    UnprocessableError,
+    json_response,
+)
 from .authentication import require_user_id
 from .contracts import (
     ActivationBody,
@@ -41,7 +46,9 @@ def _password_reset_link(key: uuid.UUID) -> str:
 
 
 def _email_change_link(key: uuid.UUID) -> str:
-    base = str(settings.integrations.frontend.email_change_base_url).rstrip("/")
+    base = str(settings.integrations.frontend.email_change_base_url).rstrip(
+        "/"
+    )
     return f"{base}/{key}"
 
 
@@ -87,9 +94,7 @@ async def _send_password_reset_email(user: UserFlat, key: uuid.UUID) -> None:
     )
 
 
-async def _cache_email_change(
-    entry: EmailChange, key: uuid.UUID
-) -> None:
+async def _cache_email_change(entry: EmailChange, key: uuid.UUID) -> None:
     async with CacheRepository[EmailChange]() as cache:
         await cache.set(
             namespace="email-change",

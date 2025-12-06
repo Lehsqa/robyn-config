@@ -34,7 +34,9 @@ class CacheRepository(Generic[_CacheEntryInstance]):
 
     async def __aenter__(self) -> "CacheRepository[_CacheEntryInstance]":
         if settings.cache.use_fake:
-            if not FakeRedis or not FakeServer:  # pragma: no cover - import guard
+            if (
+                not FakeRedis or not FakeServer
+            ):  # pragma: no cover - import guard
                 raise RuntimeError(
                     "fakeredis must be installed to use the fake cache "
                     "(SETTINGS__CACHE__USE_FAKE=true). Install the `[dev]` extras "

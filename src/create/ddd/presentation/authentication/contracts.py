@@ -1,8 +1,7 @@
 from datetime import datetime, timedelta
 
-from pydantic import EmailStr, Field
-
 from app.infrastructure.application import PublicEntity
+from pydantic import EmailStr, Field
 
 
 class LoginRequestBody(PublicEntity):

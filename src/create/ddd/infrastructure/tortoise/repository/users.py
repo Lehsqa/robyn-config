@@ -2,8 +2,8 @@ from typing import Any, AsyncGenerator
 
 from ....domain.users import UsersRepository as UsersRepositoryInterface
 from ....domain.users.entities import UserFlat, UserUncommitted
-from .base import BaseRepository
 from ..tables import UsersTable
+from .base import BaseRepository
 
 
 class UsersRepository(BaseRepository[UsersTable], UsersRepositoryInterface):

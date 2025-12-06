@@ -10,7 +10,6 @@ from typing import Iterable, Mapping, Sequence
 import click
 from jinja2 import Environment, StrictUndefined
 
-
 ORM_CHOICES: Sequence[str] = ("sqlalchemy", "tortoise")
 DESIGN_CHOICES: Sequence[str] = ("ddd", "mvc")
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -102,7 +101,9 @@ def _collect_generated_items(orm_type: str, design: str) -> set[Path]:
     return items
 
 
-def prepare_destination(path_arg: str | None, orm_type: str, design: str) -> Path:
+def prepare_destination(
+    path_arg: str | None, orm_type: str, design: str
+) -> Path:
     """Prepare and validate the destination directory for the template."""
     destination = Path(path_arg or ".").expanduser().resolve()
     generated_items = _collect_generated_items(orm_type, design)
@@ -135,7 +136,9 @@ def prepare_destination(path_arg: str | None, orm_type: str, design: str) -> Pat
     return destination
 
 
-def _get_template_config(design: str, orm_type: str, project_name: str) -> dict[str, str]:
+def _get_template_config(
+    design: str, orm_type: str, project_name: str
+) -> dict[str, str]:
     """Get the template configuration for the given design and ORM type."""
     key = f"{design}:{orm_type}"
     config = TEMPLATE_CONFIGS.get(key)
@@ -149,7 +152,9 @@ def _get_template_config(design: str, orm_type: str, project_name: str) -> dict[
     return dict(config)
 
 
-def _render_template(source: Path, target: Path, context: Mapping[str, str]) -> None:
+def _render_template(
+    source: Path, target: Path, context: Mapping[str, str]
+) -> None:
     """Render a Jinja2 template from source to target."""
     template = JINJA_ENV.from_string(source.read_text())
     rendered = template.render(**context)
@@ -246,7 +251,9 @@ def _copy_compose_app(
             return [name for name in names if name in templates]
         return []
 
-    shutil.copytree(COMPOSE_APP_DIR, target_dir, dirs_exist_ok=True, ignore=ignore)
+    shutil.copytree(
+        COMPOSE_APP_DIR, target_dir, dirs_exist_ok=True, ignore=ignore
+    )
 
     dev_source = _resolve_compose_file("dev", "sh", orm_type)
     prod_source = _resolve_compose_file("prod", "py", orm_type)

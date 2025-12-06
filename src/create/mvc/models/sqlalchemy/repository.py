@@ -3,14 +3,10 @@ from typing import Any, AsyncGenerator, Generic, get_args, get_origin
 from sqlalchemy import asc, delete, desc, func, select, update
 from sqlalchemy.engine import Result
 
-from ..utils import (
-    DatabaseError,
-    NotFoundError,
-    UnprocessableError,
-)
+from ..schemas import UserFlat, UserUncommitted
+from ..utils import DatabaseError, NotFoundError, UnprocessableError
 from .database import Session
 from .models import ConcreteTable, UsersTable
-from ..schemas import UserFlat, UserUncommitted
 
 
 class BaseRepository(Session, Generic[ConcreteTable]):
@@ -20,7 +16,7 @@ class BaseRepository(Session, Generic[ConcreteTable]):
         super().__init__()
         if not getattr(self, "schema_class", None):
             raise UnprocessableError(message="schema_class is required")
-    
+
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         if cls is BaseRepository:
@@ -34,7 +30,7 @@ class BaseRepository(Session, Generic[ConcreteTable]):
                         break
         if cls.schema_class is None:
             raise UnprocessableError(message="schema_class is required")
-    
+
     async def _filter(self, **filters: Any) -> ConcreteTable:
         query = select(self.schema_class).filter_by(**filters)
         result: Result = await self.execute(query)

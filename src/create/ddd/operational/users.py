@@ -77,9 +77,7 @@ async def update_partial(user: UserFlat, payload: dict[str, Any]) -> UserFlat:
 
 async def get_by_login(login: str) -> UserFlat:
     async with transaction():
-        return await InfrastructureUsersRepository().get_by_login(
-            login=login
-        )
+        return await InfrastructureUsersRepository().get_by_login(login=login)
 
 
 async def get(user_id: int) -> UserFlat:

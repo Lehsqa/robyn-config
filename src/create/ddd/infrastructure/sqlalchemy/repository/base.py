@@ -8,8 +8,8 @@ from ....infrastructure.application import (
     NotFoundError,
     UnprocessableError,
 )
-from ..tables import ConcreteTable
 from ..services.session import Session
+from ..tables import ConcreteTable
 
 
 class BaseRepository(Session, Generic[ConcreteTable]):
@@ -33,7 +33,7 @@ class BaseRepository(Session, Generic[ConcreteTable]):
                         break
         if cls.schema_class is None:
             raise UnprocessableError(message="schema_class is required")
-    
+
     async def _filter(self, **filters: Any) -> ConcreteTable:
         query = select(self.schema_class).filter_by(**filters)
         result: Result = await self.execute(query)

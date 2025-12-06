@@ -68,7 +68,9 @@ class JWTAuthenticationHandler(AuthenticationHandler):
     def authenticate(self, request) -> Identity | None:
         token = self.token_getter.get_token(request)
         if not token:
-            self._last_error = AuthenticationError(message="Token not provided")
+            self._last_error = AuthenticationError(
+                message="Token not provided"
+            )
             return None
 
         try:
@@ -84,8 +86,8 @@ class JWTAuthenticationHandler(AuthenticationHandler):
     def unauthorized_response(self):
         # Simplified error response
         return json_response(
-            {"message": self._last_error.message}, 
-            status_code=self._last_error.status_code
+            {"message": self._last_error.message},
+            status_code=self._last_error.status_code,
         )
 
 
@@ -93,7 +95,7 @@ def register(app: Robyn) -> None:
     @app.post("/auth/login")
     async def login(request: Request) -> Response:
         payload = await parse_body(request, LoginRequestBody)
-        
+
         async with transaction():
             repo = UsersRepository()
             try:
@@ -110,7 +112,7 @@ def register(app: Robyn) -> None:
             payload.password, user.password, scheme="bcrypt"
         ):
             raise AuthenticationError(message="Invalid credentials")
-        
+
         token = create_access_token(user.id, user.email, user.username)
         response = TokenResponse(access_token=token)
         return json_response(

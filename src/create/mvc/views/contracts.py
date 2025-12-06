@@ -8,6 +8,7 @@ from ..utils import UnprocessableError
 
 # Authentication Contracts
 
+
 class LoginRequestBody(PublicEntity):
     login: EmailStr | str = Field(
         description="User login", examples=["john@email.com", "john"]
@@ -39,6 +40,7 @@ class TokenInfo(PublicEntity):
 
 # User Contracts
 
+
 class _BaseUser(PublicEntity):
     username: str = Field(
         description="User username",
@@ -63,7 +65,7 @@ class UserCreateBody(_BaseUser):
     def password_nist(cls, value: str) -> str:
         # Simplified validation for MVC example
         if len(value) < 8:
-             raise ValueError("Password must be at least 8 characters long")
+            raise ValueError("Password must be at least 8 characters long")
         return value
 
     @model_validator(mode="before")
@@ -100,7 +102,7 @@ class PasswordChangeBody(PublicEntity):
     @classmethod
     def password_nist(cls, value: str) -> str:
         if len(value) < 8:
-             raise ValueError("Password must be at least 8 characters long")
+            raise ValueError("Password must be at least 8 characters long")
         return value
 
 
@@ -120,7 +122,7 @@ class PasswordResetConfirmBody(PublicEntity):
     @classmethod
     def password_nist(cls, value: str) -> str:
         if len(value) < 8:
-             raise ValueError("Password must be at least 8 characters long")
+            raise ValueError("Password must be at least 8 characters long")
         return value
 
 

@@ -100,6 +100,7 @@ async def transaction() -> AsyncGenerator[BaseDBAsyncClient, None]:
 
 from contextvars import ContextVar
 from typing import Sequence
+
 from tortoise import connections
 from tortoise.backends.base.client import BaseDBAsyncClient
 
@@ -119,12 +120,12 @@ class Session:
             try:
                 connection = connections.get("default")
             except KeyError:
-                 pass
-        
+                pass
+
         if connection is None:
-             # If still None, we might not be initialized or in a weird state
-             # For now, let's try to get it again or raise
-             pass
+            # If still None, we might not be initialized or in a weird state
+            # For now, let's try to get it again or raise
+            pass
 
         self._connection: BaseDBAsyncClient = connection
         # Maintain SQLAlchemy parity for downstream consumers.

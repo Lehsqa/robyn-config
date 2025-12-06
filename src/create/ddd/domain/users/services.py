@@ -49,9 +49,7 @@ async def update_partial(
 ) -> UserFlat:
     async with transaction():
         repository = repository_factory()
-        return await repository.update(
-            attr="id", value=id_, payload=payload
-        )
+        return await repository.update(attr="id", value=id_, payload=payload)
 
 
 async def activate(
@@ -75,6 +73,4 @@ async def password_update(
     }
     async with transaction():
         repository = repository_factory()
-        return await repository.update(
-            attr="id", value=id_, payload=payload
-        )
+        return await repository.update(attr="id", value=id_, payload=payload)

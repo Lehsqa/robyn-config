@@ -4,12 +4,13 @@ import msgspec
 from robyn import Response
 from starlette import status
 
-
 JSON_HEADERS = {"content-type": "application/json; charset=utf-8"}
 
 
 class BaseError(Exception):
-    def __init__(self, message: str = "", status_code: int = status.HTTP_400_BAD_REQUEST):
+    def __init__(
+        self, message: str = "", status_code: int = status.HTTP_400_BAD_REQUEST
+    ):
         self.message = message
         self.status_code = status_code
         super().__init__(message)
@@ -32,12 +33,16 @@ class NotFoundError(BaseError):
 
 class UnprocessableError(BaseError):
     def __init__(self, message: str = "Unprocessable entity"):
-        super().__init__(message, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY)
+        super().__init__(
+            message, status_code=status.HTTP_422_UNPROCESSABLE_ENTITY
+        )
 
 
 class DatabaseError(BaseError):
     def __init__(self, message: str = "Database error"):
-        super().__init__(message, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        super().__init__(
+            message, status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 
 def _encode(payload: Any) -> bytes:
