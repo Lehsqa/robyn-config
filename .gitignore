@@ -20,3 +20,6 @@ htmlcov/
 # PyPI
 .pypirc
 dist/
+
+# PyCharm
+.idea/
