@@ -1,0 +1,109 @@
+"""{{ Name }} views with routes and business logic."""
+
+from pydantic import Field
+from robyn import Request, Response, Robyn
+from starlette import status
+
+from ..models import {{ Name }}Repository, transaction
+from ..schemas import PublicEntity
+from ..utils import json_response
+from .helpers import parse_body
+
+
+class {{ Name }}CreateBody(PublicEntity):
+    """Request body for creating a {{ name }}."""
+
+    name: str = Field(
+        description="{{ Name }} name",
+        min_length=1,
+        max_length=255,
+    )
+    # Add your fields here
+
+
+class {{ Name }}UpdateBody(PublicEntity):
+    """Request body for updating a {{ name }}."""
+
+    name: str | None = Field(
+        default=None,
+        description="{{ Name }} name",
+        min_length=1,
+        max_length=255,
+    )
+    # Add your fields here
+
+
+class {{ Name }}Public(PublicEntity):
+    """Public {{ name }} response model."""
+
+    id: int = Field(description="{{ Name }} ID")
+    name: str = Field(description="{{ Name }} name")
+    # Add your fields here
+
+
+def _serialize(instance) -> dict:
+    return {{ Name }}Public.model_validate(instance, from_attributes=True).model_dump(by_alias=True)
+
+
+def register(app: Robyn) -> None:
+    """Register {{ name }} routes."""
+
+    @app.get("/{{ name }}s")
+    async def {{ name }}_list(request: Request) -> Response:
+        """Get all {{ name }}s."""
+        async with transaction():
+            repo = {{ Name }}Repository()
+            items = [item async for item in repo.all()]
+        return json_response(
+            payload=[_serialize(item) for item in items],
+            status_code=status.HTTP_200_OK,
+        )
+
+    @app.get("/{{ name }}s/:id")
+    async def {{ name }}_get(request: Request) -> Response:
+        """Get a {{ name }} by ID."""
+        id_ = int(request.path_params["id"])
+        async with transaction():
+            repo = {{ Name }}Repository()
+            item = await repo.get(id_=id_)
+        return json_response(
+            payload=_serialize(item),
+            status_code=status.HTTP_200_OK,
+        )
+
+    @app.post("/{{ name }}s")
+    async def {{ name }}_create(request: Request) -> Response:
+        """Create a new {{ name }}."""
+        payload = await parse_body(request, {{ Name }}CreateBody)
+        async with transaction():
+            repo = {{ Name }}Repository()
+            item = await repo.create(payload.model_dump())
+        return json_response(
+            payload=_serialize(item),
+            status_code=status.HTTP_201_CREATED,
+        )
+
+    @app.put("/{{ name }}s/:id")
+    async def {{ name }}_update(request: Request) -> Response:
+        """Update a {{ name }}."""
+        id_ = int(request.path_params["id"])
+        payload = await parse_body(request, {{ Name }}UpdateBody)
+        async with transaction():
+            repo = {{ Name }}Repository()
+            item = await repo.update(attr="id", value=id_, payload=payload.model_dump(exclude_unset=True))
+        return json_response(
+            payload=_serialize(item),
+            status_code=status.HTTP_200_OK,
+        )
+
+    @app.delete("/{{ name }}s/:id")
+    async def {{ name }}_delete(request: Request) -> Response:
+        """Delete a {{ name }}."""
+        id_ = int(request.path_params["id"])
+        async with transaction():
+            repo = {{ Name }}Repository()
+            await repo.delete(id_=id_)
+        return json_response(
+            payload={},
+            status_code=status.HTTP_200_OK,
+        )

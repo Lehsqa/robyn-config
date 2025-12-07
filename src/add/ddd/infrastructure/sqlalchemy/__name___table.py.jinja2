@@ -1,0 +1,14 @@
+"""{{ Name }} SQLAlchemy table definition."""
+
+from sqlalchemy.orm import Mapped, mapped_column
+
+from .tables import BaseTable
+
+
+class {{ Name }}Table(BaseTable):
+    """{{ Name }} database table."""
+
+    __tablename__ = "{{ name }}s"
+
+    name: Mapped[str] = mapped_column()
+    # Add your columns here

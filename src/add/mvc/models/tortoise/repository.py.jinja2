@@ -1,0 +1,21 @@
+
+class {{ Name }}Repository(BaseRepository[{{ Name }}Table]):
+    schema_class = {{ Name }}Table
+
+    async def all(self) -> AsyncGenerator[{{ Name }}Table, None]:
+        async for instance in self._all():
+            yield instance
+
+    async def get(self, id_: int) -> {{ Name }}Table:
+        return await self._get(key="id", value=id_)
+
+    async def create(self, payload: dict[str, Any]) -> {{ Name }}Table:
+        return await self._save(payload)
+
+    async def update(
+        self, attr: str, value: Any, payload: dict[str, Any]
+    ) -> {{ Name }}Table:
+        return await self._update(attr, value, payload)
+
+    async def delete(self, id_: int) -> None:
+        await super().delete(id_=id_)

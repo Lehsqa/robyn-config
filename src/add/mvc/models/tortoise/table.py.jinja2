@@ -1,0 +1,7 @@
+
+class {{ Name }}Table(BaseTable):
+    name = fields.CharField(max_length=255)
+    # Add your fields here
+
+    class Meta:
+        table = "{{ name }}s"
