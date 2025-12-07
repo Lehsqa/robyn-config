@@ -5,7 +5,9 @@
 [![License](https://img.shields.io/badge/License-MIT-black)](https://github.com/Lehsqa/robyn-config/blob/main/LICENSE)
 ![Python](https://img.shields.io/badge/Support-Version%20%E2%89%A5%203.11-brightgreen)
 
-`robyn-config` is a CLI tool designed to scaffold [Robyn](https://robyn.tech) backend projects. It provides templates for **Domain-Driven Design (DDD)** and **Model-View-Controller (MVC)** architectures, with support for **SQLAlchemy** and **Tortoise ORM**.
+`robyn-config` is a comprehensive CLI tool designed to bootstrap and manage [Robyn](https://robyn.tech) applications. It streamlines your development workflow by generating production-ready project structures and automating repetitive tasks, allowing you to focus on building your business logic.
+
+Think of it as the essential companion for your Robyn projects-handling everything from initial setup with best practices to injecting new feature components as your application grows.
 
 ## 📦 Installation
 
@@ -19,17 +21,33 @@ pip install robyn-config
 
 ### 🚀 Create a Project
 
-To create a new project with your preferred architecture and ORM, run:
+To bootstrap a new project with your preferred architecture and ORM, run:
 
 ```bash
+# Create a DDD project with SQLAlchemy
 robyn-config create my-service --orm sqlalchemy --design ddd ./my-service
 ```
 
-Or for an MVC layout with Tortoise ORM:
-
 ```bash
+# Create an MVC project with Tortoise ORM
 robyn-config create newsletter --orm tortoise --design mvc ~/projects/newsletter
 ```
+
+### ➕ Add Business Logic
+
+Once inside a project, you can easily add new entities (models, routes, repositories, etc.) using the `add` command. This automatically generates all necessary files and wiring based on your project's architecture.
+
+```bash
+# Add a 'product' entity to your project
+cd my-service
+robyn-config add product
+```
+
+This will:
+- Generate models/tables.
+- Create repositories.
+- Setup routes and controllers.
+- Register everything in the app configuration.
 
 ### 🏃 CLI Options
 
@@ -41,6 +59,7 @@ Options:
 
 Commands:
   create  Scaffold a new Robyn project.
+  add     Add business logic component to an existing project.
 ```
 
 **`create` command options:**
@@ -49,6 +68,11 @@ Commands:
 - `--orm`: Selects the database layer. Options: `sqlalchemy`, `tortoise`.
 - `--design`: Toggles between the architecture templates. Options: `ddd`, `mvc`.
 - `destination`: The target directory. Defaults to `.`.
+
+**`add` command options:**
+
+- `name`: The name of the entity/feature to add (e.g., `user`, `order-item`).
+- `-p`, `--project-path`: Path to the project root. Defaults to current directory.
 
 ## 🐍 Python Version Support
 
@@ -60,11 +84,12 @@ Please make sure you have the correct version of Python installed before startin
 
 ## 💡 Features
 
-- **Scaffolding**: Quickly generate Robyn backend projects.
-- **Architecture Choices**: Support for DDD and MVC patterns.
-- **ORM Flexibility**: Choose between SQLAlchemy and Tortoise ORM.
-- **Docker Ready**: Includes Docker and Docker Compose configurations.
-- **Development Tools**: Comes with `ruff`, `pytest`, and `black` configured.
+- **Rapid Scaffolding**: Instantly generate robust, production-ready Robyn backend projects.
+- **Integrated Component Management**: Use the CLI to inject models, routes, and repositories into your existing architecture, ensuring consistency and best practices.
+- **Architectural Flexibility**: Native support for **Domain-Driven Design (DDD)** and **Model-View-Controller (MVC)** patterns.
+- **ORM Choice**: Seamless integration with **SQLAlchemy** or **Tortoise ORM**.
+- **Production Ready**: Includes Docker, Docker Compose, and optimized configurations out of the box.
+- **DevEx**: Pre-configured with `ruff`, `pytest`, `black`, and `mypy` for a superior development experience.
 
 ## 🗒️ How to contribute
 
@@ -97,8 +122,7 @@ Feel free to open an issue for any clarifications or suggestions.
 3.  Run linters and tests:
 
     ```bash
-    ruff check src
-    pytest
+    make check
     ```
 
 ## ✨ Special thanks
