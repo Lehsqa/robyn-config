@@ -56,7 +56,6 @@ def run_cli_add(project_path: Path, name: str) -> None:
             "cli",
             "add",
             name,
-            "-p",
             str(project_path),
         ],
         check=True,

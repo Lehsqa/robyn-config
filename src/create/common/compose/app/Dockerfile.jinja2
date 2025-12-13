@@ -8,14 +8,29 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libssl-dev \
     libffi-dev \
     && rm -rf /var/lib/apt/lists/*
-
+{% if package_manager == "poetry" %}
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:${PATH}"
+{% else %}
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_PROJECT_ROOT=/opt/project \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy
+{% endif %}
+{% if package_manager == "poetry" %}
+RUN python -m venv /opt/venv
+RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip poetry
 
+WORKDIR /opt/project
+COPY pyproject.toml README.md poetry.lock{% if orm == "sqlalchemy" %} alembic.ini{% endif %} ./
+COPY src ./src
+RUN poetry config virtualenvs.create false
+RUN poetry install --no-interaction --without dev --quiet
+{% else %}
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /opt/project
@@ -23,6 +38,7 @@ COPY pyproject.toml README.md uv.lock{% if orm == "sqlalchemy" %} alembic.ini{% 
 COPY src ./src
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-dev
+{% endif %}
 COPY compose/app/dev.sh /tmp/dev.sh
 COPY compose/app/prod.py /tmp/prod.py
 
