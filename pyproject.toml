@@ -8,7 +8,7 @@ version = "0.2.0"
 description = "A powerful CLI tool to bootstrap and manage production-ready Robyn applications with best practices built-in."
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.11"
+requires-python = ">=3.11,<4.0"
 authors = [
   {name = "Leshqa", email = "slav4ik77777@gmail.com"}
 ]
@@ -161,7 +161,7 @@ skip = ["venv"]
 src_paths = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "-s -vvv --cache-clear --cov=./src/app --cov-report=term-missing --cov-report=html"
+addopts = "-s -vvv --cache-clear --cov=./src --cov-report=term-missing --cov-report=html"
 pythonpath = ["src", "."]
 testpaths = ["tests"]
 cache_dir = "/tmp/pytest_cache"

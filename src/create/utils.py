@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import subprocess
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
@@ -12,10 +13,19 @@ from jinja2 import Environment, StrictUndefined
 
 ORM_CHOICES: Sequence[str] = ("sqlalchemy", "tortoise")
 DESIGN_CHOICES: Sequence[str] = ("ddd", "mvc")
+PACKAGE_MANAGER_CHOICES: Sequence[str] = ("uv", "poetry")
 PACKAGE_ROOT = Path(__file__).resolve().parent
 SRC_DIR = PACKAGE_ROOT.resolve()
 COMMON_DIR = (SRC_DIR / "common").resolve()
 COMPOSE_APP_DIR = (COMMON_DIR / "compose" / "app").resolve()
+LOCK_FILE_BY_MANAGER: Mapping[str, str] = {
+    "uv": "uv.lock",
+    "poetry": "poetry.lock",
+}
+PACKAGE_MANAGER_DOWNLOAD_URLS: Mapping[str, str] = {
+    "uv": "https://docs.astral.sh/uv/getting-started/installation/",
+    "poetry": "https://python-poetry.org/docs/#installation",
+}
 
 TEMPLATE_CONFIGS: Mapping[str, dict[str, str]] = {
     "ddd:sqlalchemy": {
@@ -56,7 +66,7 @@ def _collect_existing_items(destination: Path) -> set[Path]:
     return items
 
 
-def _collect_common_items(orm_type: str) -> set[Path]:
+def _collect_common_items(orm_type: str, package_manager: str) -> set[Path]:
     items: set[Path] = set()
     for item in COMMON_DIR.iterdir():
         if item.is_dir() or item.name == ".DS_Store":
@@ -68,7 +78,12 @@ def _collect_common_items(orm_type: str) -> set[Path]:
 
         if orm_type == "tortoise" and name == "alembic.ini":
             continue
+        if name in LOCK_FILE_BY_MANAGER.values():
+            continue
         items.add(Path(name))
+    lock_file = LOCK_FILE_BY_MANAGER.get(package_manager)
+    if lock_file:
+        items.add(Path(lock_file))
     return items
 
 
@@ -87,20 +102,24 @@ def _collect_compose_items(_orm_type: str) -> set[Path]:
     return items
 
 
-def _collect_generated_items(orm_type: str, design: str) -> set[Path]:
+def _collect_generated_items(
+    orm_type: str, design: str, package_manager: str
+) -> set[Path]:
     items: set[Path] = set()
-    items.update(_collect_common_items(orm_type))
+    items.update(_collect_common_items(orm_type, package_manager))
     items.update({Path("src")})
     items.update(_collect_compose_items(orm_type))
     return items
 
 
 def prepare_destination(
-    path_arg: str | None, orm_type: str, design: str
+    path_arg: str, orm_type: str, design: str, package_manager: str
 ) -> Path:
     """Prepare and validate the destination directory for the template."""
-    destination = Path(path_arg or ".").expanduser().resolve()
-    generated_items = _collect_generated_items(orm_type, design)
+    destination = Path(path_arg).expanduser().resolve()
+    generated_items = _collect_generated_items(
+        orm_type, design, package_manager
+    )
 
     if destination.exists():
         if not destination.is_dir():
@@ -131,7 +150,7 @@ def prepare_destination(
 
 
 def _get_template_config(
-    design: str, orm_type: str, project_name: str
+    design: str, orm_type: str, project_name: str, package_manager: str
 ) -> dict[str, str]:
     """Get the template configuration for the given design and ORM type."""
     key = f"{design}:{orm_type}"
@@ -142,8 +161,11 @@ def _get_template_config(
             f"Valid options: {', '.join(TEMPLATE_CONFIGS.keys())}."
         )
         raise SystemExit(1)
-    config["name"] = project_name
-    return dict(config)
+    return {
+        **config,
+        "name": project_name,
+        "package_manager": package_manager,
+    }
 
 
 def _render_template(
@@ -157,9 +179,14 @@ def _render_template(
 
 
 def _copy_common_files(
-    destination: Path, orm_type: str, context: Mapping[str, str]
+    destination: Path,
+    orm_type: str,
+    package_manager: str,
+    context: Mapping[str, str],
 ) -> None:
     """Copy common files to the destination directory."""
+    lock_files = set(LOCK_FILE_BY_MANAGER.values())
+    current_lock = LOCK_FILE_BY_MANAGER.get(package_manager)
     for source in COMMON_DIR.iterdir():
         if source.is_dir() or source.name == ".DS_Store":
             continue
@@ -171,6 +198,10 @@ def _copy_common_files(
             name = source.stem
 
         if orm_type == "tortoise" and name == "alembic.ini":
+            continue
+        if name == current_lock:
+            continue
+        if name in lock_files:
             continue
 
         target = destination / name
@@ -247,7 +278,7 @@ def _copy_compose_app(
                 "dev.tortoise.sh",
                 "prod.sqlalchemy.py",
                 "prod.tortoise.py",
-                "Dockerfile",
+                "Dockerfile.jinja2",
             }
             return [name for name in names if name in templates]
         return []
@@ -261,15 +292,87 @@ def _copy_compose_app(
     shutil.copy2(dev_source, target_dir / "dev.sh")
     shutil.copy2(prod_source, target_dir / "prod.py")
 
-    dockerfile_source = COMPOSE_APP_DIR / "Dockerfile"
+    dockerfile_source = COMPOSE_APP_DIR / "Dockerfile.jinja2"
     _render_template(dockerfile_source, target_dir / "Dockerfile", context)
 
 
 def copy_template(
-    destination: Path, orm_type: str, design: str, project_name: str
+    destination: Path,
+    orm_type: str,
+    design: str,
+    project_name: str,
+    package_manager: str,
 ) -> None:
     """Copy the complete template to the destination directory."""
-    context = _get_template_config(design, orm_type, project_name)
+    context = _get_template_config(
+        design, orm_type, project_name, package_manager
+    )
     _copy_src_app(destination, orm_type, design)
     _copy_compose_app(destination, orm_type, context)
-    _copy_common_files(destination, orm_type, context)
+    _copy_common_files(destination, orm_type, package_manager, context)
+
+
+def collect_existing_items(destination: Path) -> set[Path]:
+    """Return the set of existing items in a destination for cleanup logic."""
+    return _collect_existing_items(destination)
+
+
+def get_generated_items(
+    orm_type: str, design: str, package_manager: str
+) -> set[Path]:
+    """Return the set of items this template would generate."""
+    return _collect_generated_items(orm_type, design, package_manager)
+
+
+def ensure_package_manager_available(package_manager: str) -> None:
+    """Validate the requested package manager is available on PATH."""
+    if package_manager not in PACKAGE_MANAGER_CHOICES:
+        raise click.ClickException(
+            "Unsupported package manager "
+            f"'{package_manager}'. Choose from: {', '.join(PACKAGE_MANAGER_CHOICES)}"
+        )
+
+    if shutil.which(package_manager) is None:
+        download_url = PACKAGE_MANAGER_DOWNLOAD_URLS.get(package_manager)
+        download_hint = (
+            f" Download it from {download_url} before running the create command."
+            if download_url
+            else " Install it before running the create command."
+        )
+        raise click.ClickException(
+            f"Package manager '{package_manager}' is not installed.{download_hint}"
+        )
+
+
+def apply_package_manager(destination: Path, package_manager: str) -> None:
+    """Generate the lock file for the project using the chosen package manager."""
+    ensure_package_manager_available(package_manager)
+
+    lock_file = LOCK_FILE_BY_MANAGER.get(package_manager, "lock file")
+    lock_path = destination / lock_file
+    env = os.environ.copy()
+    if package_manager == "uv":
+        env.setdefault("UV_CACHE_DIR", str(destination / ".uv-cache"))
+    else:
+        env.setdefault("POETRY_CACHE_DIR", str(destination / ".poetry-cache"))
+    if package_manager == "uv":
+        command = ["uv", "lock"]
+    else:
+        command = ["poetry", "lock", "--no-interaction", "--quiet"]
+
+    result = subprocess.run(
+        command, cwd=destination, capture_output=True, text=True, env=env
+    )
+    if result.returncode != 0:
+        message = (
+            result.stderr.strip() or result.stdout.strip() or "Unknown error"
+        )
+        raise click.ClickException(
+            f"Failed to generate {lock_file} with {package_manager}: {message}"
+        )
+    if lock_file and not lock_path.exists():
+        output = result.stdout.strip() or result.stderr.strip()
+        detail = f" ({output})" if output else ""
+        raise click.ClickException(
+            f"{package_manager} finished without creating {lock_file}{detail}"
+        )

@@ -1,6 +1,6 @@
 version = 1
 revision = 3
-requires-python = ">=3.11"
+requires-python = ">=3.11, <4.0"
 
 [[package]]
 name = "alabaster"
@@ -849,7 +849,7 @@ wheels = [
 
 [[package]]
 name = "robyn-config"
-version = "0.1.1"
+version = "0.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

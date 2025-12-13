@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from src.create import utils as create_utils
 from src.add import utils as add_utils
@@ -20,29 +20,38 @@ def test_collect_common_items(tmp_path):
 
     with patch("src.create.utils.COMMON_DIR", common_dir):
         # SQLAlchemy should include everything (alembic.ini is kept)
-        items_sql = create_utils._collect_common_items("sqlalchemy")
+        items_sql = create_utils._collect_common_items("sqlalchemy", "uv")
         assert Path("Makefile") in items_sql
         assert Path("README.md") in items_sql
         assert Path("alembic.ini") in items_sql
+        assert Path("uv.lock") in items_sql
+        assert Path("poetry.lock") not in items_sql
         assert Path("compose") not in items_sql
         assert Path(".DS_Store") not in items_sql
 
         # Tortoise should exclude alembic.ini
-        items_tortoise = create_utils._collect_common_items("tortoise")
+        items_tortoise = create_utils._collect_common_items(
+            "tortoise", "poetry"
+        )
         assert Path("Makefile") in items_tortoise
         assert Path("README.md") in items_tortoise
         assert Path("alembic.ini") not in items_tortoise
+        assert Path("poetry.lock") in items_tortoise
+        assert Path("uv.lock") not in items_tortoise
 
 
 def test_get_template_config():
     """Test that template config is retrieved correctly."""
-    config = create_utils._get_template_config("ddd", "sqlalchemy", "mypro")
+    config = create_utils._get_template_config(
+        "ddd", "sqlalchemy", "mypro", "uv"
+    )
     assert config["design"] == "ddd"
     assert config["orm"] == "sqlalchemy"
     assert config["name"] == "mypro"
-    
+    assert config["package_manager"] == "uv"
+
     with pytest.raises(SystemExit):
-         create_utils._get_template_config("invalid", "orm", "proj")
+        create_utils._get_template_config("invalid", "orm", "proj", "uv")
 
 
 # --- Tests for src/add/utils.py ---
