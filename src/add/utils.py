@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,37 @@ from jinja2 import Environment, StrictUndefined
 
 ADD_MODULE_ROOT = Path(__file__).resolve().parent
 JINJA_ENV = Environment(undefined=StrictUndefined)
+
+# Default routes for code injection (overridable via [tool.robyn-config.add])
+DEFAULT_DDD_DOMAIN_PATH = Path("src/app/domain")
+DEFAULT_DDD_OPERATIONAL_PATH = Path("src/app/operational")
+DEFAULT_DDD_PRESENTATION_PATH = Path("src/app/presentation")
+DEFAULT_DDD_DB_REPOSITORY_PATH = Path(
+    "src/app/infrastructure/database/repository"
+)
+DEFAULT_DDD_DB_TABLE_PATH = Path("src/app/infrastructure/database/tables.py")
+
+DEFAULT_MVC_VIEWS_PATH = Path("src/app/views")
+DEFAULT_MVC_DB_REPOSITORY_PATH = Path("src/app/models/repository.py")
+DEFAULT_MVC_DB_TABLE_PATH = Path("src/app/models/models.py")
+DEFAULT_MVC_URLS_PATH = Path("src/app/urls.py")
+
+
+@dataclass
+class DDDAddPaths:
+    domain: Path
+    operational: Path
+    presentation: Path
+    db_repository: Path
+    db_tables: Path
+
+
+@dataclass
+class MVCAddPaths:
+    views: Path
+    db_repository: Path
+    db_tables: Path
+    urls: Path
 
 
 def _normalize_entity_name(name: str) -> tuple[str, str]:
@@ -58,10 +90,8 @@ def read_project_config(project_path: Path) -> dict[str, Any]:
     return robyn_config
 
 
-def validate_project(project_path: Path) -> tuple[str, str]:
+def _extract_design_orm(config: dict[str, Any]) -> tuple[str, str]:
     """Validate project has robyn-config metadata and return (design, orm)."""
-    config = read_project_config(project_path)
-
     design = config.get("design")
     orm = config.get("orm")
 
@@ -70,8 +100,83 @@ def validate_project(project_path: Path) -> tuple[str, str]:
             "Invalid [tool.robyn-config] section. "
             "Missing 'design' or 'orm' fields."
         )
-
     return design, orm
+
+
+def validate_project(project_path: Path) -> tuple[str, str]:
+    """Validate project has robyn-config metadata and return (design, orm)."""
+    config = read_project_config(project_path)
+    return _extract_design_orm(config)
+
+
+def _resolve_path(
+    project_root: Path, raw_value: str | None, default: Path
+) -> Path:
+    """Resolve a configured path (relative to project root) or fall back to default."""
+    return (
+        (project_root / raw_value) if raw_value else (project_root / default)
+    )
+
+
+def _load_add_paths(
+    project_path: Path, design: str, config: dict[str, Any]
+) -> DDDAddPaths | MVCAddPaths:
+    """Resolve add-paths from pyproject config (with defaults)."""
+    add_config = config.get("add") or {}
+    if design == "ddd":
+        return DDDAddPaths(
+            domain=_resolve_path(
+                project_path,
+                add_config.get("domain_path"),
+                DEFAULT_DDD_DOMAIN_PATH,
+            ),
+            operational=_resolve_path(
+                project_path,
+                add_config.get("operational_path"),
+                DEFAULT_DDD_OPERATIONAL_PATH,
+            ),
+            presentation=_resolve_path(
+                project_path,
+                add_config.get("presentation_path"),
+                DEFAULT_DDD_PRESENTATION_PATH,
+            ),
+            db_repository=_resolve_path(
+                project_path,
+                add_config.get("database_repository_path"),
+                DEFAULT_DDD_DB_REPOSITORY_PATH,
+            ),
+            db_tables=_resolve_path(
+                project_path,
+                add_config.get("database_table_path"),
+                DEFAULT_DDD_DB_TABLE_PATH,
+            ),
+        )
+
+    if design == "mvc":
+        return MVCAddPaths(
+            views=_resolve_path(
+                project_path,
+                add_config.get("views_path"),
+                DEFAULT_MVC_VIEWS_PATH,
+            ),
+            db_repository=_resolve_path(
+                project_path,
+                add_config.get("database_repository_path"),
+                DEFAULT_MVC_DB_REPOSITORY_PATH,
+            ),
+            db_tables=_resolve_path(
+                project_path,
+                add_config.get("database_table_path"),
+                DEFAULT_MVC_DB_TABLE_PATH,
+            ),
+            urls=_resolve_path(
+                project_path,
+                add_config.get("urls_path"),
+                DEFAULT_MVC_URLS_PATH,
+            ),
+        )
+
+    raise ValueError(f"Unsupported design pattern: {design}")
 
 
 def _render_template_file(
@@ -329,9 +434,9 @@ def _add_table_to_tables_py(
                 tables_path.write_text(content)
 
 
-def _register_routes_ddd(app_path: Path, name: str) -> None:
+def _register_routes_ddd(presentation_path: Path, name: str) -> None:
     """Register routes in DDD presentation/__init__.py."""
-    pres_init = app_path / "presentation" / "__init__.py"
+    pres_init = presentation_path / "__init__.py"
     if not pres_init.exists():
         return
 
@@ -339,9 +444,8 @@ def _register_routes_ddd(app_path: Path, name: str) -> None:
     _ensure_register_call(pres_init, f"    {name}.register(app)")
 
 
-def _register_routes_mvc(app_path: Path, name: str) -> None:
+def _register_routes_mvc(urls_path: Path, name: str) -> None:
     """Register routes in MVC urls.py."""
-    urls_path = app_path / "urls.py"
     if not urls_path.exists():
         return
 
@@ -350,10 +454,13 @@ def _register_routes_mvc(app_path: Path, name: str) -> None:
 
 
 def _add_ddd_templates(
-    project_path: Path, name: str, name_capitalized: str, orm: str
+    project_path: Path,
+    paths: DDDAddPaths,
+    name: str,
+    name_capitalized: str,
+    orm: str,
 ) -> list[str]:
     """Add DDD templates to the project."""
-    app_path = project_path / "src" / "app"
     templates_path = ADD_MODULE_ROOT / "ddd"
     created_files = []
 
@@ -364,21 +471,22 @@ def _add_ddd_templates(
     }
 
     # Domain layer
-    domain_dir = app_path / "domain" / name
+    domain_dir = paths.domain / name
     domain_templates = templates_path / "domain" / "__name__"
     _render_templates_from_directory(
         domain_templates, domain_dir, context, project_path, created_files
     )
 
     # Update domain __init__.py
-    domain_init = app_path / "domain" / "__init__.py"
+    domain_init = paths.domain / "__init__.py"
     _ensure_import_from(
         domain_init, ".", name, trailing_comment="# noqa: F401"
     )
 
     # Add table to tables.py
-    tables_path = app_path / "infrastructure" / "database" / "tables.py"
-    _add_table_to_tables_py(tables_path, name, name_capitalized, orm, context)
+    _add_table_to_tables_py(
+        paths.db_tables, name, name_capitalized, orm, context
+    )
 
     # Infrastructure repository
     repo_template = (
@@ -389,24 +497,12 @@ def _add_ddd_templates(
         / "__name__.py.jinja2"
     )
     if repo_template.exists():
-        repo_target = (
-            app_path
-            / "infrastructure"
-            / "database"
-            / "repository"
-            / f"{name}.py"
-        )
+        repo_target = paths.db_repository / f"{name}.py"
         _render_template_file(repo_template, repo_target, context)
         created_files.append(str(repo_target.relative_to(project_path)))
 
         # Update repository __init__.py
-        repo_init = (
-            app_path
-            / "infrastructure"
-            / "database"
-            / "repository"
-            / "__init__.py"
-        )
+        repo_init = paths.db_repository / "__init__.py"
         _update_init_file(
             repo_init,
             f"from .{name} import {name_capitalized}Repository  # noqa: F401",
@@ -416,25 +512,25 @@ def _add_ddd_templates(
     # Operational layer
     ops_template = templates_path / "operational" / "__name__.py.jinja2"
     if ops_template.exists():
-        ops_target = app_path / "operational" / f"{name}.py"
+        ops_target = paths.operational / f"{name}.py"
         _render_template_file(ops_template, ops_target, context)
         created_files.append(str(ops_target.relative_to(project_path)))
 
         # Update operational __init__.py
-        ops_init = app_path / "operational" / "__init__.py"
+        ops_init = paths.operational / "__init__.py"
         _ensure_import_from(
             ops_init, ".", name, trailing_comment="# noqa: F401"
         )
 
     # Presentation layer
-    pres_dir = app_path / "presentation" / name
+    pres_dir = paths.presentation / name
     pres_templates = templates_path / "presentation" / "__name__"
     _render_templates_from_directory(
         pres_templates, pres_dir, context, project_path, created_files
     )
 
     # Auto-register routes in presentation/__init__.py
-    _register_routes_ddd(app_path, name)
+    _register_routes_ddd(paths.presentation, name)
 
     return created_files
 
@@ -481,10 +577,13 @@ def _add_to_all_list(file_path: Path, item_name: str) -> None:
 
 
 def _add_mvc_templates(
-    project_path: Path, name: str, name_capitalized: str, orm: str
+    project_path: Path,
+    paths: MVCAddPaths,
+    name: str,
+    name_capitalized: str,
+    orm: str,
 ) -> list[str]:
     """Add MVC templates to the project."""
-    app_path = project_path / "src" / "app"
     templates_path = ADD_MODULE_ROOT / "mvc"
     created_files = []
 
@@ -495,8 +594,8 @@ def _add_mvc_templates(
     }
 
     # Models layer - Append to existing files
-    models_file = app_path / "models" / "models.py"
-    repo_file = app_path / "models" / "repository.py"
+    models_file = paths.db_tables
+    repo_file = paths.db_repository
 
     # 1. Append Table to models.py
     table_template = templates_path / "models" / orm / "table.py.jinja2"
@@ -518,7 +617,7 @@ def _add_mvc_templates(
         created_files.append(str(repo_file.relative_to(project_path)))
 
         # Update models __init__.py to export Repository
-        models_init = app_path / "models" / "__init__.py"
+        models_init = paths.db_tables.parent / "__init__.py"
         _update_init_file(
             models_init,
             f"from .repository import {repo_class}  # noqa: F401",
@@ -528,12 +627,12 @@ def _add_mvc_templates(
     # Views layer
     views_template = templates_path / "views" / "__name__.py.jinja2"
     if views_template.exists():
-        views_target = app_path / "views" / f"{name}.py"
+        views_target = paths.views / f"{name}.py"
         _render_template_file(views_template, views_target, context)
         created_files.append(str(views_target.relative_to(project_path)))
 
         # Update views __init__.py
-        views_init = app_path / "views" / "__init__.py"
+        views_init = paths.views / "__init__.py"
         _update_init_file(
             views_init,
             f"from .{name} import register as register_{name}  # noqa: F401",
@@ -541,24 +640,25 @@ def _add_mvc_templates(
         )
 
     # Auto-register routes in urls.py
-    _register_routes_mvc(app_path, name)
+    _register_routes_mvc(paths.urls, name)
 
     return created_files
 
 
 def add_business_logic(project_path: Path, name: str) -> list[str]:
     """Add business logic templates to an existing project."""
-    design, orm = validate_project(project_path)
-
+    config = read_project_config(project_path)
+    design, orm = _extract_design_orm(config)
+    add_paths = _load_add_paths(project_path, design, config)
     name_lower, name_capitalized = _normalize_entity_name(name)
 
     if design == "ddd":
         return _add_ddd_templates(
-            project_path, name_lower, name_capitalized, orm
+            project_path, add_paths, name_lower, name_capitalized, orm
         )
     elif design == "mvc":
         return _add_mvc_templates(
-            project_path, name_lower, name_capitalized, orm
+            project_path, add_paths, name_lower, name_capitalized, orm
         )
     else:
         raise ValueError(f"Unsupported design pattern: {design}")

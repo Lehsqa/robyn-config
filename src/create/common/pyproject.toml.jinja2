@@ -261,3 +261,18 @@ src_folder = "./."
 [tool.robyn-config]
 design = "{{ design }}"
 orm = "{{ orm }}"
+package_manager = "{{ package_manager }}"
+
+{%- if design == "ddd" %}
+[tool.robyn-config.add]
+domain_path = "src/app/domain"
+operational_path = "src/app/operational"
+presentation_path = "src/app/presentation"
+database_repository_path = "src/app/infrastructure/database/repository"
+database_table_path = "src/app/infrastructure/database/tables.py"
+{%- elif design == "mvc" %}
+[tool.robyn-config.add]
+views_path = "src/app/views"
+database_repository_path = "src/app/models/repository.py"
+database_table_path = "src/app/models/models.py"
+{%- endif %}
