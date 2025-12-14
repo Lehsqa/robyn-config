@@ -6,6 +6,11 @@ import sys
 from pathlib import Path
 
 import pytest
+try:
+    import tomllib
+except ImportError:
+    import tomli as tomllib
+
 from tests.integration.test_create_command import create_fake_package_managers
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -74,6 +79,35 @@ def run_make_migration(project_path: Path) -> subprocess.CompletedProcess:
     )
 
 
+def _read_add_config(project_path: Path) -> dict[str, str]:
+    with open(project_path / "pyproject.toml", "rb") as f:
+        data = tomllib.load(f)
+    return data.get("tool", {}).get("robyn-config", {}).get("add", {}) or {}
+
+
+def _ddd_paths_from_config(project_dir: Path, add_cfg: dict[str, str]) -> dict[str, Path]:
+    return {
+        "domain": project_dir / add_cfg.get("domain_path", "src/app/domain"),
+        "operational": project_dir / add_cfg.get("operational_path", "src/app/operational"),
+        "presentation": project_dir / add_cfg.get("presentation_path", "src/app/presentation"),
+        "db_repo": project_dir / add_cfg.get(
+            "database_repository_path", "src/app/infrastructure/database/repository"
+        ),
+        "db_tables": project_dir / add_cfg.get(
+            "database_table_path", "src/app/infrastructure/database/tables.py"
+        ),
+    }
+
+
+def _mvc_paths_from_config(project_dir: Path, add_cfg: dict[str, str]) -> dict[str, Path]:
+    return {
+        "views": project_dir / add_cfg.get("views_path", "src/app/views"),
+        "db_repo": project_dir / add_cfg.get("database_repository_path", "src/app/models/repository.py"),
+        "db_tables": project_dir / add_cfg.get("database_table_path", "src/app/models/models.py"),
+        "urls": project_dir / add_cfg.get("urls_path", "src/app/urls.py"),
+    }
+
+
 
 
 @pytest.mark.integration
@@ -83,46 +117,49 @@ def test_add_command_creates_files(tmp_path: Path, design: str, orm: str) -> Non
     project_dir = tmp_path / "test-project"
     fake_bin = create_fake_package_managers(tmp_path)
     run_cli_create(project_dir, design=design, orm=orm, bin_dir=fake_bin)
-    
+    add_cfg = _read_add_config(project_dir)
+
     # Add a new business logic module
     run_cli_add(project_dir, "product")
-    
+
     if design == "ddd":
+        paths = _ddd_paths_from_config(project_dir, add_cfg)
         # Check DDD files were created
-        assert (project_dir / "src" / "app" / "domain" / "product" / "__init__.py").exists()
-        assert (project_dir / "src" / "app" / "domain" / "product" / "entities.py").exists()
-        assert (project_dir / "src" / "app" / "domain" / "product" / "repository.py").exists()
-        assert (project_dir / "src" / "app" / "infrastructure" / "database" / "repository" / "product.py").exists()
-        assert (project_dir / "src" / "app" / "operational" / "product.py").exists()
-        assert (project_dir / "src" / "app" / "presentation" / "product" / "__init__.py").exists()
-        assert (project_dir / "src" / "app" / "presentation" / "product" / "contracts.py").exists()
-        assert (project_dir / "src" / "app" / "presentation" / "product" / "rest.py").exists()
-        
+        assert (paths["domain"] / "product" / "__init__.py").exists()
+        assert (paths["domain"] / "product" / "entities.py").exists()
+        assert (paths["domain"] / "product" / "repository.py").exists()
+        assert (paths["db_repo"] / "product.py").exists()
+        assert (paths["operational"] / "product.py").exists()
+        assert (paths["presentation"] / "product" / "__init__.py").exists()
+        assert (paths["presentation"] / "product" / "contracts.py").exists()
+        assert (paths["presentation"] / "product" / "rest.py").exists()
+
         # Check table was added
-        tables_content = (project_dir / "src" / "app" / "infrastructure" / "database" / "tables.py").read_text()
+        tables_content = paths["db_tables"].read_text()
         assert "ProductTable" in tables_content
-        
+
         # Check domain import was updated
-        domain_init = (project_dir / "src" / "app" / "domain" / "__init__.py").read_text()
+        domain_init = (paths["domain"] / "__init__.py").read_text()
         assert "product" in domain_init
-        
+
         # Check routes were registered
-        pres_init = (project_dir / "src" / "app" / "presentation" / "__init__.py").read_text()
+        pres_init = (paths["presentation"] / "__init__.py").read_text()
         assert "product" in pres_init
         assert "product.register(app)" in pres_init
-        
+
     elif design == "mvc":
+        paths = _mvc_paths_from_config(project_dir, add_cfg)
         # Check MVC files were appended
-        models_content = (project_dir / "src" / "app" / "models" / "models.py").read_text()
+        models_content = paths["db_tables"].read_text()
         assert "ProductTable" in models_content
-        
-        repo_content = (project_dir / "src" / "app" / "models" / "repository.py").read_text()
+
+        repo_content = paths["db_repo"].read_text()
         assert "ProductRepository" in repo_content
-        
-        assert (project_dir / "src" / "app" / "views" / "product.py").exists()
-        
+
+        assert (paths["views"] / "product.py").exists()
+
         # Check routes were registered in urls.py
-        urls_content = (project_dir / "src" / "app" / "urls.py").read_text()
+        urls_content = paths["urls"].read_text()
         assert "product" in urls_content
         assert "product.register(app)" in urls_content
 
@@ -134,21 +171,24 @@ def test_add_command_no_lint_errors(tmp_path: Path, design: str, orm: str) -> No
     project_dir = tmp_path / "test-project-lint"
     fake_bin = create_fake_package_managers(tmp_path)
     run_cli_create(project_dir, design=design, orm=orm, bin_dir=fake_bin)
+    add_cfg = _read_add_config(project_dir)
     run_cli_add(project_dir, "product")
-    
+
     # Check only the files generated by add command
     if design == "ddd":
+        paths = _ddd_paths_from_config(project_dir, add_cfg)
         files_to_check = [
-            project_dir / "src" / "app" / "domain" / "product",
-            project_dir / "src" / "app" / "infrastructure" / "database" / "repository" / "product.py",
-            project_dir / "src" / "app" / "operational" / "product.py",
-            project_dir / "src" / "app" / "presentation" / "product",
+            paths["domain"] / "product",
+            paths["db_repo"] / "product.py",
+            paths["operational"] / "product.py",
+            paths["presentation"] / "product",
         ]
     else:  # mvc
+        paths = _mvc_paths_from_config(project_dir, add_cfg)
         files_to_check = [
-            project_dir / "src" / "app" / "models" / "models.py",
-            project_dir / "src" / "app" / "models" / "repository.py",
-            project_dir / "src" / "app" / "views" / "product.py",
+            paths["db_tables"],
+            paths["db_repo"],
+            paths["views"] / "product.py",
         ]
     
     for file_path in files_to_check:
@@ -168,27 +208,30 @@ def test_add_command_multiple_entities(tmp_path: Path, design: str, orm: str) ->
     project_dir = tmp_path / "test-project-multi"
     fake_bin = create_fake_package_managers(tmp_path)
     run_cli_create(project_dir, design=design, orm=orm, bin_dir=fake_bin)
-    
+    add_cfg = _read_add_config(project_dir)
+
     # Add multiple entities
     run_cli_add(project_dir, "product")
     run_cli_add(project_dir, "order")
     run_cli_add(project_dir, "category")
-    
+
     if design == "ddd":
+        paths = _ddd_paths_from_config(project_dir, add_cfg)
         # Check all entities exist
         for entity in ["product", "order", "category"]:
-            assert (project_dir / "src" / "app" / "domain" / entity / "__init__.py").exists()
-            assert (project_dir / "src" / "app" / "presentation" / entity / "__init__.py").exists()
-        
+            assert (paths["domain"] / entity / "__init__.py").exists()
+            assert (paths["presentation"] / entity / "__init__.py").exists()
+
         # Check all are in domain __init__
-        domain_init = (project_dir / "src" / "app" / "domain" / "__init__.py").read_text()
+        domain_init = (paths["domain"] / "__init__.py").read_text()
         assert "product" in domain_init
         assert "order" in domain_init
         assert "category" in domain_init
-        
+
     elif design == "mvc":
-        models_content = (project_dir / "src" / "app" / "models" / "models.py").read_text()
-        repo_content = (project_dir / "src" / "app" / "models" / "repository.py").read_text()
+        paths = _mvc_paths_from_config(project_dir, add_cfg)
+        models_content = paths["db_tables"].read_text()
+        repo_content = paths["db_repo"].read_text()
         
         for entity in ["product", "order", "category"]:
             name = "".join(word.capitalize() for word in entity.split("_"))

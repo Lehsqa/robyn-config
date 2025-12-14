@@ -64,21 +64,6 @@ def _restore_project_backup(project_path: Path, backup_path: Path) -> None:
     shutil.copytree(backup_path, project_path, dirs_exist_ok=True)
 
 
-def _echo_add_summary(name: str, created_files: list[str]) -> None:
-    """Render a consistent summary for the add command."""
-    click.echo(f"Successfully added '{name}' business logic!")
-    click.echo("Created/updated files:")
-    for file_path in created_files:
-        click.echo(f"  - {file_path}")
-    click.echo("")
-    click.echo("Automatic updates:")
-    click.echo("  ✓ Table added to tables.py")
-    click.echo("  ✓ Routes registered automatically")
-    click.echo("")
-    click.echo("Next step:")
-    click.echo("  - Create a database migration (make makemigrations)")
-
-
 @click.group(name="robyn-config")
 def cli() -> None:
     """Robyn configuration utilities."""
@@ -157,9 +142,6 @@ def create(
         apply_package_manager(target_dir, package_manager)
 
         click.echo(
-            f"Robyn template ({design}/{orm_type}) copied to {target_dir}"
-        )
-        click.echo(
             click.style("Successfully created Robyn template", fg="green")
         )
     except Exception as e:
@@ -167,7 +149,7 @@ def create(
             _cleanup_create_failure(
                 target_dir, generated_items, existing_items, created_new_dir
             )
-        raise click.ClickException(str(e)) from e
+        raise click.ClickException(click.style(str(e), fg="red")) from e
 
 
 @cli.command("add")
@@ -187,12 +169,16 @@ def add(name: str, project_path: Path) -> None:
 
     try:
         backup_dir, backup_path = _backup_project(project_path)
-        created_files = add_business_logic(project_path, name)
-        _echo_add_summary(name, created_files)
+        add_business_logic(project_path, name)
+        click.echo(
+            click.style(
+                f"Successfully added '{name}' business logic!", fg="green"
+            )
+        )
     except Exception as e:
         if backup_path:
             _restore_project_backup(project_path, backup_path)
-        raise click.ClickException(str(e)) from e
+        raise click.ClickException(click.style(str(e), fg="red")) from e
     finally:
         if backup_dir:
             shutil.rmtree(backup_dir, ignore_errors=True)

@@ -49,6 +49,7 @@ This will:
 - Create repositories.
 - Setup routes and controllers.
 - Register everything in the app configuration.
+- Respect your configured paths: `add` reads injection targets from `[tool.robyn-config.add]` in `pyproject.toml` (e.g., domain/operational/presentation paths for DDD or views/repository/urls for MVC). You can customize those paths before running `add` to steer where new code is written.
 
 ### 🏃 CLI Options
 

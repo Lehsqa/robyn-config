@@ -86,7 +86,6 @@ def test_create_project_structure(tmp_path, design, orm):
     
     # Check CLI execution success
     assert result.returncode == 0, f"CLI create failed: {result.stderr}"
-    assert "copied to" in result.stdout
 
     # 1. Verify Common Files
     assert (project_dir / "pyproject.toml").exists()
