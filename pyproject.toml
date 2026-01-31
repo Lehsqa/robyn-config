@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "robyn-config"
-version = "0.3.0"
+version = "0.3.1"
 description = "A powerful CLI tool to bootstrap and manage production-ready Robyn applications with best practices built-in."
 readme = "README.md"
 license = {text = "MIT"}
