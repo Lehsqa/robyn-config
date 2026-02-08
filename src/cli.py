@@ -9,6 +9,7 @@ from pathlib import Path
 import click
 
 from add import add_business_logic
+from adminpanel import add_adminpanel
 from create import (
     DESIGN_CHOICES,
     ORM_CHOICES,
@@ -173,6 +174,38 @@ def add(name: str, project_path: Path) -> None:
         click.echo(
             click.style(
                 f"Successfully added '{name}' business logic!", fg="green"
+            )
+        )
+    except Exception as e:
+        if backup_path:
+            _restore_project_backup(project_path, backup_path)
+        raise click.ClickException(click.style(str(e), fg="red")) from e
+    finally:
+        if backup_dir:
+            shutil.rmtree(backup_dir, ignore_errors=True)
+
+
+@cli.command("adminpanel")
+@click.argument(
+    "project_path",
+    type=click.Path(
+        exists=True, file_okay=False, dir_okay=True, path_type=Path
+    ),
+    default=".",
+)
+def adminpanel(project_path: Path) -> None:
+    """Add admin panel scaffolding to an existing robyn-config project."""
+    backup_dir: Path | None = None
+    backup_path: Path | None = None
+    project_path = project_path.resolve()
+
+    try:
+        backup_dir, backup_path = _backup_project(project_path)
+        add_adminpanel(project_path)
+        click.echo(
+            click.style(
+                "Successfully added admin panel scaffolding!",
+                fg="green",
             )
         )
     except Exception as e:

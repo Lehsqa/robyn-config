@@ -1,0 +1,260 @@
+{# 内联数据模态框组件 #}
+<div class="modal fade" id="inlineModal" tabindex="-1">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <button class="btn btn-primary add-inline-record">
+                        <i class="bi bi-plus-lg"></i> 添加记录
+                    </button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table" id="inlineTable"></table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.sortable {
+    cursor: pointer;
+}
+.sortable:after {
+    content: '';
+    float: right;
+    margin-top: 7px;
+    border-width: 0 4px 4px;
+    border-style: solid;
+    border-color: #404040 transparent;
+    visibility: hidden;
+}
+.sortable.asc:after {
+    border-bottom: none;
+    border-width: 4px 4px 0;
+}
+.sortable:hover:after {
+    visibility: visible;
+}
+</style>
+
+{% macro inline_modal_scripts() %}
+<script>
+(function() {
+    let inlineModal = null;
+    let currentOptions = null;
+
+    // 初始化模态框
+    document.addEventListener('DOMContentLoaded', function() {
+        inlineModal = new bootstrap.Modal(document.getElementById('inlineModal'));
+    });
+
+    // 显示内联数据模态框
+    window.showInlineModal = function(options) {
+        if (!inlineModal) {
+            inlineModal = new bootstrap.Modal(document.getElementById('inlineModal'));
+        }
+
+        currentOptions = options;
+        
+        // 设置标题
+        document.querySelector('#inlineModal .modal-title').textContent = options.title;
+        
+        // 初始化表格
+        const $table = $('#inlineTable');
+        
+        // 先清空表格
+        $table.bootstrapTable('destroy');
+        
+        // 加载数据和初始化表格
+        const params = new URLSearchParams({
+            parent_id: options.parentId,
+            inline_model: options.model
+        });
+        
+        fetch(`/admin/${options.route_id}/inline_data?${params}`)
+            .then(response => response.json())
+            .then(result => {
+                if (result.success) {
+                    // 构建列配置
+                    const columns = result.fields.map(field => {
+                        console.log('Processing field:', field);
+                        return {
+                            field: field.name,
+                            title: field.label,
+                            sortable: field.sortable,
+                            width: field.width,
+                            class: field.sortable ? 'sortable' : '',
+                            formatter: function(value, row) {
+                                const displayValue = row.display[field.name] || row.data[field.name] || '';
+                                
+                                // 如果字段名包含"link"或"url"，强制作为链接处理
+                                if (field.name.toLowerCase().includes('link') || field.name.toLowerCase().includes('url')) {
+                                    return `<a href="${displayValue}" target="_blank" 
+                                              class="text-decoration-none link-primary">${displayValue}</a>`;
+                                }
+                                
+                                if (field.is_link || field.display_type === 'link') {
+                                    const url = field.is_link ? displayValue : `/admin/${options.model}/${row.data.id}`;
+                                    const target = field.is_link ? '_blank' : '_self';
+                                    return `<a href="${url}" class="text-decoration-none link-primary" 
+                                              target="${target}" title="点击查看详情">${displayValue}</a>`;
+                                }
+                                
+                                switch (field.display_type) {
+                                    case 'boolean':
+                                        return displayValue === 'True' ? 
+                                            '<i class="bi bi-check-circle text-success"></i>' : 
+                                            '<i class="bi bi-x-circle text-danger"></i>';
+                                    case 'datetime':
+                                        return `<span class="text-muted">${displayValue}</span>`;
+                                    case 'status':
+                                        return `<span class="badge bg-primary">${displayValue}</span>`;
+                                    default:
+                                        return displayValue;
+                                }
+                            }
+                        };
+                    });
+                    
+                    // 添加操作列
+                    columns.push({
+                        field: 'operate',
+                        title: '操作',
+                        width: 150,
+                        sortable: false,
+                        formatter: function(value, row) {
+                            return `
+                                <button class="btn btn-sm btn-warning" onclick="editInlineRecord('${options.model}', '${row.data.id}')">
+                                    <i class="bi bi-pencil"></i> 编辑
+                                </button>
+                                <button class="btn btn-sm btn-danger" onclick="deleteInlineRecord('${options.model}', '${row.data.id}')">
+                                    <i class="bi bi-trash"></i> 删除
+                                </button>
+                            `;
+                        }
+                    });
+
+                    // 初始化表格
+                    $table.bootstrapTable({
+                        columns: columns,
+                        data: result.data,
+                        pagination: true,
+                        search: true,
+                        pageSize: 10,
+                        pageList: [10, 25, 50, 100],
+                        showColumns: true,
+                        showRefresh: true,
+                        sortable: true,
+                        sortStable: true,
+                        serverSort: true,
+                        sortName: options.config.default_ordering ? 
+                            options.config.default_ordering[0].replace('-', '') : undefined,
+                        sortOrder: options.config.default_ordering && 
+                            options.config.default_ordering[0].startsWith('-') ? 'desc' : 'asc',
+                        onSort: function(name, order) {
+                            refreshInlineTable(name, order);
+                        },
+                        locale: 'zh-CN',
+                        formatNoMatches: function() {
+                            return '没有找到匹配的记录';
+                        },
+                        formatLoadingMessage: function() {
+                            return '正在加载数据...';
+                        }
+                    });
+                    
+                    // 显示模态框
+                    inlineModal.show();
+                } else {
+                    console.error('Failed to load inline data:', result.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error loading inline data:', error);
+            });
+    };
+
+    // 刷新内联表格据
+    async function refreshInlineTable(sortField, sortOrder) {
+        if (!currentOptions) return;
+        
+        try {
+            const params = new URLSearchParams({
+                parent_id: currentOptions.parentId,
+                inline_model: currentOptions.model
+            });
+            
+            if (sortField) {
+                params.append('sort', sortField);
+                params.append('order', sortOrder);
+            }
+            
+            const response = await fetch(`/admin/${currentOptions.parentModel}/inline_data?${params}`);
+            const result = await response.json();
+            
+            if (result.success) {
+                $('#inlineTable').bootstrapTable('load', result.data);
+            } else {
+                console.error('Failed to refresh data:', result.error);
+            }
+        } catch (error) {
+            console.error('Error refreshing inline table:', error);
+        }
+    }
+
+    // 添加记录
+    window.addInlineRecord = function(model, parentId) {
+        const fkField = currentOptions.config.fk_field;
+        const initialData = { [fkField]: parentId };
+        showFormModal('add', initialData);
+    };
+
+    // 编辑记录
+    window.editInlineRecord = function(model, id) {
+        fetch(`/admin/${window.serverConfig.route_id}/${id}`)
+            .then(response => response.json())
+            .then(data => {
+                showFormModal('edit', data);
+            })
+            .catch(error => {
+                console.error('Error loading record:', error);
+                alert('加载数据失败');
+            });
+    };
+
+    // 删除记录
+    window.deleteInlineRecord = function(model, id) {
+        if (confirm('确定要删除这条记录吗？')) {
+            fetch(`/admin/${window.serverConfig.route_id}/${id}/delete`, {
+                method: 'POST'
+            })
+            .then(response => {
+                if (response.ok) {
+                    // 刷新表格
+                    $('#inlineTable').bootstrapTable('refresh');
+                } else {
+                    alert('删除失败');
+                }
+            })
+            .catch(error => {
+                console.error('Delete error:', error);
+                alert('删除失败');
+            });
+        }
+    };
+
+    // 监听表单提交成功事件
+    document.addEventListener('formSubmitSuccess', function() {
+        // 刷新内联表格
+        if (inlineModal && inlineModal._element.classList.contains('show')) {
+            $('#inlineTable').bootstrapTable('refresh');
+        }
+    });
+})();
+</script>
+{% endmacro %} 

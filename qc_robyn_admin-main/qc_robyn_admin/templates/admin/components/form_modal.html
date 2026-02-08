@@ -1,0 +1,327 @@
+{# 表单弹窗组件 #}
+<div class="modal fade" id="formModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="modelForm">
+                    <div id="formFields"></div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ get_text('cancel', language) }}</button>
+                <button type="button" class="btn btn-primary" onclick="submitForm()">{{ get_text('save', language) }}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% macro form_scripts() %}
+<script>
+// add file upload handler
+async function handleFileUpload(file, uploadPath, maxSize) {
+    if (!file) return null;
+    
+    // check file size
+    if (maxSize && file.size > maxSize) {
+        alert(`文件大小超过限制 (${Math.round(maxSize/1024)}KB)`);
+        return null;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_path', uploadPath);
+    
+    try {
+        const response = await fetch('/admin/upload', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        if (result.success) {
+            return result.data.url;
+        } else {
+            alert(result.message || '上传失败');
+            return null;
+        }
+    } catch (error) {
+        console.error('Upload error:', error);
+        alert('上传失败');
+        return null;
+    }
+}
+
+function showFormModal(action, data = null) {
+    // clear form
+    $('#formFields').empty();
+    
+    var config = window.serverConfig;
+    console.log('Show form modal:', {
+        action: action,
+        data: data,
+        config: config
+    });
+    
+    // save current action and data to modal
+    $('#formModal').data('currentData', data);
+    $('#formModal').data('action', action);
+    
+    var formFields = action === 'add' ? config.addFormFields : config.formFields;
+    var title = action === 'add' ? config.addFormTitle : config.editFormTitle;
+    
+    // set title
+    $('.modal-title').text(title);
+    
+    // ensure formFields exists
+    if (!formFields) {
+        console.error('Form fields not found in config:', config);
+        return;
+    }
+    
+    // generate form fields
+    formFields.forEach(function(field) {
+        var fieldHtml = '';
+        var fieldValue = '';
+        
+        // get field value
+        if (data && data[field.name] !== undefined) {
+            fieldValue = data[field.name];
+        }
+        
+        // check if contains HTML tags
+        const containsHtml = fieldValue && typeof fieldValue === 'string' && 
+            (fieldValue.includes('<') && fieldValue.includes('>'));
+        
+        // generate different form controls based on field type
+        switch(field.field_type) {
+            case 'file_upload':
+                // handle fieldValue, extract src if HTML format
+                let imgSrc = fieldValue;
+                if (fieldValue && fieldValue.includes('<img')) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = fieldValue;
+                    const imgElement = tempDiv.querySelector('img');
+                    if (imgElement) {
+                        imgSrc = imgElement.src;
+                    }
+                }
+                
+                fieldHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">${field.label}</label>
+                        <div class="input-group">
+                            <input type="file" class="form-control" 
+                                   id="file_${field.name}" 
+                                   accept="image/*"
+                                   ${field.required ? 'required' : ''}>
+                            <input type="hidden" name="${field.name}" id="hidden_${field.name}" 
+                                   value="${imgSrc || ''}">
+                        </div>
+                        ${containsHtml ? `
+                            <div class="mt-2">
+                                <div class="border rounded p-2">
+                                    ${fieldValue}
+                                </div>
+                            </div>
+                        ` : ''}
+                        <small class="form-text text-muted">
+                            <br>
+                            最大文件大小: ${Math.round(field.max_size/1024)}KB
+                        </small>
+                    </div>`;
+                
+                // add file change listener
+                setTimeout(() => {
+                    document.getElementById(`file_${field.name}`).addEventListener('change', async function(e) {
+                        const file = e.target.files[0];
+                        if (file) {
+                            const uploadedUrl = await handleFileUpload(file, field.upload_path, field.max_size);
+                            if (uploadedUrl) {
+                                document.getElementById(`hidden_${field.name}`).value = uploadedUrl;
+                                // 更新预览图
+                                const previewContainer = this.parentElement.nextElementSibling;
+                                if (previewContainer) {
+                                    previewContainer.innerHTML = `
+                                        <img src="${uploadedUrl}" class="img-thumbnail" style="max-height: 100px">
+                                    `;
+                                } else {
+                                    this.parentElement.insertAdjacentHTML('afterend', `
+                                        <div class="mt-2">
+                                            <img src="${uploadedUrl}" class="img-thumbnail" style="max-height: 100px">
+                                        </div>
+                                    `);
+                                }
+                            }
+                        }
+                    });
+                }, 0);
+                break;
+                
+            case 'json':
+                fieldHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">${field.label}</label>
+                        <textarea class="form-control" name="${field.name}" 
+                                rows="5" ${field.required ? 'required' : ''}
+                                placeholder="请输入有效的JSON格式">${fieldValue}</textarea>
+                        <small class="form-text text-muted">
+                            请输入有效的JSON格式数据
+                        </small>
+                    </div>`;
+                break;
+            case 'select':
+                fieldHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">${field.label}</label>
+                        <select class="form-select" name="${field.name}"
+                                ${field.required ? 'required' : ''}>
+                            <option value="">请选择</option>
+                            ${Object.entries(field.choices || {}).map(([value, label]) => 
+                                `<option value="${value}" 
+                                    ${fieldValue == value ? 'selected' : ''}>
+                                    ${label}
+                                </option>`
+                            ).join('')}
+                        </select>
+                    </div>`;
+                break;
+            case 'datetime':
+                fieldHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">${field.label}</label>
+                        <input type="datetime-local" class="form-control" 
+                               name="${field.name}" value="${fieldValue}"
+                               ${field.required ? 'required' : ''}>
+                    </div>`;
+                break;
+            case 'date':
+                fieldHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">${field.label}</label>
+                        <input type="date" class="form-control" 
+                               name="${field.name}" value="${fieldValue}"
+                               ${field.required ? 'required' : ''}>
+                    </div>`;
+                break;
+            case 'boolean':
+                fieldHtml = `
+                    <div class="mb-3 form-check">
+                        <input type="checkbox" class="form-check-input" 
+                               name="${field.name}" ${fieldValue ? 'checked' : ''}
+                               id="${field.name}">
+                        <label class="form-check-label" for="${field.name}">${field.label}</label>
+                    </div>`;
+                break;
+            case 'password':
+                fieldHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">${field.label}</label>
+                        <input type="password" class="form-control" 
+                               name="${field.name}"
+                               ${field.required ? 'required' : ''}>
+                    </div>`;
+                break;
+            default:
+                fieldHtml = `
+                    <div class="mb-3">
+                        <label class="form-label">${field.label}</label>
+                        <input type="text" class="form-control" 
+                               name="${field.name}" value="${fieldValue}"
+                               ${field.required ? 'required' : ''}>
+                        ${containsHtml ? `
+                            <div class="mt-2">
+                                <div class="border rounded p-2">
+                                    ${fieldValue}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>`;
+        }
+        
+        $('#formFields').append(fieldHtml);
+    });
+    
+    // show modal
+    var modal = new bootstrap.Modal(document.getElementById('formModal'));
+    modal.show();
+}
+
+// submit form
+async function submitForm() {
+    var form = document.getElementById('modelForm');
+    var formData = new FormData(form);
+    var data = new URLSearchParams();
+    
+    // get current action and form fields config
+    var modal = $('#formModal');
+    var action = modal.data('action');
+    var config = window.serverConfig;
+    var formFields = action === 'add' ? config.addFormFields : config.formFields;
+    
+    // handle form data
+    for(let [key, value] of formData.entries()) {
+        const field = formFields.find(f => f.name === key);
+        if (field && field.field_type === 'json') {
+            try {
+                // validate JSON format
+                JSON.parse(value);
+                data.append(key, value);
+            } catch (e) {
+                alert('Invalid JSON format, please check input');
+                return;
+            }
+        } else {
+            data.append(key, value);
+        }
+    }
+    
+    try {
+        var currentData = modal.data('currentData');
+        
+        console.log('Submit form:', {
+            action: action,
+            currentData: currentData,
+            formData: Object.fromEntries(data)
+        });
+
+        // determine URL based on action type
+        var url = action === 'edit' && currentData && currentData.id ? 
+            `/admin/${config.route_id}/${currentData.id}/edit` : 
+            `/admin/${config.route_id}/add`;
+            
+        console.log('Submit URL:', url);
+
+        const response = await fetch(url, {
+            method: 'POST',
+            body: data,
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            }
+        });
+        
+        if (response.ok) {
+            // close modal
+            var modalInstance = bootstrap.Modal.getInstance(document.getElementById('formModal'));
+            modalInstance.hide();
+            
+            // clear modal data
+            modal.removeData('currentData');
+            modal.removeData('action');
+            
+            // refresh table
+            $('#dataTable').bootstrapTable('refresh');
+        } else {
+            const errorText = await response.text();
+            throw new Error(errorText);
+        }
+    } catch (error) {
+        console.error('Error submitting form:', error);
+        alert('保存失败: ' + error.message);
+    }
+}
+</script>
+{% endmacro %} 

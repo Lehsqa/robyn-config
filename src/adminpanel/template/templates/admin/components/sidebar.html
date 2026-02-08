@@ -1,0 +1,91 @@
+<nav id="sidebar" class="sidebar bg-dark">
+    <div class="sidebar-sticky">
+        {% if models is defined %}
+        {# 添加系统管理菜单组 #}
+        {% if 'AdminUserAdmin' in models or 'RoleAdmin' in models or 'UserRoleAdmin' in models %}
+        <div class="nav-group">
+            <a class="nav-link nav-group-toggle" data-bs-toggle="collapse" 
+               href="#menu-system" role="button"
+               aria-expanded="true">
+                <span>
+                    <i class="bi bi-gear"></i>
+                    {{ get_text('system_management', language) }}
+                </span>
+            </a>
+            <div class="collapse show" id="menu-system">
+                <ul class="nav flex-column">
+                    {% if 'AdminUserAdmin' in models %}
+                    <li class="nav-item">
+                        <a class="nav-link" 
+                           href="/admin/AdminUserAdmin">
+                            <i class="bi bi-people"></i>
+                            {{ get_text('user_management', language) }}
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if 'RoleAdmin' in models %}
+                    <li class="nav-item">
+                        <a class="nav-link" 
+                           href="/admin/RoleAdmin">
+                            <i class="bi bi-person-badge"></i>
+                            {{ get_text('role_management', language) }}
+                        </a>
+                    </li>
+                    {% endif %}
+                    {% if 'UserRoleAdmin' in models %}
+                    <li class="nav-item">
+                        <a class="nav-link" 
+                           href="/admin/UserRoleAdmin">
+                            <i class="bi bi-person-badge"></i>
+                            {{ get_text('user_role_management', language) }}
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+
+        {# 其他业务菜单组 #}
+        {% set menu_groups = {} %}
+        {% for model_name, model_admin in models.items() %}
+            {% if model_admin.menu_group not in menu_groups and model_admin.menu_group != '系统管理' %}
+                {% set _ = menu_groups.update({model_admin.menu_group: []}) %}
+            {% endif %}
+            {% if model_admin.menu_group != '系统管理' %}
+                {% set _ = menu_groups[model_admin.menu_group].append((model_name, model_admin)) %}
+            {% endif %}
+        {% endfor %}
+        
+        {# 渲染业务菜单组 #}
+        {% for group_name, items in menu_groups.items()|sort(attribute='0') %}
+            {% if items|length > 0 %}  {# 只显示有权限访问的模型所在的菜单组 #}
+                {% set menu_item = menus.get(group_name, {'icon': 'bi bi-folder'}) %}
+                <div class="nav-group">
+                    <a class="nav-link nav-group-toggle" data-bs-toggle="collapse" 
+                       href="#menu-{{ group_name|lower|replace(' ', '-') }}" role="button"
+                       aria-expanded="true">
+                        <span>
+                            <i class="{{ menu_item.icon }}"></i>
+                            {{ group_name }}
+                        </span>
+                    </a>
+                    <div class="collapse show" id="menu-{{ group_name|lower|replace(' ', '-') }}">
+                        <ul class="nav flex-column">
+                            {% for model_name, model_admin in items|sort(attribute='1.menu_order') %}
+                            <li class="nav-item">
+                                <a class="nav-link{% if model_name == current_model %} active{% endif %}" 
+                                   href="/admin/{{ model_admin.route_id }}">
+                                    <i class="{{ model_admin.menu_icon }}"></i>
+                                    {{ model_admin.verbose_name }}
+                                </a>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            {% endif %}
+        {% endfor %}
+        {% endif %}
+    </div>
+</nav> 

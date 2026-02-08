@@ -1,0 +1,995 @@
+{# 表格组件 #}
+{% if filters %}
+    {% include "admin/components/filter_panel.html" %}
+{% endif %}
+<div class="card">
+    <div class="card-body mb-4">
+        <div id="toolbar" class="mb-3"></div>
+        <div class="table-responsive">
+            <table id="dataTable"></table>
+        </div>
+    </div>
+</div>
+
+{% macro table_scripts() %}
+<script>
+// 只保留功能相关的翻译
+var translations = {
+    selected_items: "{{ get_text('selected_items', language) }}",
+    clear_selection: "{{ get_text('clear_selection', language) }}",
+    please_select_items: "{{ get_text('please_select_items', language) }}",
+    confirm_batch_delete: "{{ get_text('confirm_batch_delete', language) }}",
+    deleting: "{{ get_text('deleting', language) }}",
+    export_selected: "{{ get_text('export_selected', language) }}",
+    export_current: "{{ get_text('export_current', language) }}",
+    load_failed: "{{ get_text('load_failed', language) }}",
+    delete_success: "{{ get_text('delete_success', language) }}",
+    delete_failed: "{{ get_text('delete_failed', language) }}",
+    add: "{{ get_text('add', language) }}",
+    edit: "{{ get_text('edit', language) }}",
+    delete: "{{ get_text('delete', language) }}",
+    batch_delete: "{{ get_text('batch_delete', language) }}",
+    export: "{{ get_text('export', language) }}",
+    import: "{{ get_text('import', language) }}",
+    operation: "{{ get_text('operation', language) }}",
+    row_delete: "{{ get_text('row_delete', language) }}",
+};
+console.log('Translations:', translations);
+function renderToolbar() {
+    var $toolbar = $('#toolbar');
+    var config = window.serverConfig;
+    console.log('Rendering toolbar with full config:', config);
+    console.log('Allow add:', config.allowAdd);
+    console.log('Allow delete:', config.allowDelete);
+    console.log('Allow export:', config.allowExport);
+    console.log('Allow import:', config.allowImport);
+    
+    var buttons = [];
+    
+    // 添加按钮
+    if (config.allowAdd) {
+        console.log('Adding add button');
+        buttons.push(`
+            <button class="btn btn-primary" onclick="showFormModal('add')">
+                <i class="bi bi-plus-lg"></i> ${translations.add || '添加'}
+            </button>
+        `);
+    }
+    
+    // 导入按钮
+    if (config.allowImport) {
+        console.log('Adding import button');
+        buttons.push(`
+            <button class="btn btn-success" onclick="showImportModal()">
+                <i class="bi bi-upload"></i> ${translations.import || '导入'}
+            </button>
+        `);
+    }
+    
+    // 批量删除按钮
+    if (config.allowDelete) {
+        console.log('Adding delete button');
+        buttons.push(`
+            <button id="batchDelete" class="btn btn-danger" disabled>
+                <i class="bi bi-trash"></i> ${translations.batch_delete || '批量删除'}
+            </button>
+        `);
+    }
+    
+    // 导出按钮
+    if (config.allowExport) {
+        buttons.push(`
+            <div class="btn-group">
+                <button id="exportBtn" class="btn btn-success">
+                    <i class="bi bi-download"></i> ${translations.export || '导出'}
+                </button>
+                <button type="button" class="btn btn-success dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
+                    <span class="visually-hidden">Toggle Dropdown</span>
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" onclick="exportData('all')">
+                        ${translations.export_current || '导出当前页'}
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="exportData('selected')">
+                        ${translations.export_selected || '导出选中'}
+                    </a></li>
+                </ul>
+            </div>
+        `);
+    }
+    
+    // 渲按钮
+    $toolbar.empty().append(buttons.join(''));
+}
+
+// 初始化滤器功能
+function initializeFilter($table) {
+    // 处理过滤表单提交
+    $('#filterForm').on('submit', function(e) {
+        e.preventDefault();
+        
+        // 收集滤条件
+        var filterData = {};
+        
+        // 遍历所有过滤字段
+        $('.filter-field').each(function() {
+            var $field = $(this);
+            var name = $field.attr('name');
+            var value = $field.val();
+            
+            // 如果字段有值才添加到过滤条件中
+            if (value) {
+                filterData[name] = value;
+            }
+        });
+        
+        // 获取当前的查询参数
+        var options = $table.bootstrapTable('getOptions');
+        
+        // 合并现有参数和过滤参数
+        var params = {
+            limit: options.pageSize,
+            offset: 0,  // 重置到第一页
+            search: options.searchText || '',
+            sort: options.sortName,
+            order: options.sortOrder,
+            ...filterData  // 添加过滤参数
+        };
+        
+        // 刷新表格
+        $table.bootstrapTable('refreshOptions', {
+            pageNumber: 1,  // 重置到第一页
+            queryParams: function(p) {
+                return { ...p, ...params };
+            }
+        });
+    });
+    
+    // 处理重置按钮
+    $('#filterForm button[type="reset"]').on('click', function() {
+        // 清空所有输入框和选择框
+        $('.filter-field').val('');
+        
+        // 重置表格查询参数
+        $table.bootstrapTable('refreshOptions', {
+            pageNumber: 1,
+            queryParams: function(p) {
+                return {
+                    limit: p.limit,
+                    offset: p.offset,
+                    search: p.search,
+                    sort: p.sort,
+                    order: p.order
+                };
+            }
+        });
+    });
+}
+
+$(document).ready(function() {
+    if (!window.serverConfig) {
+        console.error('serverConfig not initialized');
+        return;
+    }
+
+    var config = window.serverConfig;
+    console.log('Table config:', config);
+    console.log('Inlines:', config.inlines);
+    
+    // 确保在获取到配置后再渲染工具栏
+    renderToolbar();
+
+    // 构建表格列配置
+    var columns = [{checkbox: true}];
+    config.tableFields.forEach(function(field) {
+        if (!field.hidden) {
+            var column = {
+                field: field.name,
+                title: field.label,
+                formatter: function(value, row) {
+                    // 处理 switch 类型
+                    if (field.display_type === 'switch') {
+                        // 确定当前值是否为"开启"状态
+                        const isChecked = (
+                            value === field.choices[true] || 
+                            value === true || 
+                            value === 'true' || 
+                            value === 'True' || 
+                            value === '1' || 
+                            value === 1
+                        );
+                        
+                        // 获取显示文本
+                        const onText = field.labels ? field.labels[true] : '是';
+                        const offText = field.labels ? field.labels[false] : '否';
+                        
+                        // 获取实际值
+                        const onValue = field.choices ? field.choices[true] : true;
+                        const offValue = field.choices ? field.choices[false] : false;
+                        
+                        console.log('Switch value:', {
+                            originalValue: value,
+                            isChecked: isChecked,
+                            onText: onText,
+                            offText: offText,
+                            onValue: onValue,
+                            offValue: offValue
+                        });
+                        
+                        return `
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" 
+                                       id="switch-${row.id}-${field.name}"
+                                       ${isChecked ? 'checked' : ''}
+                                       data-on-value="${onValue}"
+                                       data-off-value="${offValue}"
+                                       onchange="handleSwitchChange('${row.id}', '${field.name}', this)"
+                                       ${field.editable ? '' : 'disabled'}>
+                                <label class="form-check-label" for="switch-${row.id}-${field.name}">
+                                    ${isChecked ? onText : offText}
+                                </label>
+                            </div>
+                        `;
+                    }
+                    
+                    if (field.actions && field.actions.length > 0) {
+                        // 生成自定义操作按钮
+                        return field.actions.map(action => `
+                            <button class="btn btn-sm ${action.btn_class}"
+                                    onclick="handleCustomAction('${action.name}', '${row.id}', '${action.inline_model}')">
+                                ${action.icon ? `<i class="${action.icon}"></i> ` : ''}
+                                ${action.label}
+                            </button>
+                        `).join(' ');
+                    }
+                    
+                    if (row.display && row.display[field.name] !== undefined) {
+                        return row.display[field.name];
+                    }
+                    if (row.data && row.data[field.name] !== undefined) {
+                        return row.data[field.name];
+                    }
+                    return value || '';
+                }
+            };
+            if (field.sortable) column.sortable = true;
+            if (field.width) column.width = field.width;
+            columns.push(column);
+        }
+    });
+
+    // 只有在 enableEdit 或 allowDelete 为 true 时才添加操作列
+    if (config.enableEdit || config.allowDelete || config.inlines) {
+        columns.push({
+            field: 'operate',
+            title: translations.operation,
+            width: 150,
+            formatter: function(value, row) {
+                try {
+                    // 获取完整的行数据
+                    const rowData = row.data || row;
+                    const id = rowData.id;
+                    
+                    // 创建一个新对象来存储处理后的数据
+                    const safeData = {};
+                    
+                    // 遍历所有字段
+                    Object.keys(rowData).forEach(key => {
+                        if (key === 'display') return; // 跳过 display 字段
+                        
+                        let value = rowData[key];
+                        if (value === null || value === undefined) {
+                            safeData[key] = '';
+                            return;
+                        }
+                        
+                        // 检查是否为 JSON 字段
+                        const field = config.tableFields.find(f => f.name === key);
+                        if (field && field.display_type === 'json') {
+                            // 如果已经是字符串形式，检查是否为有效的 JSON
+                            if (typeof value === 'string') {
+                                try {
+                                    JSON.parse(value); // 验证 JSON 格式
+                                    safeData[key] = value;
+                                } catch (e) {
+                                    safeData[key] = '[]';
+                                }
+                            } else if (Array.isArray(value)) {
+                                // 如果是数组，转换为字符串
+                                safeData[key] = JSON.stringify(value);
+                            } else if (typeof value === 'object') {
+                                // 如果是对象，转换为字符串
+                                safeData[key] = JSON.stringify(value);
+                            } else {
+                                safeData[key] = '[]';
+                            }
+                        } else {
+                            // 非 JSON 字段直接赋值
+                            safeData[key] = value;
+                        }
+                    });
+                    
+                    // 打印处理后的数据用于调试
+                    console.log('Row data for ID ' + id + ':', safeData);
+                    
+                    // 编码数据
+                    const encodedData = encodeURIComponent(JSON.stringify(safeData));
+                    
+                    let buttons = [];
+                    
+                    if (config.enableEdit) {
+                        buttons.push(`
+                            <button class="btn btn-sm btn-warning" 
+                                    onclick="handleAction('edit', '${id}', '${encodedData}')">
+                                <i class="bi bi-pencil"></i> ${translations.edit || '编辑'}
+                            </button>
+                        `);
+                    }
+                    
+                    if (config.allowDelete) {
+                        buttons.push(`
+                            <button class="btn btn-sm btn-danger" 
+                                    onclick="handleAction('delete', '${id}')">
+                                <i class="bi bi-trash"></i> ${translations.row_delete || '删除'}
+                            </button>
+                        `);
+                    }
+
+                    if (config.inlines && config.inlines.length > 0) {
+                        const inline = config.inlines[0];
+                        buttons.push(`
+                            <button class="btn btn-sm btn-info" 
+                                    onclick="handleCustomAction('view_documents', '${id}', '${inline.model}')">
+                                <i class="bi bi-file-text"></i> 状态详情
+                            </button>
+                        `);
+                    }
+                    
+                    return buttons.join(' ');
+                } catch (error) {
+                    console.error('Error formatting operation buttons:', error, row);
+                    return '<button class="btn btn-sm btn-warning" disabled>编辑</button>';
+                }
+            }
+        });
+    }
+
+    // 初始化表格并保存到全局变量
+    window.$table = $('#dataTable').bootstrapTable({
+        url: `/admin/${config.route_id}/data`,
+        method: 'GET',
+        columns: columns,  // 使用构建好的列配置
+        toggle: 'table',
+        pagination: true,
+        sidePagination: 'server',
+        pageNumber: 1,
+        pageSize: config.pageSize,
+        pageList: [10, 25, 50, 100],
+        search: true,
+        showColumns: true,
+        showRefresh: true,
+        showToggle: true,
+        clickToSelect: true,
+        toolbar: '#toolbar',
+        locale: 'en-US',
+        cache: false,
+        maintainMetaData: true,
+        queryParamsType: 'limit',
+        queryParams: function(params) {
+            console.log('Original params:', params);
+            
+            // 获取所有过滤字段值
+            var filterData = {};
+            $('.filter-field').each(function() {
+                var $field = $(this);
+                var name = $field.attr('name');
+                var value = $field.val();
+                if (value) {
+                    filterData[name] = value;
+                }
+            });
+
+            console.log('Filter data:', filterData);
+
+            // 合并所有参数
+            var finalParams = {
+                limit: params.limit,
+                offset: params.offset,
+                search: params.search,
+                sort: params.sort,
+                order: params.order,
+                ...filterData  // 添加过滤参数
+            };
+            
+            console.log('Final params:', finalParams);
+            return finalParams;
+        },
+        responseHandler: function(res) {
+            console.log('Server response:', res);
+            if (!res || !res.data) {
+                console.error('Invalid response data:', res);
+                return { total: 0, rows: [] };
+            }
+            
+            // 处理返回的数据
+            var result = {
+                total: parseInt(res.total),  // 总记录数
+                rows: res.data.map(function(item) {
+                    return {
+                        ...item.data,
+                        display: item.display
+                    };
+                })
+            };
+            console.log('Processed result:', result);
+            return result;
+        },
+        onLoadSuccess: function(data) {
+            console.log('Table data loaded:', data);
+            console.log('Total records:', data.total);
+            console.log('Current page data:', data.rows.length);
+        },
+        onLoadError: function(status, res) {
+            console.error('Table load error:', status, res);
+            alert(translations.load_failed);
+        },
+        onPageChange: function(number, size) {
+            console.log('Page changed to:', number, 'Size:', size);
+        }
+    });
+
+    // 确保表格已初始化
+    console.log('Table initialized:', window.$table);
+
+    // 初始化过滤器
+    initializeFilter($table);
+
+    // 监听表格选择事件
+    $table.on('check.bs.table uncheck.bs.table check-all.bs.table uncheck-all.bs.table',
+        function () {
+            var selections = $table.bootstrapTable('getSelections');
+            $('#batchDelete').prop('disabled', !selections.length);
+            // 更新选中提示
+            updateSelectionInfo(selections.length);
+        }
+    );
+
+    // 添加选中信息提示区域
+    var $toolbar = $('#toolbar');
+    $('<div/>', {
+        id: 'selectionInfo',
+        class: 'alert alert-info d-none mt-2',
+        role: 'alert'
+    }).appendTo($toolbar);
+
+    // 更新选中信息
+    function updateSelectionInfo(count) {
+        var $info = $('#selectionInfo');
+        if (count > 0) {
+            $info.html(
+                translations.selected_items.replace('{count}', count) + 
+                ` <button class="btn btn-link btn-sm p-0 ms-2" onclick="clearSelection()">
+                    ${translations.clear_selection}
+                </button>`
+            );
+            $info.removeClass('d-none');
+        } else {
+            $info.addClass('d-none');
+        }
+    }
+
+    // ��除选择
+    window.clearSelection = function() {
+        $table.bootstrapTable('uncheckAll');
+    };
+
+    // 批量删除功能
+    $('#batchDelete').click(function() {
+        var selections = $table.bootstrapTable('getSelections');
+        if (!selections.length) {
+            alert(translations.please_select_items);
+            return;
+        }
+
+        if (!confirm(translations.confirm_batch_delete.replace('{count}', selections.length))) {
+            return;
+        }
+
+        var ids = selections.map(function(item) {
+            return item.id;
+        });
+
+        // 显示加载提示
+        var $btn = $(this);
+        var originalText = $btn.html();
+        $btn.prop('disabled', true)
+            .html(`<i class="bi bi-hourglass-split"></i> ${translations.deleting}`);
+
+        // 发送批量删除请求
+        $.ajax({
+            url: `/admin/${config.modelName}/batch_delete`,
+            method: 'POST',
+            data: { ids: ids },
+            dataType: 'json',  // 指定应类 JSON
+            success: function(response) {
+                if (response.success) {
+                    // 显示成功提示
+                    var $alert = $('<div/>', {
+                        class: 'alert alert-success alert-dismissible fade show mt-2',
+                        role: 'alert'
+                    }).html(`
+                        ${response.message || translations.delete_success}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `);
+                    $('#toolbar').append($alert);
+                    
+                    // 自动关闭提示
+                    setTimeout(function() {
+                        $alert.alert('close');
+                    }, 3000);
+
+                    // 刷新表格
+                    $table.bootstrapTable('refresh');
+                    
+                    // 清除选择
+                    $table.bootstrapTable('uncheckAll');
+                } else {
+                    // 显示错误提示
+                    var $alert = $('<div/>', {
+                        class: 'alert alert-danger alert-dismissible fade show mt-2',
+                        role: 'alert'
+                    }).html(`
+                        ${response.message || translations.delete_failed}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `);
+                    $('#toolbar').append($alert);
+                    
+                    // 自动关闭提示
+                    setTimeout(function() {
+                        $alert.alert('close');
+                    }, 3000);
+                }
+            },
+            error: function(xhr) {
+                var message = translations.delete_failed;
+                try {
+                    var response = JSON.parse(xhr.responseText);
+                    message = response.message || message;
+                } catch (e) {
+                    console.error('Error parsing response:', e);
+                }
+                
+                // 显示错误提示
+                var $alert = $('<div/>', {
+                    class: 'alert alert-danger alert-dismissible fade show mt-2',
+                    role: 'alert'
+                }).html(`
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `);
+                $('#toolbar').append($alert);
+                
+                // 自动关闭提示
+                setTimeout(function() {
+                    $alert.alert('close');
+                }, 3000);
+            },
+            complete: function() {
+                // 恢复按钮状态
+                $btn.prop('disabled', false).html(originalText);
+            }
+        });
+    });
+
+    // 刷新表格数据的函数
+    window.refreshTable = function() {
+        $table.bootstrapTable('refresh', {
+            silent: false,
+            reset: true  // 重置页码和其他状态
+        });
+    };
+
+    // 导出数据功能
+    $('#exportBtn').click(function() {
+        // 获取当前表格的所有数据
+        var data = $table.bootstrapTable('getData');
+        
+        // 获取显示的列（排除操作列和复选框列）
+        var visibleColumns = $table.bootstrapTable('getVisibleColumns')
+            .filter(function(column) {
+                return column.field !== 'operate' && !column.checkbox;
+            });
+        
+        // 构建CSV内容
+        var csvContent = '\ufeff'; // 添加BOM，解决中文乱码
+        
+        // 添加表头
+        csvContent += visibleColumns.map(function(column) {
+            return '"' + (column.title || column.field) + '"';
+        }).join(',') + '\n';
+        
+        // 添加数据
+        data.forEach(function(row) {
+            csvContent += visibleColumns.map(function(column) {
+                var value;
+                // 显示值
+                var cell = $table.find('tr[data-index="' + $table.bootstrapTable('getData').indexOf(row) + '"] td[data-field="' + column.field + '"]');
+                if (cell.length) {
+                    value = cell.text().trim();
+                } else {
+                    value = row[column.field] || '';
+                }
+                
+                // 处理特殊字符
+                if (typeof value === 'string') {
+                    // 移除HTML标签
+                    value = value.replace(/<[^>]+>/g, '');
+                    // 处理双引号
+                    value = value.replace(/"/g, '""');
+                }
+                
+                return '"' + value + '"';
+            }).join(',') + '\n';
+        });
+        
+        // 创建Blob对象
+        var blob = new Blob([csvContent], {
+            type: 'text/csv;charset=utf-8;'
+        });
+        
+        // 创建下载链接
+        var link = document.createElement('a');
+        var url = URL.createObjectURL(blob);
+        var timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+        var filename = config.modelName + '_export_' + timestamp + '.csv';
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        
+        // 触发下载
+        link.click();
+        
+        // 清理
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        // 提示用户
+        var message = translations.export_current;
+        alert(message);
+    });
+
+    // 添加自定义操作处理函数
+    window.handleCustomAction = async function(action, id, inlineModel) {
+        if (action === 'view_documents') {
+            try {
+                const response = await fetch(`/admin/${config.route_id}/inline_data?parent_id=${id}&inline_model=${inlineModel}`);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText);
+                }
+                
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.error || '加载数据失败');
+                }
+                
+                // geting inline config
+                const inlineConfig = window.serverConfig.inlines.find(i => i.model === inlineModel);
+                if (!inlineConfig) {
+                    throw new Error('内联配置未找到');
+                }
+                
+                // show inline modal
+                showInlineModal({
+                    title: inlineConfig.title,
+                    model: inlineModel,
+                    parentId: id,
+                    data: result.data,
+                    config: inlineConfig
+                });
+            } catch (error) {
+                console.error('Error loading inline data:', error);
+                alert('加载数据失败: ' + (error.message || '未知错误'));
+            }
+        }
+    };
+
+    // show inline modal
+    function showInlineModal(options) {
+        console.log('Showing inline modal with options:', options);
+        console.log('Fields config:', options.config.fields);
+        const modalHtml = `
+            <div class="modal fade" id="inlineModal" tabindex="-1">
+                <div class="modal-dialog modal-xl" style="max-width: 90%; width: 1200px;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${options.title}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="table-responsive">
+                                <div class="mb-3">
+                                    <button class="btn btn-primary" onclick="addInlineRecord('${options.model}', '${options.parentId}')">
+                                        <i class="bi bi-plus-lg"></i> 添加记录
+                                    </button>
+                                </div>
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            ${options.config.fields.map(f => `<th>${f.label}</th>`).join('')}
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${generateInlineTableRows(options)}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // remove existing modal
+        const existingModal = document.getElementById('inlineModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // add new modal
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // show modal
+        const modal = new bootstrap.Modal(document.getElementById('inlineModal'));
+        modal.show();
+    }
+
+    // generate inline table rows
+    function generateInlineTableRows(options) {
+        return options.data.map(item => `
+            <tr>
+                ${options.config.fields.map(field => {
+                    const value = item.display[field.name] || item.data[field.name] || '';
+                    
+                    // 处理链接和其他显示类型
+                    if (field.is_link || field.display_type === 'link') {
+                        const baseUrl = `/admin/${options.model}/${item.data.id}`;
+                        return `<td><a href="${baseUrl}" class="text-decoration-none link-primary" 
+                                  title="点击查看详情">${value}</a></td>`;
+                    }
+                    
+                    switch (field.display_type) {
+                        case 'boolean':
+                            return `<td>${value === 'True' ? 
+                                '<i class="bi bi-check-circle text-success"></i>' : 
+                                '<i class="bi bi-x-circle text-danger"></i>'}</td>`;
+                        case 'datetime':
+                            return `<td><span class="text-muted">${value}</span></td>`;
+                        case 'status':
+                            return `<td><span class="badge bg-primary">${value}</span></td>`;
+                        default:
+                            return `<td>${value}</td>`;
+                    }
+                }).join('')}
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editInlineRecord('${options.model}', '${item.data.id}')">
+                        <i class="bi bi-pencil"></i> 编辑
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteInlineRecord('${options.model}', '${item.data.id}')">
+                        <i class="bi bi-trash"></i> 删除
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    // add inline record
+    window.addInlineRecord = function(model, parentId) {
+        showFormModal('add', { [window.serverConfig.inlines[0].fk_field]: parentId });
+    };
+
+    // edit inline record
+    window.editInlineRecord = function(model, id) {
+        // 获取记录数据并显示编辑表单
+        fetch(`/admin/${model}/${id}`)
+            .then(response => response.json())
+            .then(data => {
+                showFormModal('edit', data);
+            })
+            .catch(error => {
+                console.error('Error loading record:', error);
+                alert('加载数据失败');
+            });
+    };
+
+    // delete inline record
+    window.deleteInlineRecord = function(model, id) {
+        if (confirm('确定要删除这条记录吗？')) {
+            fetch(`/admin/${model}/${id}/delete`, {
+                method: 'POST'
+            })
+            .then(response => {
+                if (response.ok) {
+                    // refresh table
+                    document.getElementById('inlineModal').querySelector('tbody').innerHTML = 
+                        generateInlineTableRows(currentInlineOptions);
+                } else {
+                    alert('删除失败');
+                }
+            })
+            .catch(error => {
+                console.error('Delete error:', error);
+                alert('删除失败');
+            });
+        }
+    };
+});
+
+// change language
+window.setLanguage = function(lang) {
+    $.ajax({
+        url: '/admin/set_language',
+        method: 'POST',
+        data: { language: lang },
+        success: function() {
+            location.reload();
+        },
+        error: function() {
+            alert(translations.switch_language_failed);
+        }
+    });
+};
+
+// change switch
+window.handleSwitchChange = async function(id, field, switchElement) {
+    const isChecked = switchElement.checked;
+    const onValue = switchElement.dataset.onValue;
+    const offValue = switchElement.dataset.offValue;
+    const newValue = isChecked ? onValue : offValue;
+    
+    try {
+        const response = await fetch(`/admin/${window.serverConfig.route_id}/${id}/edit`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                [field]: newValue
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('更新失败');
+        }
+        
+        // refresh table
+        $('#dataTable').bootstrapTable('refresh');
+        
+    } catch (error) {
+        console.error('Switch change error:', error);
+        alert('更新失败');
+        // restore switch state
+        switchElement.checked = !isChecked;
+    }
+};
+
+function handleAction(action, id, rowData) {
+    console.log('Action:', action, 'ID:', id);
+    console.log('Raw row data:', rowData);
+    
+    let row = null;
+    if (rowData && rowData !== 'undefined' && rowData !== 'NaN') {
+        try {
+            // parse row data
+            const decodedData = decodeURIComponent(rowData);
+            console.log('Decoded data:', decodedData);
+            
+            row = JSON.parse(decodedData);
+            console.log('Parsed row data:', row);
+            
+            if (!row || typeof row !== 'object') {
+                throw new Error('Invalid row data format');
+            }
+            
+            row.id = id;
+            
+            // if edit action, ensure JSON fields are handled correctly
+            if (action === 'edit') {
+                const config = window.serverConfig;
+                const jsonFields = config.tableFields
+                    .filter(f => f.display_type === 'json')
+                    .map(f => f.name);
+                
+                console.log('JSON fields:', jsonFields);
+                
+                // handle all JSON fields
+                for (const fieldName of jsonFields) {
+                    if (row[fieldName] !== undefined) {
+                        try {
+                            // if JSON string, validate and keep as is
+                            if (typeof row[fieldName] === 'string') {
+                                JSON.parse(row[fieldName]); // validate JSON format
+                            } 
+                            // if object, convert to string
+                            else if (typeof row[fieldName] === 'object') {
+                                row[fieldName] = JSON.stringify(row[fieldName]);
+                            }
+                        } catch (e) {
+                            console.error(`Error processing JSON field ${fieldName}:`, e);
+                            row[fieldName] = '[]';
+                        }
+                    }
+                }
+            }
+            
+            console.log('Final processed row data:', row);
+        } catch (e) {
+            console.error('Error parsing row data:', e);
+            alert('数据格式错误，请刷新页面重试');
+            return;
+        }
+    }
+    
+    switch(action) {
+        case 'edit':
+            if (!id || id === 'undefined') {
+                console.error('Invalid id for edit action');
+                alert('无效的记录ID');
+                return;
+            }
+            if (!row) {
+                console.error('No row data for edit action');
+                alert('无法获取记录数据');
+                return;
+            }
+            $('#formModal').data({
+                currentData: row,
+                action: 'edit',
+                routeId: window.serverConfig.route_id
+            });
+            showFormModal('edit', row);
+            break;
+        case 'delete':
+            if (!id || id === 'undefined') {
+                console.error('Invalid id for delete action');
+                alert('无效的记录ID');
+                return;
+            }
+            if(confirm('确定要删除这条记录吗？')) {
+                deleteRecord(id);
+            }
+            break;
+        default:
+            console.log('Unknown action:', action);
+    }
+}
+</script>
+{% endmacro %}
+
+<style>
+    /* beautify switch */
+    .form-switch {
+        padding-left: 2.5em;
+    }
+    
+    .form-switch .form-check-input {
+        width: 2em;
+        margin-left: -2.5em;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='rgba%280, 0, 0, 0.25%29'/%3e%3c/svg%3e");
+        background-position: left center;
+        border-radius: 2em;
+        transition: background-position .15s ease-in-out;
+    }
+    
+    .form-switch .form-check-input:checked {
+        background-position: right center;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
+    }
+    
+    .form-check-label {
+        margin-left: 0.5em;
+    }
+</style>

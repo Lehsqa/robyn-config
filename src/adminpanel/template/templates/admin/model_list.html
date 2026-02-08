@@ -1,0 +1,217 @@
+{% extends "admin/base.html" %}
+
+{% from "admin/components/data_table.html" import table_scripts %}
+{% from "admin/components/form_modal.html" import form_scripts %}
+{% from "admin/components/inline_modal.html" import inline_modal_scripts %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col">
+            {# 添加导入模态框 #}
+            {% if frontend_config.allowImport %}
+            <div class="modal fade" id="importModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">{{ get_text('import_data', language) }}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <form id="importForm">
+                                <div class="mb-3">
+                                    <label class="form-label">{{ get_text('select_file', language) }}</label>
+                                    <div class="custom-file">
+                                        <input type="file" class="form-control" id="importFile" 
+                                               accept=".xlsx,.xls,.csv" required
+                                               data-browse="{{ get_text('choose_file', language) }}"
+                                               data-placeholder="{{ get_text('no_file_chosen', language) }}">
+                                    </div>
+                                    <small class="form-text text-muted">
+                                        {{ get_text('supported_formats', language) }}<br>
+                                        {{ get_text('required_fields', language) }}: {{ frontend_config.import_fields|join(', ') }}
+                                    </small>
+                                </div>
+                            </form>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ get_text('cancel', language) }}</button>
+                            <button type="button" class="btn btn-primary" onclick="handleImport()">{{ get_text('import_button', language) }}</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+            
+            {# 添加表单模态框组件 #}
+            {% include "admin/components/form_modal.html" %}
+            
+            {# 添加内联数据模态框组件 #}
+            {% include "admin/components/inline_modal.html" %}
+            
+            {# 只在非内联模型时显示数据表格 #}
+            {% if not frontend_config.is_inline %}
+                {# 传递过滤器配置并显示数据表格 #}
+                {% with filters = frontend_config.filterFields %}
+                    {% include "admin/components/data_table.html" %}
+                {% endwith %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+// 初始化前端配置
+window.serverConfig = JSON.parse('{{ frontend_config|tojson|safe }}');
+console.log('Server config initialized:', window.serverConfig);
+
+// 处理表格操作
+function handleAction(action, id, rowData) {
+    console.log('Action:', action, 'ID:', id, 'Row data:', rowData);
+    
+    let row = null;
+    if (rowData) {
+        try {
+            row = JSON.parse(decodeURIComponent(rowData));
+            row.id = id;
+            console.log('Parsed row data:', row);
+        } catch (e) {
+            console.error('Error parsing row data:', e);
+            return;
+        }
+    }
+    switch(action) {
+        case 'edit':
+            if (!id || id === 'undefined') {
+                console.error('Invalid id for edit action');
+                alert('无效的记录ID');
+                return;
+            }
+            $('#formModal').data({
+                currentData: row,
+                action: 'edit',
+                routeId: window.serverConfig.route_id
+            });
+            showFormModal('edit', row);
+            break;
+        case 'delete':
+            if (!id || id === 'undefined') {
+                console.error('Invalid id for delete action');
+                alert('无效的记录ID');
+                return;
+            }
+            if(confirm('确定要删除这条记录吗？')) {
+                deleteRecord(id);
+            }
+            break;
+        default:
+            console.log('Unknown action:', action);
+    }
+}
+
+// 删除记录
+async function deleteRecord(id) {
+    if (!id || id === 'undefined') {
+        console.error('Invalid id for delete');
+        alert('无效的记录ID');
+        return;
+    }
+    try {
+        const response = await fetch(`/admin/${window.serverConfig.route_id}/${id}/delete`, {
+            method: 'POST'
+        });
+        if(response.ok) {
+            $('#dataTable').bootstrapTable('refresh');
+        } else {
+            alert('删除失败');
+        }
+    } catch(error) {
+        console.error('Delete error:', error);
+        alert('删除失败');
+    }
+}
+
+function showImportModal() {
+    var modal = new bootstrap.Modal(document.getElementById('importModal'));
+    modal.show();
+    
+    // 设置文件输入框的文本
+    const fileInput = document.getElementById('importFile');
+    const placeholder = fileInput.getAttribute('data-placeholder');
+    
+    // 监听文件选择变化
+    fileInput.addEventListener('change', function(e) {
+        const fileName = e.target.files[0]?.name || placeholder;
+        const label = e.target.nextElementSibling;
+        if (label) {
+            label.textContent = fileName;
+        }
+    });
+}
+
+async function handleImport() {
+    const fileInput = document.getElementById('importFile');
+    if (!fileInput.files.length) {
+        alert(fileInput.getAttribute('data-placeholder'));
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    
+    try {
+        const response = await fetch(`/admin/${window.serverConfig.route_id}/import`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        alert(result.message);
+        
+        if (result.success) {
+            // 关闭模态框
+            bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
+            // 刷新表格
+            $('#dataTable').bootstrapTable('refresh');
+        }
+        
+        if (result.errors && result.errors.length) {
+            console.error('Import errors:', result.errors);
+        }
+    } catch (error) {
+        console.error('Import error:', error);
+        alert('导入失败');
+    }
+}
+</script>
+
+{# 确保在配置初始化后加载表格脚本 #}
+{% if not frontend_config.is_inline %}
+    {{ table_scripts() }}
+{% endif %}
+
+{{ form_scripts() }}
+{{ inline_modal_scripts() }}
+{% endblock %}
+
+<style>
+.custom-file {
+    position: relative;
+}
+
+.custom-file input[type="file"] {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    height: calc(1.5em + 0.75rem + 2px);
+    margin: 0;
+    opacity: 1;
+}
+
+.custom-file input[type="file"]:lang(zh-CN) ~ .custom-file-label::after {
+    content: attr(data-browse);
+}
+</style> 

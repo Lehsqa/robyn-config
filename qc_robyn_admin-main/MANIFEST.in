@@ -1,0 +1,7 @@
+include LICENSE
+include README.md
+include requirements.txt
+include pyproject.toml
+recursive-include qc_robyn_admin/templates *
+recursive-include qc_robyn_admin/static *
+recursive-include qc_robyn_admin/i18n * 

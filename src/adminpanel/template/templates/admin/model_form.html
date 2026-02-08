@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="container", style="margin-top: 50px;">
+    <div class="row">
+        <div class="col-12">
+            <h1>{{ "添加" if action == "add" else "编辑" }} {{ model_name }}</h1>
+            
+            {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+            {% endif %}
+            
+            <form method="post">
+                {% for field in fields %}
+                <div class="mb-3">
+                    <label for="{{ field }}" class="form-label">{{ field }}</label>
+                    <input type="text" class="form-control" id="{{ field }}" 
+                           name="{{ field }}" value="{{ form_data[field] if form_data else '' }}">
+                </div>
+                {% endfor %}
+                
+                <button type="submit" class="btn btn-primary">{{ get_text('save', language) }}</button>
+                <a href="/admin/{{ model_name.lower() }}" class="btn btn-secondary">{{ get_text('back', language) }}</a>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %} 

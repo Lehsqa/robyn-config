@@ -1,0 +1,118 @@
+{# 筛选面板组件 #}
+<div class="card mb-3">
+    <div class="card-body">
+        <form id="filterForm" class="row g-3" onsubmit="return handleFilterSubmit(event)">
+            {% for field in filters %}
+                <div class="col-md-3">
+                    <div class="form-group">
+                        <label class="form-label">{{ field.label }}</label>
+                        
+                        {% if field.type == 'select' %}
+                            <select class="form-select filter-field" name="{{ field.name }}">
+                                <option value="">{{ get_text('all', language) }}</option>
+                                {% for value, label in field.choices.items() %}
+                                    <option value="{{ value }}">{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                            
+                        {% elif field.type == 'date_range' %}
+                            <div class="input-group">
+                                <input type="date" class="form-control filter-field" 
+                                       name="{{ field.name }}_start"
+                                       placeholder="{{ get_text('start_date', language) }}">
+                                <span class="input-group-text">
+                                    {{ get_text('date_separator', language) }}
+                                </span>
+                                <input type="date" class="form-control filter-field" 
+                                       name="{{ field.name }}_end"
+                                       placeholder="{{ get_text('end_date', language) }}">
+                            </div>
+                            
+                        {% elif field.type == 'number_range' %}
+                            <div class="input-group">
+                                <input type="number" class="form-control filter-field" 
+                                       name="{{ field.name }}_min"
+                                       placeholder="{{ get_text('min_value', language) }}">
+                                <span class="input-group-text">
+                                    {{ get_text('number_separator', language) }}
+                                </span>
+                                <input type="number" class="form-control filter-field" 
+                                       name="{{ field.name }}_max"
+                                       placeholder="{{ get_text('max_value', language) }}">
+                            </div>
+                            
+                        {% else %}
+                            <input type="text" class="form-control filter-field" 
+                                   name="{{ field.name }}"
+                                   placeholder="{{ get_text('filter_placeholder', language)|replace('{field}', field.label) }}">
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+            
+            <div class="col-12">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-search"></i> {{ get_text('search', language) }}
+                </button>
+                <button type="reset" class="btn btn-secondary" onclick="resetFilters()">
+                    <i class="bi bi-x-circle"></i> {{ get_text('reset', language) }}
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function handleFilterSubmit(event) {
+    event.preventDefault();  // 阻止表单默认提交
+    applyFilters();
+    return false;
+}
+
+function applyFilters() {
+    console.log('Applying filters...');
+    
+    // 获取所有过滤字段的值
+    const filterForm = document.getElementById('filterForm');
+    const filterFields = filterForm.getElementsByClassName('filter-field');
+    const filterParams = {};
+    
+    for (let field of filterFields) {
+        if (field.value) {
+            filterParams[field.name] = field.value;
+        }
+    }
+    
+    console.log('Filter params:', filterParams);
+    
+    // 刷新表格数据
+    if (window.$table) {
+        window.$table.bootstrapTable('refresh', {
+            query: filterParams
+        });
+    } else {
+        console.error('Table not initialized!');
+    }
+}
+
+function resetFilters() {
+    // 重置表单
+    document.getElementById('filterForm').reset();
+    // 刷新表格数据（不带过滤参数）
+    if (window.$table) {
+        window.$table.bootstrapTable('refresh', {
+            query: {}
+        });
+    }
+}
+
+// 为过滤字段添加回车键触发搜索
+document.querySelectorAll('.filter-field').forEach(field => {
+    field.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            applyFilters();
+        }
+    });
+});
+</script> 

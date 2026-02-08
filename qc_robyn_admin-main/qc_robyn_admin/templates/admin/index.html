@@ -1,0 +1,38 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row">
+        <div class="col">
+            <h1>{{ get_text('welcome', language) }}</h1>
+            <p>{{ get_text('home', language) }}</p>
+            
+            {% for group_name, items in menus.items() %}
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h5 class="mb-0">
+                        <i class="{{ items.icon }}"></i>
+                        {{ group_name }}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group">
+                        {% for model_name, model_admin in models.items() %}
+                            {% if model_admin.menu_group == group_name %}
+                            <a href="/admin/{{ model_name }}" 
+                               class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="{{ model_admin.menu_icon }}"></i>
+                                    {{ model_admin.verbose_name }}
+                                </div>
+                            </a>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

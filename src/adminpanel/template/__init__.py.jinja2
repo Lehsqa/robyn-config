@@ -1,0 +1,61 @@
+from __future__ import annotations
+
+from robyn import Robyn
+
+from .auth_admin import AdminUserAdmin, RoleAdmin, UserRoleAdmin
+from .auth_models import AdminUser, Role, UserRole
+from .core import AdminSite, MenuItem, ModelAdmin
+from . import auth_models, models
+
+__version__ = "0.1.5"
+
+__all__ = [
+    "AdminSite",
+    "MenuItem",
+    "AdminUser",
+    "Role",
+    "UserRole",
+    "AdminUserAdmin",
+    "RoleAdmin",
+    "UserRoleAdmin",
+    "models",
+    "auth_models",
+    "register",
+]
+
+{% if design == "ddd" %}
+from app.infrastructure.database import tables as project_tables
+from app.infrastructure.database.services.engine import MODEL_MODULES, TORTOISE_ORM
+{% elif design == "mvc" %}
+from app.models import models as project_tables
+from app.models.database import MODEL_MODULES, TORTOISE_ORM
+{% endif %}
+
+
+class UsersAdmin(ModelAdmin):
+    verbose_name = "Users"
+
+
+class NewsLetterSubscriptionsAdmin(ModelAdmin):
+    verbose_name = "Newsletter Subscriptions"
+
+
+def _admin_modules() -> dict[str, list[str]]:
+    return {"models": list(MODEL_MODULES)}
+
+
+def register(app: Robyn) -> AdminSite:
+    admin_site = AdminSite(
+        app,
+        title="Robyn Admin",
+        prefix="admin",
+        db_url=TORTOISE_ORM["connections"]["default"],
+        modules=_admin_modules(),
+        generate_schemas=True,
+    )
+    admin_site.register_model(project_tables.UsersTable, UsersAdmin)
+    admin_site.register_model(
+        project_tables.NewsLetterSubscriptionsTable,
+        NewsLetterSubscriptionsAdmin,
+    )
+    return admin_site
