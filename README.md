@@ -18,6 +18,16 @@ You can simply use Pip for installation.
 pip install robyn-config
 ```
 
+## 🤖 AI Agent Skills
+
+`robyn-config` also supports AI agent skills, which let agents apply reusable project-specific workflows and guidance.
+
+To add the Robyn Config skills pack, run:
+
+```bash
+npx skills add Lehsqa/robyn-config-skills
+```
+
 ## 🤔 Usage
 
 ### 🚀 Create a Project
@@ -95,6 +105,7 @@ Please make sure you have the correct version of Python installed before startin
 - **Resilient operations**: `create` cleans up generated files if it fails; `add` rolls back using a temporary backup to keep your project intact.
 - **Production Ready**: Includes Docker, Docker Compose, and optimized configurations out of the box.
 - **DevEx**: Pre-configured with `ruff`, `pytest`, `black`, and `mypy` for a superior development experience.
+- **AI Agent Skills**: Installable skills support for AI agents to streamline specialized workflows.
 
 ## 🗒️ How to contribute
 
