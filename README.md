@@ -44,6 +44,15 @@ robyn-config create my-service --orm sqlalchemy --design ddd ./my-service
 robyn-config create newsletter --orm tortoise --design mvc --package-manager poetry ~/projects/newsletter
 ```
 
+```bash
+# Launch the interactive create UI
+robyn-config create -i
+```
+
+Interactive mode defaults destination to `.` and lets you edit all fields
+before confirmation. If you pass flags (for example `--orm tortoise`),
+those values are prefilled in the form and still editable.
+
 ### ➕ Add Business Logic
 
 Once inside a project, you can easily add new entities (models, routes, repositories, etc.) using the `add` command. This automatically generates all necessary files and wiring based on your project's architecture.
@@ -76,11 +85,15 @@ Commands:
 
 **`create` command options:**
 
-- `name`: Sets the project name used in templated files like `pyproject.toml` and `README.md`.
+- `name`: Sets the project name used in templated files like
+  `pyproject.toml` and `README.md`. Required unless `-i` is used.
+- `-i`, `--interactive`: Launch a Textual terminal UI to fill create
+  options interactively.
 - `--orm`: Selects the database layer. Options: `sqlalchemy` (default), `tortoise`.
 - `--design`: Toggles between the architecture templates. Options: `ddd` (default), `mvc`.
 - `--package-manager`: Choose how dependencies are locked/installed. Options: `uv` (default), `poetry`.
-- `destination`: The target directory. Defaults to `.`.
+- `destination`: The target directory. Defaults to `.` (including in
+  interactive mode).
 
 **`add` command options:**
 

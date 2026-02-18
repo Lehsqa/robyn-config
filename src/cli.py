@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
@@ -11,6 +12,7 @@ import click
 from add import add_business_logic
 from create import (
     DESIGN_CHOICES,
+    InteractiveCreateConfig,
     ORM_CHOICES,
     PACKAGE_MANAGER_CHOICES,
     apply_package_manager,
@@ -19,6 +21,7 @@ from create import (
     ensure_package_manager_available,
     get_generated_items,
     prepare_destination,
+    run_create_interactive,
 )
 
 
@@ -64,13 +67,23 @@ def _restore_project_backup(project_path: Path, backup_path: Path) -> None:
     shutil.copytree(backup_path, project_path, dirs_exist_ok=True)
 
 
+def _interactive_terminal_available() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
 @click.group(name="robyn-config")
 def cli() -> None:
     """Robyn configuration utilities."""
 
 
 @cli.command("create")
-@click.argument("name")
+@click.argument("name", required=False)
+@click.option(
+    "-i",
+    "--interactive",
+    is_flag=True,
+    help="Launch interactive mode for collecting create options.",
+)
 @click.option(
     "-orm",
     "--orm",
@@ -103,16 +116,54 @@ def cli() -> None:
     type=click.Path(
         exists=False, file_okay=False, dir_okay=True, path_type=Path
     ),
-    default=".",
+    required=False,
+    default=Path("."),
 )
 def create(
-    name: str,
-    destination: Path,
+    name: str | None,
+    destination: Path | None,
+    interactive: bool,
     orm_type: str,
     design: str,
     package_manager: str,
 ) -> None:
     """Copy the template into destination with specific configurations."""
+    destination = destination or Path(".")
+
+    if interactive:
+        if not _interactive_terminal_available():
+            raise click.ClickException(
+                "Interactive mode requires a TTY terminal. "
+                "Use non-interactive mode: "
+                "robyn-config create NAME [DESTINATION]."
+            )
+
+        try:
+            selected = run_create_interactive(
+                InteractiveCreateConfig(
+                    name=name or "",
+                    destination=str(destination),
+                    orm=orm_type,
+                    design=design,
+                    package_manager=package_manager,
+                )
+            )
+        except RuntimeError as exc:
+            raise click.ClickException(str(exc)) from exc
+        if selected is None:
+            raise click.ClickException("Create command cancelled.")
+
+        name = selected.name
+        destination = Path(selected.destination).expanduser()
+        orm_type = selected.orm
+        design = selected.design
+        package_manager = selected.package_manager
+
+    if not name:
+        raise click.UsageError("Missing argument 'NAME'.")
+
+    orm_type = orm_type.lower()
+    design = design.lower()
     package_manager = package_manager.lower()
     ensure_package_manager_available(package_manager)
 
