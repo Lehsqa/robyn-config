@@ -28,6 +28,7 @@ RUN /opt/venv/bin/pip install --no-cache-dir --upgrade pip poetry
 WORKDIR /opt/project
 COPY pyproject.toml README.md poetry.lock{% if orm == "sqlalchemy" %} alembic.ini{% endif %} ./
 COPY src ./src
+RUN mkdir -p /opt/project/logs
 RUN poetry config virtualenvs.create false
 RUN poetry install --no-interaction --without dev --quiet
 {% else %}
@@ -36,6 +37,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 WORKDIR /opt/project
 COPY pyproject.toml README.md uv.lock{% if orm == "sqlalchemy" %} alembic.ini{% endif %} ./
 COPY src ./src
+RUN mkdir -p /opt/project/logs
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --no-dev
 {% endif %}
@@ -83,7 +85,7 @@ COPY --from=builder /lib/x86_64-linux-gnu/libgcc_s.so.1* /lib/x86_64-linux-gnu/
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libexpat.so.1* /usr/lib/x86_64-linux-gnu/
 
 COPY --from=builder /opt/venv /opt/venv
-COPY --from=builder /opt/project /app
+COPY --chown=65532:65532 --from=builder /opt/project /app
 COPY --from=builder /tmp/prod.py /usr/local/bin/prod.py
 
 WORKDIR /app

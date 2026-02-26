@@ -47,7 +47,7 @@ uv pip install -e .[dev]
 
 The `[dev]` extra adds the linting, formatting, testing, typing, and coverage helpers (`ruff`, `flake8`, `black`, `isort`, `pytest`/`pytest-cov`, `coverage`, `mypy`, and `pyright`) that are configured via `pyproject.toml`.
 
-Copy `.env.example` to `.env` before running the app locally or via Compose; `.env.example` defaults to SQLite/fakeredis/localhost so the service can start without external infrastructure, and Compose overrides the database/cache hosts to point at its PostgreSQL/Valkey containers.
+Copy `.env.example` to `.env` before running the app locally or via Compose; `.env.example` uses host-friendly (`localhost`) infrastructure defaults, and Compose overrides the database/cache/mail hosts to point at its internal PostgreSQL/Valkey/MailHog containers.
 
 ## Makefile shortcuts
 
@@ -173,7 +173,7 @@ Services:
 - `postgres` – PostgreSQL 16 with database `robyn_users` (user/pass `app`).
 - `cache` – Valkey (Redis-compatible) cache used by `CacheRepository`.
 - `mailhog` – SMTP sink (`1025`) with web UI at <http://localhost:8025> for captured mail.
-- `app` – Robyn service (`python -m app.server`) exposed on <http://localhost:8000>. The `environment` block in `docker-compose.yml` overrides only the database/cache driver and host entries; the rest load from `.env` so the same file works for both Docker and local runs.
+- `app` – Robyn service (`python -m app.server`) exposed on <http://localhost:8000>. The `environment` block in `docker-compose.yml` overrides only the infrastructure host entries (database/cache/mail) for container networking; the rest load from `.env` so the same file works for both Docker and local runs.
 
 The `app` service builds from `compose/app/Dockerfile`, copies the `dev.sh` helper into the image, and runs it so {{ "Alembic" if orm == "sqlalchemy" else "Aerich" }} upgrades happen before `python -m app.server --reload` executes.
 
@@ -218,14 +218,14 @@ Useful Makefile commands:
 
 If you run inside Docker, execute the same commands through `docker compose exec app ...`.
 
-The compose service starts in development mode by exporting `SETTINGS__DEBUG=true`,
-sets `LOGURU_LEVEL=DEBUG`, and mounts `./logs` into the container so Loguru’s
-`logs/robyn_app.log` is immediately available on the host. Tail the file locally or
-inspect `docker compose logs -f app` for streaming output.
-
 Environment variables are passed to the container via `SETTINGS__*` prefixes so the app
 picks up the correct infra hosts/ports. Logs are written via Loguru to `logs/robyn_app.log`
-inside the container (and mounted working tree if you bind-mount).
+inside the container, and the default Compose file stores `/app/logs` in a named Docker
+volume (`app-logs`) to avoid host permission issues.
+
+Use `docker compose logs -f app` for streaming logs. If you prefer host-visible log files,
+replace `app-logs:/app/logs` with `./logs:/app/logs` in `docker-compose.yml` and ensure the
+host directory is writable by the container user.
 
 To run migrations or inspect the DB, connect to `localhost:5432` using the credentials
 above. Valkey listens on `localhost:6379` (compatible with any Redis client).

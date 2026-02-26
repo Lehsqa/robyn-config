@@ -152,3 +152,49 @@ def test_create_with_poetry_package_manager(tmp_path):
         project_dir / "compose" / "app" / "Dockerfile"
     ).read_text()
     assert "poetry.lock" in dockerfile_content
+    assert "RUN mkdir -p /opt/project/logs" in dockerfile_content
+
+
+def test_create_generates_reliable_compose_and_env_defaults(tmp_path):
+    """Scaffold should work without manual compose/logs/env edits."""
+    project_dir = tmp_path / "reliable_defaults_project"
+    fake_bin = create_fake_package_managers(tmp_path)
+    result = run_create_command(project_dir, "ddd", "sqlalchemy", bin_dir=fake_bin)
+
+    assert result.returncode == 0, f"CLI create failed: {result.stderr}"
+
+    compose_content = (project_dir / "docker-compose.yml").read_text()
+    env_example_content = (project_dir / ".env.example").read_text()
+
+    assert ".env.example" not in compose_content
+    assert "      - .env" in compose_content
+    assert "      - app-logs:/app/logs" in compose_content
+    assert "\n  app-logs:\n" in compose_content
+    assert "SETTINGS__DATABASE__HOST: postgres" in compose_content
+    assert "SETTINGS__CACHE__HOST: valkey" in compose_content
+    assert "SETTINGS__MAILING__HOST: mailhog" in compose_content
+
+    assert "SETTINGS__DATABASE__HOST=localhost" in env_example_content
+    assert "SETTINGS__CACHE__HOST=localhost" in env_example_content
+    assert "SETTINGS__MAILING__HOST=localhost" in env_example_content
+
+
+def test_create_generates_rooted_env_loading_and_nonroot_log_dir_setup(tmp_path):
+    """Generated config and Dockerfile should support cwd-independent env loading."""
+    project_dir = tmp_path / "rooted_env_project"
+    fake_bin = create_fake_package_managers(tmp_path)
+    result = run_create_command(project_dir, "mvc", "sqlalchemy", bin_dir=fake_bin)
+
+    assert result.returncode == 0, f"CLI create failed: {result.stderr}"
+
+    config_content = (project_dir / "src" / "app" / "config" / "__init__.py").read_text()
+    dockerfile_content = (
+        project_dir / "compose" / "app" / "Dockerfile"
+    ).read_text()
+
+    assert '_env_file=core.ROOT_PATH / ".env"' in config_content
+    assert "RUN mkdir -p /opt/project/logs" in dockerfile_content
+    assert (
+        "COPY --chown=65532:65532 --from=builder /opt/project /app"
+        in dockerfile_content
+    )

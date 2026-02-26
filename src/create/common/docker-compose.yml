@@ -6,7 +6,7 @@ services:
     container_name: database
     restart: unless-stopped
     env_file:
-      - .env.example
+      - .env
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U app -d database"]
       interval: 10s
@@ -47,7 +47,11 @@ services:
         - linux/amd64
     container_name: app
     env_file:
-      - .env.example
+      - .env
+    environment:
+      SETTINGS__DATABASE__HOST: postgres
+      SETTINGS__CACHE__HOST: valkey
+      SETTINGS__MAILING__HOST: mailhog
     restart: unless-stopped
     depends_on:
       postgres:
@@ -59,8 +63,9 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./logs:/app/logs
+      - app-logs:/app/logs
       - ./src/app:/app/src/app
 
 volumes:
   postgres-data:
+  app-logs:

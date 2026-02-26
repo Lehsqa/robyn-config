@@ -43,4 +43,8 @@ class Settings(BaseSettings):
     integrations: _integrations.Settings = _integrations.Settings()
 
 
-settings = Settings(root_dir=core.ROOT_PATH, src_dir=core.SRC_PATH)
+settings = Settings(
+    root_dir=core.ROOT_PATH,
+    src_dir=core.SRC_PATH,
+    _env_file=core.ROOT_PATH / ".env",
+)
