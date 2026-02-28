@@ -18,6 +18,16 @@ You can simply use Pip for installation.
 pip install robyn-config
 ```
 
+## 🤖 AI Agent Skills
+
+`robyn-config` also supports AI agent skills, which let agents apply reusable project-specific workflows and guidance.
+
+To add the Robyn Config skills pack, run:
+
+```bash
+npx skills add Lehsqa/robyn-config-skills
+```
+
 ## 🤔 Usage
 
 ### 🚀 Create a Project
@@ -33,6 +43,15 @@ robyn-config create my-service --orm sqlalchemy --design ddd ./my-service
 # Create an MVC project with Tortoise ORM, locking with poetry
 robyn-config create newsletter --orm tortoise --design mvc --package-manager poetry ~/projects/newsletter
 ```
+
+```bash
+# Launch the interactive create UI
+robyn-config create -i
+```
+
+Interactive mode defaults destination to `.` and lets you edit all fields
+before confirmation. If you pass flags (for example `--orm tortoise`),
+those values are prefilled in the form and still editable.
 
 ### ➕ Add Business Logic
 
@@ -66,11 +85,15 @@ Commands:
 
 **`create` command options:**
 
-- `name`: Sets the project name used in templated files like `pyproject.toml` and `README.md`.
+- `name`: Sets the project name used in templated files like
+  `pyproject.toml` and `README.md`. Required unless `-i` is used.
+- `-i`, `--interactive`: Launch a Textual terminal UI to fill create
+  options interactively.
 - `--orm`: Selects the database layer. Options: `sqlalchemy` (default), `tortoise`.
 - `--design`: Toggles between the architecture templates. Options: `ddd` (default), `mvc`.
 - `--package-manager`: Choose how dependencies are locked/installed. Options: `uv` (default), `poetry`.
-- `destination`: The target directory. Defaults to `.`.
+- `destination`: The target directory. Defaults to `.` (including in
+  interactive mode).
 
 **`add` command options:**
 
@@ -95,6 +118,7 @@ Please make sure you have the correct version of Python installed before startin
 - **Resilient operations**: `create` cleans up generated files if it fails; `add` rolls back using a temporary backup to keep your project intact.
 - **Production Ready**: Includes Docker, Docker Compose, and optimized configurations out of the box.
 - **DevEx**: Pre-configured with `ruff`, `pytest`, `black`, and `mypy` for a superior development experience.
+- **AI Agent Skills**: Installable skills support for AI agents to streamline specialized workflows.
 
 ## 🗒️ How to contribute
 

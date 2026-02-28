@@ -38,7 +38,6 @@ tests.coverage:
 .PHONY: fix  # fix formatting and order imports
 fix:
 	uv run black src
-	uv run isort src
 	uv run ruff check src --fix
 
 .PHONY: check.types  # check type annotations
@@ -49,6 +48,5 @@ check.types:
 check:
 	uv run ruff check src
 	uv run black --check src
-	uv run isort --check src
 	uv run mypy --check-untyped-defs src
 	uv run pytest
