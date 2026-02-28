@@ -94,7 +94,7 @@ def _ddd_paths_from_config(project_dir: Path, add_cfg: dict[str, str]) -> dict[s
             "database_repository_path", "src/app/infrastructure/database/repository"
         ),
         "db_tables": project_dir / add_cfg.get(
-            "database_table_path", "src/app/infrastructure/database/tables.py"
+            "database_table_path", "src/app/infrastructure/database/table/__init__.py"
         ),
     }
 
@@ -103,7 +103,9 @@ def _mvc_paths_from_config(project_dir: Path, add_cfg: dict[str, str]) -> dict[s
     return {
         "views": project_dir / add_cfg.get("views_path", "src/app/views"),
         "db_repo": project_dir / add_cfg.get("database_repository_path", "src/app/models/repository.py"),
-        "db_tables": project_dir / add_cfg.get("database_table_path", "src/app/models/models.py"),
+        "db_tables": project_dir / add_cfg.get(
+            "database_table_path", "src/app/models/table/__init__.py"
+        ),
         "urls": project_dir / add_cfg.get("urls_path", "src/app/urls.py"),
     }
 
@@ -135,8 +137,9 @@ def test_add_command_creates_files(tmp_path: Path, design: str, orm: str) -> Non
         assert (paths["presentation"] / "product" / "rest.py").exists()
 
         # Check table was added
-        tables_content = paths["db_tables"].read_text()
-        assert "ProductTable" in tables_content
+        product_table = paths["db_tables"].parent / "product.py"
+        assert product_table.exists()
+        assert "class ProductTable" in product_table.read_text()
 
         # Check domain import was updated
         domain_init = (paths["domain"] / "__init__.py").read_text()
@@ -150,8 +153,9 @@ def test_add_command_creates_files(tmp_path: Path, design: str, orm: str) -> Non
     elif design == "mvc":
         paths = _mvc_paths_from_config(project_dir, add_cfg)
         # Check MVC files were appended
-        models_content = paths["db_tables"].read_text()
-        assert "ProductTable" in models_content
+        product_table = paths["db_tables"].parent / "product.py"
+        assert product_table.exists()
+        assert "class ProductTable" in product_table.read_text()
 
         repo_content = paths["db_repo"].read_text()
         assert "ProductRepository" in repo_content
@@ -186,7 +190,7 @@ def test_add_command_no_lint_errors(tmp_path: Path, design: str, orm: str) -> No
     else:  # mvc
         paths = _mvc_paths_from_config(project_dir, add_cfg)
         files_to_check = [
-            paths["db_tables"],
+            paths["db_tables"].parent,
             paths["db_repo"],
             paths["views"] / "product.py",
         ]
@@ -230,12 +234,13 @@ def test_add_command_multiple_entities(tmp_path: Path, design: str, orm: str) ->
 
     elif design == "mvc":
         paths = _mvc_paths_from_config(project_dir, add_cfg)
-        models_content = paths["db_tables"].read_text()
         repo_content = paths["db_repo"].read_text()
         
         for entity in ["product", "order", "category"]:
             name = "".join(word.capitalize() for word in entity.split("_"))
-            assert f"{name}Table" in models_content
+            table_module = paths["db_tables"].parent / f"{entity}.py"
+            assert table_module.exists()
+            assert f"class {name}Table" in table_module.read_text()
             assert f"{name}Repository" in repo_content
             assert (project_dir / "src" / "app" / "views" / f"{entity}.py").exists()
 

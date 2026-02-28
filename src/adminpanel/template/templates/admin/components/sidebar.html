@@ -49,10 +49,10 @@
         {# 其他业务菜单组 #}
         {% set menu_groups = {} %}
         {% for model_name, model_admin in models.items() %}
-            {% if model_admin.menu_group not in menu_groups and model_admin.menu_group != '系统管理' %}
+            {% if model_admin.menu_group not in menu_groups and model_admin.menu_group != 'System Management' %}
                 {% set _ = menu_groups.update({model_admin.menu_group: []}) %}
             {% endif %}
-            {% if model_admin.menu_group != '系统管理' %}
+            {% if model_admin.menu_group != 'System Management' %}
                 {% set _ = menu_groups[model_admin.menu_group].append((model_name, model_admin)) %}
             {% endif %}
         {% endfor %}

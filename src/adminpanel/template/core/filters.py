@@ -145,5 +145,5 @@ class BooleanFilter(FilterField):
             name=name,
             label=label,
             filter_type=FilterType.BOOLEAN,
-            choices={True: '是', False: '否'}
+            choices={True: "Yes", False: "No"}
         )

@@ -1,0 +1,99 @@
+"""create admin panel tables
+
+Revision ID: {{ revision }}
+Revises: {{ down_revision_text }}
+Create Date: {{ create_date }}
+"""
+
+from alembic import op
+import sqlalchemy as sa
+
+# revision identifiers, used by Alembic.
+revision = "{{ revision }}"
+down_revision = {{ down_revision_literal }}
+branch_labels = None
+depends_on = None
+
+
+def upgrade() -> None:
+    op.create_table(
+        "robyn_admin_users",
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("username", sa.String(length=150), nullable=False),
+        sa.Column("password", sa.String(length=256), nullable=False),
+        sa.Column("email", sa.String(length=254), nullable=True),
+        sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
+        sa.Column("is_superuser", sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column("last_login", sa.DateTime(), nullable=True),
+        sa.Column(
+            "created_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
+    )
+    op.create_index(
+        "ix_robyn_admin_users_username",
+        "robyn_admin_users",
+        ["username"],
+        unique=True,
+    )
+
+    op.create_table(
+        "robyn_admin_roles",
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("name", sa.String(length=150), nullable=False),
+        sa.Column("description", sa.String(length=200), nullable=True),
+        sa.Column("accessible_models", sa.JSON(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
+    )
+    op.create_index(
+        "ix_robyn_admin_roles_name",
+        "robyn_admin_roles",
+        ["name"],
+        unique=True,
+    )
+
+    op.create_table(
+        "robyn_admin_user_roles",
+        sa.Column("id", sa.Integer(), primary_key=True, autoincrement=True),
+        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column("role_id", sa.Integer(), nullable=False),
+        sa.Column(
+            "created_at",
+            sa.DateTime(),
+            nullable=False,
+            server_default=sa.text("CURRENT_TIMESTAMP"),
+        ),
+        sa.ForeignKeyConstraint(["user_id"], ["robyn_admin_users.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["role_id"], ["robyn_admin_roles.id"], ondelete="CASCADE"),
+    )
+    op.create_index(
+        "ix_robyn_admin_user_roles_user_id",
+        "robyn_admin_user_roles",
+        ["user_id"],
+        unique=False,
+    )
+    op.create_index(
+        "ix_robyn_admin_user_roles_role_id",
+        "robyn_admin_user_roles",
+        ["role_id"],
+        unique=False,
+    )
+
+
+def downgrade() -> None:
+    op.drop_index("ix_robyn_admin_user_roles_role_id", table_name="robyn_admin_user_roles")
+    op.drop_index("ix_robyn_admin_user_roles_user_id", table_name="robyn_admin_user_roles")
+    op.drop_table("robyn_admin_user_roles")
+
+    op.drop_index("ix_robyn_admin_roles_name", table_name="robyn_admin_roles")
+    op.drop_table("robyn_admin_roles")
+
+    op.drop_index("ix_robyn_admin_users_username", table_name="robyn_admin_users")
+    op.drop_table("robyn_admin_users")

@@ -17,6 +17,13 @@ JINJA_ENV = Environment(undefined=StrictUndefined)
 
 TEMPLATE_ROOT = ADMINPANEL_ROOT / "template"
 
+LEGACY_DDD_DB_TABLE_PATH = Path("src/app/infrastructure/database/tables.py")
+DEFAULT_DDD_DB_TABLE_PATH = Path(
+    "src/app/infrastructure/database/table/__init__.py"
+)
+LEGACY_MVC_DB_TABLE_PATH = Path("src/app/models/models.py")
+DEFAULT_MVC_DB_TABLE_PATH = Path("src/app/models/table/__init__.py")
+
 ADMIN_DEPENDENCIES: tuple[tuple[str, str], ...] = (
     ("jinja2", ">=3.0.0"),
     ("aiosqlite", ">=0.17.0"),
@@ -25,7 +32,7 @@ ADMIN_DEPENDENCIES: tuple[tuple[str, str], ...] = (
 )
 
 SUPPORTED_DESIGNS = ("ddd", "mvc")
-SUPPORTED_ORM = "tortoise"
+SUPPORTED_ORMS = ("tortoise", "sqlalchemy")
 
 DDD_APP_PANEL_TEMPLATE = """\
 from __future__ import annotations
@@ -37,6 +44,145 @@ from app.infrastructure import adminpanel as adminpanel_module
 
 def register(app: Robyn) -> None:
     adminpanel_module.register(app)
+"""
+
+SQLALCHEMY_ADMIN_TABLES_SNIPPET = """\
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+from .authentication import UsersTable
+from .base import Base
+
+
+class Role(Base):
+    __tablename__ = "robyn_admin_roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(150), unique=True, index=True)
+    description: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    accessible_models: Mapped[list[str]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.CURRENT_TIMESTAMP(),
+    )
+
+
+class UserRole(Base):
+    __tablename__ = "robyn_admin_user_roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(f"{UsersTable.__tablename__}.id", ondelete="CASCADE"),
+        index=True,
+    )
+    role_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("robyn_admin_roles.id", ondelete="CASCADE"),
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.CURRENT_TIMESTAMP(),
+    )
+"""
+
+TORTOISE_ADMIN_TABLES_SNIPPET = """\
+from __future__ import annotations
+
+from tortoise import fields
+
+from .base import BaseTable
+
+
+class Role(BaseTable):
+    name = fields.CharField(max_length=150, unique=True)
+    description = fields.CharField(max_length=200, null=True)
+    accessible_models = fields.JSONField(default=list)
+
+    class Meta:
+        table = "robyn_admin_roles"
+        ordering = ("id",)
+
+
+class UserRole(BaseTable):
+    user = fields.ForeignKeyField("models.UsersTable", related_name="user_roles")
+    role = fields.ForeignKeyField("models.Role", related_name="role_users")
+
+    class Meta:
+        table = "robyn_admin_user_roles"
+        ordering = ("id",)
+"""
+
+SQLALCHEMY_ADMIN_TABLES_LEGACY_SNIPPET = """\
+from __future__ import annotations
+
+from datetime import datetime
+
+from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, func
+from sqlalchemy.orm import Mapped, mapped_column
+
+
+class Role(Base):
+    __tablename__ = "robyn_admin_roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(150), unique=True, index=True)
+    description: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    accessible_models: Mapped[list[str]] = mapped_column(JSON, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.CURRENT_TIMESTAMP(),
+    )
+
+
+class UserRole(Base):
+    __tablename__ = "robyn_admin_user_roles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
+    role_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("robyn_admin_roles.id", ondelete="CASCADE"),
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        server_default=func.CURRENT_TIMESTAMP(),
+    )
+"""
+
+TORTOISE_ADMIN_TABLES_LEGACY_SNIPPET = """\
+from __future__ import annotations
+
+from tortoise import fields
+
+
+class Role(BaseTable):
+    name = fields.CharField(max_length=150, unique=True)
+    description = fields.CharField(max_length=200, null=True)
+    accessible_models = fields.JSONField(default=list)
+
+    class Meta:
+        table = "robyn_admin_roles"
+        ordering = ("id",)
+
+
+class UserRole(BaseTable):
+    user = fields.ForeignKeyField("models.UsersTable", related_name="user_roles")
+    role = fields.ForeignKeyField("models.Role", related_name="role_users")
+
+    class Meta:
+        table = "robyn_admin_user_roles"
+        ordering = ("id",)
 """
 
 
@@ -63,6 +209,8 @@ def _render_template_tree(
     created_files: list[str] = []
     for template_file in template_root.rglob("*.jinja2"):
         rel_path = template_file.relative_to(template_root)
+        if "migrations" in rel_path.parts:
+            continue
         target_path = (target_root / rel_path).with_suffix("")
         if _render_template_file(template_file, target_path, context):
             created_files.append(str(target_path.relative_to(project_root)))
@@ -135,7 +283,7 @@ def _ensure_route_registrar(
             inner = inner[inner.find("(") + 1 : inner.rfind(")")]
             items = [item.strip() for item in inner.split(",") if item.strip()]
             items.append(registrar)
-            suffix = ")," if line.rstrip().endswith("),") else ")"
+            suffix = "," if line.rstrip().endswith("),") else ""
             lines[idx] = (
                 f"{indent}route_registrars=({', '.join(items)}){suffix}"
             )
@@ -268,6 +416,27 @@ def _ensure_project_dependency(
     pyproject_path.write_text("\n".join(lines))
 
 
+def _repair_sqlalchemy_adminpanel_imports(target_root: Path) -> bool:
+    init_file = target_root / "__init__.py"
+    if not init_file.exists():
+        return False
+
+    content = init_file.read_text()
+    broken_import = "from .auth_models_sqlalchemy import AdminUser, Role, UserRole"
+    fixed_models_import = "from .models_sqlalchemy import AdminUser"
+    fixed_auth_import = "from .auth_models_sqlalchemy import Role, UserRole"
+
+    if broken_import not in content:
+        return False
+
+    updated = content.replace(
+        broken_import,
+        f"{fixed_models_import}\n{fixed_auth_import}",
+    )
+    init_file.write_text(updated)
+    return True
+
+
 def _ensure_dependency(
     pyproject_path: Path, package_manager: str, dependency: str, version: str
 ) -> None:
@@ -281,6 +450,123 @@ def _ensure_dependency(
         _ensure_poetry_dependency(pyproject_path, dependency, version)
     else:
         _ensure_project_dependency(pyproject_path, dependency, version)
+
+
+def _resolve_db_tables_path(
+    project_path: Path, config: Mapping[str, object], design: str
+) -> Path:
+    add_config = config.get("add")
+    configured_path: str | None = None
+    if isinstance(add_config, Mapping):
+        raw = add_config.get("database_table_path")
+        if isinstance(raw, str) and raw.strip():
+            configured_path = raw
+
+    if configured_path:
+        return project_path / configured_path
+
+    if design == "ddd":
+        preferred = project_path / DEFAULT_DDD_DB_TABLE_PATH
+        if preferred.exists():
+            return preferred
+        legacy = project_path / LEGACY_DDD_DB_TABLE_PATH
+        if legacy.exists():
+            return legacy
+        return preferred
+
+    preferred = project_path / DEFAULT_MVC_DB_TABLE_PATH
+    if preferred.exists():
+        return preferred
+    legacy = project_path / LEGACY_MVC_DB_TABLE_PATH
+    if legacy.exists():
+        return legacy
+    return preferred
+
+
+def _ensure_symbols_in_all(
+    content: str, symbols: tuple[str, ...]
+) -> str:
+    all_pattern = r"(__all__\s*=\s*\(\s*)(.*?)(\s*\))"
+    match = re.search(all_pattern, content, re.DOTALL)
+    if not match:
+        return content
+
+    current_items = match.group(2)
+    missing = [
+        symbol
+        for symbol in symbols
+        if f'"{symbol}"' not in current_items and f"'{symbol}'" not in current_items
+    ]
+    if not missing:
+        return content
+
+    updated_items = current_items.rstrip()
+    if updated_items and not updated_items.endswith(","):
+        updated_items += ","
+    for symbol in missing:
+        updated_items += f'\n    "{symbol}",'
+
+    updated_all = f"{match.group(1)}{updated_items}{match.group(3)}"
+    return content[: match.start()] + updated_all + content[match.end() :]
+
+
+def _append_admin_models_to_shared_tables(
+    project_path: Path,
+    config: Mapping[str, object],
+    design: str,
+    orm: str,
+) -> None:
+    tables_path = _resolve_db_tables_path(project_path, config, design)
+    if not tables_path.exists():
+        raise FileNotFoundError(
+            f"Database table module not found at {tables_path.as_posix()}"
+        )
+
+    package_snippet = (
+        SQLALCHEMY_ADMIN_TABLES_SNIPPET
+        if orm == "sqlalchemy"
+        else TORTOISE_ADMIN_TABLES_SNIPPET
+    )
+    legacy_snippet = (
+        SQLALCHEMY_ADMIN_TABLES_LEGACY_SNIPPET
+        if orm == "sqlalchemy"
+        else TORTOISE_ADMIN_TABLES_LEGACY_SNIPPET
+    )
+    symbols = ("Role", "UserRole")
+
+    if tables_path.name == "__init__.py":
+        module_file = tables_path.parent / "adminpanel.py"
+        if module_file.exists():
+            module_content = module_file.read_text()
+            if all(f"class {symbol}" in module_content for symbol in symbols):
+                _ensure_import_from(tables_path, ".adminpanel", "Role")
+                _ensure_import_from(tables_path, ".adminpanel", "UserRole")
+                init_content = tables_path.read_text()
+                updated_init = _ensure_symbols_in_all(init_content, symbols)
+                if updated_init != init_content:
+                    tables_path.write_text(updated_init)
+                return
+
+        module_file.write_text(package_snippet.rstrip() + "\n")
+        _ensure_import_from(tables_path, ".adminpanel", "Role")
+        _ensure_import_from(tables_path, ".adminpanel", "UserRole")
+        init_content = tables_path.read_text()
+        updated_init = _ensure_symbols_in_all(init_content, symbols)
+        if updated_init != init_content:
+            tables_path.write_text(updated_init)
+        return
+
+    # Legacy single-file tables.py/models.py projects.
+    content = tables_path.read_text()
+    if all(f"class {symbol}" in content for symbol in symbols):
+        updated = _ensure_symbols_in_all(content, symbols)
+        if updated != content:
+            tables_path.write_text(updated)
+        return
+
+    updated_content = content.rstrip() + f"\n\n\n{legacy_snippet}\n"
+    updated_content = _ensure_symbols_in_all(updated_content, symbols)
+    tables_path.write_text(updated_content)
 
 
 def _ensure_application_adminpanel(project_path: Path) -> None:
@@ -304,9 +590,9 @@ def add_adminpanel(project_path: Path) -> list[str]:
     design, orm = validate_project(project_path)
     if design not in SUPPORTED_DESIGNS:
         raise ValueError(f"Unsupported design pattern: {design}")
-    if orm != SUPPORTED_ORM:
+    if orm not in SUPPORTED_ORMS:
         raise ValueError(
-            "Admin panel scaffolding requires a Tortoise ORM project."
+            "Admin panel scaffolding requires a supported ORM project."
         )
 
     if not TEMPLATE_ROOT.exists():
@@ -322,8 +608,21 @@ def add_adminpanel(project_path: Path) -> list[str]:
         TEMPLATE_ROOT, target_root, project_path
     )
     created_files += _render_template_tree(
-        TEMPLATE_ROOT, target_root, {"design": design}, project_path
+        TEMPLATE_ROOT,
+        target_root,
+        {"design": design, "orm": orm},
+        project_path,
     )
+
+    _append_admin_models_to_shared_tables(
+        project_path=project_path,
+        config=config,
+        design=design,
+        orm=orm,
+    )
+
+    if orm == "sqlalchemy":
+        _repair_sqlalchemy_adminpanel_imports(target_root)
 
     if design == "ddd":
         infra_dir = project_path / "src" / "app" / "infrastructure"

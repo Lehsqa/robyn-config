@@ -63,6 +63,23 @@ def run_cli_add(project_path: Path, name: str) -> None:
     )
 
 
+def run_adminpanel(project_path: Path) -> None:
+    """Add adminpanel to an existing project using the CLI."""
+    env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT / "src")
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "cli",
+            "adminpanel",
+            str(project_path),
+        ],
+        check=True,
+        env=env,
+    )
+
+
 def run_make_migration(project_dir: Path, design: str, orm: str) -> None:
     """Run make makemigration in the project directory."""
     try:
@@ -98,17 +115,42 @@ def docker_compose(project_dir: Path, *args: str) -> None:
     )
 
 
-def wait_for_health(timeout: float = 120.0) -> None:
+def _get_app_container_logs(project_dir: Path, tail: int = 200) -> str:
+    env = {**os.environ, "COMPOSE_HTTP_TIMEOUT": "200"}
+    result = subprocess.run(
+        ["docker", "compose", "logs", "--tail", str(tail), "app"],
+        cwd=project_dir,
+        check=False,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+
+    output = result.stdout.strip()
+    stderr = result.stderr.strip()
+    if stderr:
+        output = f"{output}\n{stderr}".strip()
+    return output or "<no app logs captured>"
+
+
+def wait_for_health(project_dir: Path, timeout: float = 15.0) -> None:
     deadline = time.monotonic() + timeout
+    last_error: Exception | None = None
     while time.monotonic() < deadline:
         try:
-            response = httpx.get(f"{APP_BASE_URL}/health", timeout=5.0)
+            response = httpx.get(f"{APP_BASE_URL}/health", timeout=timeout)
             if response.status_code == 200:
                 return
-        except httpx.HTTPError:
-            pass
+        except httpx.HTTPError as exc:
+            last_error = exc
         time.sleep(1)
-    pytest.fail("App health check did not become available in time")
+
+    app_logs = _get_app_container_logs(project_dir)
+    error_lines = ["App health check did not become available in time"]
+    if last_error:
+        error_lines.append(f"Last health probe error: {last_error}")
+    error_lines += ["App container logs:", app_logs]
+    pytest.fail("\n".join(error_lines))
 
 
 def fetch_activation_key(timeout: float = 120.0) -> str:
@@ -143,6 +185,51 @@ def clear_mailhog_queue() -> None:
         pass
 
 
+def test_wait_for_health_includes_app_logs_on_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    ticks = iter([0.0, 0.2, 0.4, 5.2])
+
+    monkeypatch.setattr(time, "monotonic", lambda: next(ticks))
+    monkeypatch.setattr(time, "sleep", lambda _: None)
+
+    def fake_get(url: str, timeout: float) -> None:
+        raise httpx.ConnectError(
+            "connection refused",
+            request=httpx.Request("GET", url),
+        )
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    docker_calls: list[list[str]] = []
+
+    def fake_run(
+        args: list[str],
+        cwd: Path,
+        check: bool,
+        env: dict[str, str],
+        capture_output: bool,
+        text: bool,
+    ) -> subprocess.CompletedProcess:
+        docker_calls.append(args)
+        return subprocess.CompletedProcess(
+            args=args,
+            returncode=0,
+            stdout="app log line",
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    with pytest.raises(pytest.fail.Exception) as exc_info:
+        wait_for_health(tmp_path, timeout=5.0)
+
+    error_message = str(exc_info.value)
+    assert "App container logs:" in error_message
+    assert "app log line" in error_message
+    assert docker_calls == [["docker", "compose", "logs", "--tail", "200", "app"]]
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize("design,orm", COMBINATIONS)
 def test_generate_app_and_run_endpoints(
@@ -155,6 +242,7 @@ def test_generate_app_and_run_endpoints(
     shutil.rmtree(project_dir, ignore_errors=True)
     run_cli_create(project_dir, design=design, orm=orm)
     run_cli_add(project_dir, "product")
+    run_adminpanel(project_dir)
     run_make_migration(project_dir, design, orm)
     shutil.copy2(project_dir / ".env.example", project_dir / ".env")
 
@@ -162,7 +250,7 @@ def test_generate_app_and_run_endpoints(
     try:
         docker_compose(project_dir, "up", "-d", "--build")
         compose_started = True
-        wait_for_health()
+        wait_for_health(project_dir)
         clear_mailhog_queue()
 
         user_payload = {

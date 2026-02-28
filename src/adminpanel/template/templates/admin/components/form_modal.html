@@ -27,7 +27,7 @@ async function handleFileUpload(file, uploadPath, maxSize) {
     
     // check file size
     if (maxSize && file.size > maxSize) {
-        alert(`文件大小超过限制 (${Math.round(maxSize/1024)}KB)`);
+        alert(`File size exceeds limit (${Math.round(maxSize/1024)}KB)`);
         return null;
     }
     
@@ -45,12 +45,12 @@ async function handleFileUpload(file, uploadPath, maxSize) {
         if (result.success) {
             return result.data.url;
         } else {
-            alert(result.message || '上传失败');
+            alert(result.message || 'Upload failed');
             return null;
         }
     } catch (error) {
         console.error('Upload error:', error);
-        alert('上传失败');
+        alert('Upload failed');
         return null;
     }
 }
@@ -130,7 +130,7 @@ function showFormModal(action, data = null) {
                         ` : ''}
                         <small class="form-text text-muted">
                             <br>
-                            最大文件大小: ${Math.round(field.max_size/1024)}KB
+                            Max file size: ${Math.round(field.max_size/1024)}KB
                         </small>
                     </div>`;
                 
@@ -167,9 +167,9 @@ function showFormModal(action, data = null) {
                         <label class="form-label">${field.label}</label>
                         <textarea class="form-control" name="${field.name}" 
                                 rows="5" ${field.required ? 'required' : ''}
-                                placeholder="请输入有效的JSON格式">${fieldValue}</textarea>
+                                placeholder="Enter valid JSON">${fieldValue}</textarea>
                         <small class="form-text text-muted">
-                            请输入有效的JSON格式数据
+                            Enter valid JSON data
                         </small>
                     </div>`;
                 break;
@@ -179,7 +179,7 @@ function showFormModal(action, data = null) {
                         <label class="form-label">${field.label}</label>
                         <select class="form-select" name="${field.name}"
                                 ${field.required ? 'required' : ''}>
-                            <option value="">请选择</option>
+                            <option value="">Please select</option>
                             ${Object.entries(field.choices || {}).map(([value, label]) => 
                                 `<option value="${value}" 
                                     ${fieldValue == value ? 'selected' : ''}>
@@ -320,7 +320,7 @@ async function submitForm() {
         }
     } catch (error) {
         console.error('Error submitting form:', error);
-        alert('保存失败: ' + error.message);
+        alert('Save failed: ' + error.message);
     }
 }
 </script>

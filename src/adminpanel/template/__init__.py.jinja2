@@ -2,10 +2,20 @@ from __future__ import annotations
 
 from robyn import Robyn
 
+{% if orm == "tortoise" %}
 from .auth_admin import AdminUserAdmin, RoleAdmin, UserRoleAdmin
 from .auth_models import AdminUser, Role, UserRole
 from .core import AdminSite, MenuItem, ModelAdmin
 from . import auth_models, models
+{% elif orm == "sqlalchemy" %}
+from .auth_admin_sqlalchemy import AdminUserAdmin, RoleAdmin, UserRoleAdmin
+from .models_sqlalchemy import AdminUser
+from .auth_models_sqlalchemy import Role, UserRole
+from .core.menu import MenuItem
+from .core.sqlalchemy_admin import ModelAdmin
+from .core.sqlalchemy_site import AdminSite
+from . import auth_models_sqlalchemy as auth_models, models_sqlalchemy as models
+{% endif %}
 
 __version__ = "0.1.5"
 
@@ -23,12 +33,18 @@ __all__ = [
     "register",
 ]
 
-{% if design == "ddd" %}
-from app.infrastructure.database import tables as project_tables
+{% if design == "ddd" and orm == "tortoise" %}
+from app.infrastructure.database import table as project_tables
 from app.infrastructure.database.services.engine import MODEL_MODULES, TORTOISE_ORM
-{% elif design == "mvc" %}
-from app.models import models as project_tables
+{% elif design == "ddd" and orm == "sqlalchemy" %}
+from app.infrastructure.database import table as project_tables
+from app.infrastructure.database.services.session import create_session
+{% elif design == "mvc" and orm == "tortoise" %}
+from app.models import table as project_tables
 from app.models.database import MODEL_MODULES, TORTOISE_ORM
+{% elif design == "mvc" and orm == "sqlalchemy" %}
+from app.models import table as project_tables
+from app.models.database import create_session
 {% endif %}
 
 
@@ -40,11 +56,14 @@ class NewsLetterSubscriptionsAdmin(ModelAdmin):
     verbose_name = "Newsletter Subscriptions"
 
 
+{% if orm == "tortoise" %}
 def _admin_modules() -> dict[str, list[str]]:
     return {"models": list(MODEL_MODULES)}
+{% endif %}
 
 
 def register(app: Robyn) -> AdminSite:
+{% if orm == "tortoise" %}
     admin_site = AdminSite(
         app,
         title="Robyn Admin",
@@ -53,6 +72,16 @@ def register(app: Robyn) -> AdminSite:
         modules=_admin_modules(),
         generate_schemas=True,
     )
+{% elif orm == "sqlalchemy" %}
+    admin_site = AdminSite(
+        app,
+        title="Robyn Admin",
+        prefix="admin",
+        session_factory=create_session,
+        generate_schemas=False,
+        orm="sqlalchemy",
+    )
+{% endif %}
     admin_site.register_model(project_tables.UsersTable, UsersAdmin)
     admin_site.register_model(
         project_tables.NewsLetterSubscriptionsTable,

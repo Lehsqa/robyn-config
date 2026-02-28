@@ -12,21 +12,13 @@ from urllib.parse import parse_qs, unquote
 import secrets
 import hashlib
 import base64
-import importlib
 import atexit
 
 from ..auth_admin import AdminUserAdmin, RoleAdmin, UserRoleAdmin
 from ..auth_models import AdminUser, Role, UserRole
 from .admin import ModelAdmin
 from .menu import MenuManager, MenuItem
-from ..models import AdminUser
-from ..i18n.translations import get_text
 from typing import Callable
-
-
-def _internal_module_path(module_name: str) -> str:
-    package = __package__.rsplit(".", 1)[0] if __package__ else ""
-    return f"{package}.{module_name}".lstrip(".")
 
 class AdminSite:
     """Admin站点主类"""
@@ -51,7 +43,7 @@ class AdminSite:
         :param db_url: 数据库连接URL,如果为None则尝试复用已有配置
         :param modules: 模型模块配置,如果为None则尝试复用已有配置
         :param generate_schemas: 是否自动生成数据库表结构
-        :param default_language: 默认语言 zh_CN, en_US
+        :param default_language: default language code
         """
         self.app = app
         self.title = title          # 后台名称
@@ -132,7 +124,7 @@ class AdminSite:
                 # 如果没有提供配置,试获取已有配置
                 if not self.db_url:
                     if not Tortoise._inited:
-                        raise Exception("数据库未初始化,配置数据库或提供db_url参数")
+                        raise Exception("Database is not initialized. Configure database or provide db_url.")
                     # 复用现有配置
                     current_config = Tortoise.get_connection("default").config
                     self.db_url = current_config.get("credentials", {}).get("dsn")
@@ -144,73 +136,13 @@ class AdminSite:
                         abs_path = os.path.abspath(db_path)
                         self.db_url = f'sqlite://{abs_path}'
                 
-                # 处理模块配置
-                if self.modules is None:
-                    # 动态导入内部模型模块
-                    try:
-                        models_module = importlib.import_module(
-                            _internal_module_path("models")
-                        )
-                        auth_models_module = importlib.import_module(
-                            _internal_module_path("auth_models")
-                        )
-                        
-                        self.modules = {
-                            "models": [
-                                models_module,  # 直接使用模块对象而不是字符串
-                                auth_models_module
-                            ]
-                        }
-                    except ImportError as e:
-                        print(f"Error importing internal modules: {e}")
-                        raise
-                        
-                elif not self.modules:
-                    # 如果是字典，获取现有配置
+                if self.modules is None or not self.modules:
                     if not Tortoise._inited:
-                        raise Exception("数据库未初始化,请先配置数据库或提供modules参数")
+                        raise Exception(
+                            "Model modules are required. "
+                            "Provide modules explicitly when database is not initialized."
+                        )
                     self.modules = dict(Tortoise.apps)
-                    # 确保内部模型被加载
-                    try:
-                        models_module = importlib.import_module(
-                            _internal_module_path("models")
-                        )
-                        auth_models_module = importlib.import_module(
-                            _internal_module_path("auth_models")
-                        )
-                        
-                        if "models" in self.modules and isinstance(self.modules["models"], list):
-                            self.modules["models"].extend([models_module, auth_models_module])
-                        else:
-                            self.modules["models"] = [models_module, auth_models_module]
-                    except ImportError as e:
-                        print(f"Error importing internal modules: {e}")
-                        raise
-                        
-                else:
-                    # 如果提供了配置，确保内部模型被加载
-                    try:
-                        models_module = importlib.import_module(
-                            _internal_module_path("models")
-                        )
-                        auth_models_module = importlib.import_module(
-                            _internal_module_path("auth_models")
-                        )
-                        
-                        if "models" in self.modules:
-                            if isinstance(self.modules["models"], list):
-                                self.modules["models"].extend([models_module, auth_models_module])
-                            else:
-                                self.modules["models"] = [
-                                    models_module,
-                                    auth_models_module,
-                                    self.modules["models"]
-                                ]
-                        else:
-                            self.modules["models"] = [models_module, auth_models_module]
-                    except ImportError as e:
-                        print(f"Error importing internal modules: {e}")
-                        raise
 
                 # 初始化数据库连接
                 if not Tortoise._inited:
@@ -345,7 +277,7 @@ class AdminSite:
                 else:
                     print(f"Authentication failed for username: {username}")  # 调试日志
                     context = {
-                        "error": "用户名或密码错误",
+                        "error": "Invalid username or password",
                         "user": None,
                         "site_title": self.title,
                         "copyright": self.copyright
@@ -357,7 +289,7 @@ class AdminSite:
                 traceback.print_exc()  # 打印完整的错误堆栈
                 return Response(
                     status_code=500,
-                    description=f"登录失败: {str(e)}"
+                    description=f"Login failed: {str(e)}"
                 )
 
         @self.app.get(f"/{self.prefix}/logout")
@@ -389,7 +321,7 @@ class AdminSite:
             if not user:
                 return Response(
                     status_code=401, 
-                    description="未登录",
+                    description="Not logged in",
                     headers={"Content-Type": "application/json"}
                 )
             
@@ -397,7 +329,7 @@ class AdminSite:
             if not model_admin:
                 return Response(
                     status_code=404, 
-                    description="模型不存在",
+                    description="Model not found",
                     headers={"Content-Type": "application/json"}
                 )
             
@@ -442,7 +374,7 @@ class AdminSite:
                     return Response(
                         status_code=403, 
                         headers={"Content-Type": "text/html"},
-                        description="没有权限访问此页面"
+                        description="Permission denied"
                     )
                 
                 model_admin = self.get_model_admin(route_id)
@@ -484,7 +416,7 @@ class AdminSite:
                 return Response(
                     status_code=500,
                     headers={"Content-Type": "text/html"},
-                    description=f"获取列表页失败: {str(e)}"
+                    description=f"Failed to load list page: {str(e)}"
                 )
 
 
@@ -497,13 +429,13 @@ class AdminSite:
                 if not model_admin:
                     return Response(
                         status_code=404,
-                        description="模型不存在",
+                        description="Model not found",
                         headers={"Content-Type": "text/html"}
                     )
                     
                 # 检查权限
                 if not await self.check_permission(request, route_id, 'add'):
-                    return Response(status_code=403, description="没有添加权限", headers={"Content-Type": "text/html"})
+                    return Response(status_code=403, description="No create permission", headers={"Content-Type": "text/html"})
                 # 解析表单数据
                 data = request.body
                 params = parse_qs(data)
@@ -533,7 +465,7 @@ class AdminSite:
                 traceback.print_exc()
                 return Response(
                     status_code=500,
-                    description=f"添加失败: {str(e)}",
+                    description=f"Create failed: {str(e)}",
                     headers={"Content-Type": "text/html"}
                 )
 
@@ -548,7 +480,7 @@ class AdminSite:
                 if not model_admin:
                     return Response(
                         status_code=404,
-                        description="模型不存在",
+                        description="Model not found",
                         headers={"Content-Type": "text/html"}
                     )
                 if not model_admin.enable_edit:
@@ -590,7 +522,7 @@ class AdminSite:
                 print(f"Edit error: {str(e)}")
                 return Response(
                     status_code=500,
-                    description=f"编辑失败: {str(e)}",
+                    description=f"Edit failed: {str(e)}",
                     headers={"Content-Type": "text/html"}
                 )
 
@@ -602,15 +534,15 @@ class AdminSite:
                 object_id: str = request.path_params.get("id")
                 user = await self._get_current_user(request)
                 if not user:
-                    return Response(status_code=401, description="未登录", headers={"Location": f"/{self.prefix}/login"})
+                    return Response(status_code=401, description="Not logged in", headers={"Location": f"/{self.prefix}/login"})
                 
                 model_admin = self.get_model_admin(route_id)
                 if not model_admin:
-                    return Response(status_code=404, description="模型不存在", headers={"Content-Type": "text/html"})
+                    return Response(status_code=404, description="Model not found", headers={"Content-Type": "text/html"})
                     
                 # 检查权限
                 if not await self.check_permission(request, route_id, 'delete'):
-                    return Response(status_code=403, description="没有删除权限", headers={"Content-Type": "text/html"})
+                    return Response(status_code=403, description="No delete permission", headers={"Content-Type": "text/html"})
                     
                 # 调用模型管理类的处理方法
                 success, message = await model_admin.handle_delete(request, object_id)
@@ -632,7 +564,7 @@ class AdminSite:
                 print(f"Delete error: {str(e)}")
                 return Response(
                     status_code=500,
-                    description=f"删除失败: {str(e)}",
+                    description=f"Delete failed: {str(e)}",
                     headers={"Content-Type": "text/html"}
                 )
         
@@ -692,11 +624,11 @@ class AdminSite:
                 route_id: str = request.path_params.get("route_id")
                 user = await self._get_current_user(request)
                 if not user:
-                    return Response(status_code=401, description="未登录", headers={"Location": f"/{self.prefix}/login"})
+                    return Response(status_code=401, description="Not logged in", headers={"Location": f"/{self.prefix}/login"})
                 
                 model_admin = self.get_model_admin(route_id)
                 if not model_admin:
-                    return Response(status_code=404, description="模型不存在", headers={"Content-Type": "text/html"})
+                    return Response(status_code=404, description="Model not found", headers={"Content-Type": "text/html"})
                 
                 # 解析请求数据
                 data = request.body
@@ -706,7 +638,7 @@ class AdminSite:
                 if not ids:
                     return Response(
                         status_code=400,
-                        description="未选择要删除的记录",
+                        description="No records selected",
                         headers={"Content-Type": "text/html"}
                     )
                 
@@ -724,7 +656,7 @@ class AdminSite:
                 print(f"Batch delete error: {str(e)}")
                 return jsonify({
                     "code": 500,
-                    "message": f"批量删除失败: {str(e)}",
+                    "message": f"Batch delete failed: {str(e)}",
                     "success": False
                 })
         
@@ -737,7 +669,7 @@ class AdminSite:
                 if not user:
                     return jsonify({
                         "code": 401,
-                        "message": "未登录",
+                        "message": "Not logged in",
                         "success": False
                     })
 
@@ -746,7 +678,7 @@ class AdminSite:
                 if not files:
                     return jsonify({
                         "code": 400,
-                        "message": "没上传文件",
+                        "message": "No file uploaded",
                         "success": False
                     })
                 # 获取上传路数
@@ -758,7 +690,7 @@ class AdminSite:
                     if not file_name.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.sql', '.xlsx', '.csv', '.xls')):
                         return jsonify({
                             "code": 400,
-                            "message": "不支持文件类型",
+                            "message": "Unsupported file type",
                             "success": False
                         })
 
@@ -785,17 +717,17 @@ class AdminSite:
                 # 返回成功响应
                 return jsonify({
                     "code": 200,
-                    "message": "上传成功",
+                    "message": "Upload successful",
                     "success": True,
                     "data": uploaded_files[0] if uploaded_files else None  # 返回一个文件的信息
                 })
                 
             except Exception as e:
-                print(f"文件上传失败: {str(e)}")
+                print(f"Upload failed: {str(e)}")
                 traceback.print_exc()
                 return jsonify({
                     "code": 500,
-                    "message": f"文件上传失败: {str(e)}",
+                    "message": f"Upload failed: {str(e)}",
                     "success": False
                 })
         
@@ -934,7 +866,7 @@ class AdminSite:
                 if not model_admin or not model_admin.allow_import:
                     return jsonify({
                         "success": False,
-                        "message": "不支持导入功能"
+                        "message": "Import is not supported"
                     })
                 
                 # 获取上传的文件
@@ -943,7 +875,7 @@ class AdminSite:
                 if not files:
                     return jsonify({
                         "success": False,
-                        "message": "未上传文件"
+                        "message": "No file uploaded"
                     })
                     
                 file_data = next(iter(files.values()))
@@ -952,7 +884,7 @@ class AdminSite:
                 if not any(filename.endswith(ext) for ext in ['.xlsx', '.xls', '.csv']):
                     return jsonify({
                         "success": False,
-                        "message": "仅支持 Excel 或 CSV 文件"
+                        "message": "Only Excel or CSV files are supported"
                     })
                     
                 # 处理文件数据
@@ -970,7 +902,7 @@ class AdminSite:
                 if missing_fields:
                     return jsonify({
                         "success": False,
-                        "message": f"缺少必需字段: {', '.join(missing_fields)}"
+                        "message": f"Missing required fields: {', '.join(missing_fields)}"
                     })
                     
                 # 导入数据
@@ -989,7 +921,7 @@ class AdminSite:
                         
                 return jsonify({
                     "success": True,
-                    "message": f"导入完成: 成功 {success_count} 条, 失败 {error_count} 条",
+                    "message": f"Import completed: {success_count} succeeded, {error_count} failed",
                     "errors": errors if errors else None
                 })
                 
@@ -997,7 +929,7 @@ class AdminSite:
                 print(f"Import error: {str(e)}")
                 return jsonify({
                     "success": False,
-                    "message": f"导入失败: {str(e)}"
+                    "message": f"Import failed: {str(e)}"
                 })
         
     def register_model(self, model: Type[Model], admin_class: Optional[Type[ModelAdmin]] = None):

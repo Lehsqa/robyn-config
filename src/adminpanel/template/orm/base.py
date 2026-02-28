@@ -1,30 +1,30 @@
 from abc import ABC, abstractmethod
-from typing import Any, List, Dict, Type
+from typing import Any, Type
 
 class BaseORMAdapter(ABC):
-    """ORM适配器基类"""
-    
+    """ORM adapter base for admin data operations."""
+
     @abstractmethod
-    async def get_all(self, model: Type[Any], **kwargs) -> List[Any]:
-        """获取所有记录"""
-        pass
-        
+    async def list(self, model: Type[Any], **filters) -> list[Any]:
+        """Return model rows matching filters."""
+        raise NotImplementedError
+
     @abstractmethod
-    async def get_by_id(self, model: Type[Any], id: Any) -> Any:
-        """通过ID获取记录"""
-        pass
-        
+    async def get(self, model: Type[Any], **filters) -> Any | None:
+        """Return one model row matching filters."""
+        raise NotImplementedError
+
     @abstractmethod
     async def create(self, model: Type[Any], **data) -> Any:
-        """创建记录"""
-        pass
-        
+        """Create a model row."""
+        raise NotImplementedError
+
     @abstractmethod
-    async def update(self, instance: Any, **data) -> Any:
-        """更新记录"""
-        pass
-        
+    async def update(self, model: Type[Any], identity: Any, **data) -> Any | None:
+        """Update a model row by identity."""
+        raise NotImplementedError
+
     @abstractmethod
-    async def delete(self, instance: Any) -> None:
-        """删除记录"""
-        pass
+    async def delete(self, model: Type[Any], identity: Any) -> bool:
+        """Delete a model row by identity."""
+        raise NotImplementedError

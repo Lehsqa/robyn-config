@@ -1,4 +1,4 @@
-{# 内联数据模态框组件 #}
+{# Inline data modal component #}
 <div class="modal fade" id="inlineModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
@@ -9,7 +9,7 @@
             <div class="modal-body">
                 <div class="mb-3">
                     <button class="btn btn-primary add-inline-record">
-                        <i class="bi bi-plus-lg"></i> 添加记录
+                        <i class="bi bi-plus-lg"></i> Add record
                     </button>
                 </div>
                 <div class="table-responsive">
@@ -48,12 +48,12 @@
     let inlineModal = null;
     let currentOptions = null;
 
-    // 初始化模态框
+    // Initialize modal
     document.addEventListener('DOMContentLoaded', function() {
         inlineModal = new bootstrap.Modal(document.getElementById('inlineModal'));
     });
 
-    // 显示内联数据模态框
+    // Show inline data modal
     window.showInlineModal = function(options) {
         if (!inlineModal) {
             inlineModal = new bootstrap.Modal(document.getElementById('inlineModal'));
@@ -61,16 +61,16 @@
 
         currentOptions = options;
         
-        // 设置标题
+        // Set title
         document.querySelector('#inlineModal .modal-title').textContent = options.title;
         
-        // 初始化表格
+        // Initialize table
         const $table = $('#inlineTable');
         
-        // 先清空表格
+        // Reset table first
         $table.bootstrapTable('destroy');
         
-        // 加载数据和初始化表格
+        // Load data and initialize table
         const params = new URLSearchParams({
             parent_id: options.parentId,
             inline_model: options.model
@@ -80,7 +80,7 @@
             .then(response => response.json())
             .then(result => {
                 if (result.success) {
-                    // 构建列配置
+                    // Build columns
                     const columns = result.fields.map(field => {
                         console.log('Processing field:', field);
                         return {
@@ -92,7 +92,7 @@
                             formatter: function(value, row) {
                                 const displayValue = row.display[field.name] || row.data[field.name] || '';
                                 
-                                // 如果字段名包含"link"或"url"，强制作为链接处理
+                                // If field name contains "link" or "url", force link rendering
                                 if (field.name.toLowerCase().includes('link') || field.name.toLowerCase().includes('url')) {
                                     return `<a href="${displayValue}" target="_blank" 
                                               class="text-decoration-none link-primary">${displayValue}</a>`;
@@ -102,7 +102,7 @@
                                     const url = field.is_link ? displayValue : `/admin/${options.model}/${row.data.id}`;
                                     const target = field.is_link ? '_blank' : '_self';
                                     return `<a href="${url}" class="text-decoration-none link-primary" 
-                                              target="${target}" title="点击查看详情">${displayValue}</a>`;
+                                              target="${target}" title="View details">${displayValue}</a>`;
                                 }
                                 
                                 switch (field.display_type) {
@@ -121,25 +121,25 @@
                         };
                     });
                     
-                    // 添加操作列
+                    // Add action column
                     columns.push({
                         field: 'operate',
-                        title: '操作',
+                        title: 'Actions',
                         width: 150,
                         sortable: false,
                         formatter: function(value, row) {
                             return `
                                 <button class="btn btn-sm btn-warning" onclick="editInlineRecord('${options.model}', '${row.data.id}')">
-                                    <i class="bi bi-pencil"></i> 编辑
+                                    <i class="bi bi-pencil"></i> Edit
                                 </button>
                                 <button class="btn btn-sm btn-danger" onclick="deleteInlineRecord('${options.model}', '${row.data.id}')">
-                                    <i class="bi bi-trash"></i> 删除
+                                    <i class="bi bi-trash"></i> Delete
                                 </button>
                             `;
                         }
                     });
 
-                    // 初始化表格
+                    // Initialize table
                     $table.bootstrapTable({
                         columns: columns,
                         data: result.data,
@@ -159,16 +159,16 @@
                         onSort: function(name, order) {
                             refreshInlineTable(name, order);
                         },
-                        locale: 'zh-CN',
+                        locale: 'en-US',
                         formatNoMatches: function() {
-                            return '没有找到匹配的记录';
+                            return 'No matching records found';
                         },
                         formatLoadingMessage: function() {
-                            return '正在加载数据...';
+                            return 'Loading data...';
                         }
                     });
                     
-                    // 显示模态框
+                    // Show modal
                     inlineModal.show();
                 } else {
                     console.error('Failed to load inline data:', result.error);
@@ -179,7 +179,7 @@
             });
     };
 
-    // 刷新内联表格据
+    // Refresh inline table data
     async function refreshInlineTable(sortField, sortOrder) {
         if (!currentOptions) return;
         
@@ -207,14 +207,14 @@
         }
     }
 
-    // 添加记录
+    // Add record
     window.addInlineRecord = function(model, parentId) {
         const fkField = currentOptions.config.fk_field;
         const initialData = { [fkField]: parentId };
         showFormModal('add', initialData);
     };
 
-    // 编辑记录
+    // Edit record
     window.editInlineRecord = function(model, id) {
         fetch(`/admin/${window.serverConfig.route_id}/${id}`)
             .then(response => response.json())
@@ -223,34 +223,34 @@
             })
             .catch(error => {
                 console.error('Error loading record:', error);
-                alert('加载数据失败');
+                alert('Failed to load data');
             });
     };
 
-    // 删除记录
+    // Delete record
     window.deleteInlineRecord = function(model, id) {
-        if (confirm('确定要删除这条记录吗？')) {
+        if (confirm('Are you sure you want to delete this record?')) {
             fetch(`/admin/${window.serverConfig.route_id}/${id}/delete`, {
                 method: 'POST'
             })
             .then(response => {
                 if (response.ok) {
-                    // 刷新表格
+                    // Refresh table
                     $('#inlineTable').bootstrapTable('refresh');
                 } else {
-                    alert('删除失败');
+                    alert('Delete failed');
                 }
             })
             .catch(error => {
                 console.error('Delete error:', error);
-                alert('删除失败');
+                alert('Delete failed');
             });
         }
     };
 
-    // 监听表单提交成功事件
+    // Listen for successful form submit
     document.addEventListener('formSubmitSuccess', function() {
-        // 刷新内联表格
+        // Refresh inline table
         if (inlineModal && inlineModal._element.classList.contains('show')) {
             $('#inlineTable').bootstrapTable('refresh');
         }

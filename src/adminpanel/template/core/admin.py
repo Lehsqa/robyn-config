@@ -74,8 +74,8 @@ class ModelAdmin:
         self.allow_export = getattr(self, 'allow_export', True)
         self.per_page = getattr(self, 'per_page', 10)
         self.default_ordering = getattr(self, 'default_ordering', [])
-        self.add_form_title = getattr(self, 'add_form_title', f"添加{self.verbose_name}")
-        self.edit_form_title = getattr(self, 'edit_form_title', f"编辑{self.verbose_name}")
+        self.add_form_title = getattr(self, 'add_form_title', f"Add {self.verbose_name}")
+        self.edit_form_title = getattr(self, 'edit_form_title', f"Edit {self.verbose_name}")
         self.allow_import = getattr(self, 'allow_import', False)  # 是否允许导入
         self.import_fields = getattr(self, 'import_fields', [])   # 允许导入的字段
         # 初始化其他配置
@@ -92,7 +92,7 @@ class ModelAdmin:
         
         # 如果没有设置菜单组使用默认分组
         if not hasattr(self, 'menu_group') or not self.menu_group:
-            self.menu_group = "系统管理"
+            self.menu_group = "System Management"
             
         self._process_fields()
         
@@ -270,7 +270,7 @@ class ModelAdmin:
         # 处理布尔字段
         model_field = self.model._meta.fields_map.get(field_name)
         if isinstance(model_field, fields.BooleanField):
-            return [('True', '是'), ('False', '否')]
+            return [('True', 'Yes'), ('False', 'No')]
             
         # 如果是外键字段，返回空列表（后续可以异步获取选项）
         if field_name.endswith('_id') and isinstance(model_field, fields.IntField):
@@ -399,8 +399,8 @@ class ModelAdmin:
             "pageSize": self.per_page,
             "formFields": [field.to_dict() for field in form_fields],
             "addFormFields": [field.to_dict() for field in add_form_fields],
-            "addFormTitle": self.add_form_title or f"添加{self.verbose_name}",
-            "editFormTitle": self.edit_form_title or f"编辑{self.verbose_name}",
+            "addFormTitle": self.add_form_title or f"Add {self.verbose_name}",
+            "editFormTitle": self.edit_form_title or f"Edit {self.verbose_name}",
             "searchFields": [field.to_dict() for field in search_fields],
             "filterFields": [field.to_dict() for field in filter_fields],
             "enableEdit": self.enable_edit,
@@ -517,17 +517,17 @@ class ModelAdmin:
         try:
             obj = await self.get_object(object_id)
             if not obj:
-                return False, "记录不存在"
+                return False, "Record not found"
             # 处理表单数据
             processed_data = await self.process_form_data(data)
             # 更新对象
             for field, value in processed_data.items():
                 setattr(obj, field, value)
             await obj.save()
-            return True, "更新成功"
+            return True, "Updated successfully"
         except Exception as e:
             print(f"Edit error: {str(e)}")
-            return False, f"更新失败: {str(e)}"
+            return False, f"Update failed: {str(e)}"
 
     async def handle_add(self, request: Request, data: dict) -> tuple[bool, str]:
         """
@@ -543,11 +543,11 @@ class ModelAdmin:
         try:
             processed_data = await self.process_form_data(data)
             obj = await self.model.create(**processed_data)
-            return True, "创建成功"
+            return True, "Created successfully"
             
         except Exception as e:
             print(f"Add error: {str(e)}")
-            return False, f"创建失败: {str(e)}"
+            return False, f"Create failed: {str(e)}"
 
     async def handle_delete(self, request: Request, object_id: str) -> tuple[bool, str]:
         """
@@ -563,12 +563,12 @@ class ModelAdmin:
         try:
             obj = await self.get_object(object_id)
             if not obj:
-                return False, "记录不存在"
+                return False, "Record not found"
             await obj.delete()
-            return True, "删除成功"
+            return True, "Deleted successfully"
         except Exception as e:
             print(f"Delete error: {str(e)}")
-            return False, f"删除失败: {str(e)}"
+            return False, f"Delete failed: {str(e)}"
 
     async def handle_batch_delete(self, request: Request, ids: list) -> tuple[bool, str, int]:
         """
@@ -596,11 +596,11 @@ class ModelAdmin:
                     continue
                 
             if deleted_count > 0:
-                return True, f"成功删除 {deleted_count} 条记录", deleted_count
-            return False, "没有记录被删除", 0
+                return True, f"Deleted {deleted_count} records", deleted_count
+            return False, "No records were deleted", 0
         except Exception as e:
             print(f"Batch delete error: {str(e)}")
-            return False, f"批量删除失败: {str(e)}", 0
+            return False, f"Batch delete failed: {str(e)}", 0
 
     async def handle_query(self, request: Request, params: dict) -> tuple[QuerySet, int]:
         """
@@ -638,4 +638,3 @@ class ModelAdmin:
         except Exception as e:
             print(f"Query error: {str(e)}")
             return self.model.all(), 0
-
