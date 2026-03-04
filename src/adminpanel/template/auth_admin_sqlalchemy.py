@@ -20,7 +20,9 @@ class AdminUserAdmin(ModelAdmin):
         TableField("id", label="ID", hidden=True),
         TableField("username", label="Username", sortable=True),
         TableField("email", label="Email", sortable=True),
-        TableField("is_active", label="Active", display_type=DisplayType.BOOLEAN),
+        TableField(
+            "is_active", label="Active", display_type=DisplayType.BOOLEAN
+        ),
         TableField(
             "is_superuser",
             label="Superuser",
@@ -98,9 +100,9 @@ class UserRoleAdmin(ModelAdmin):
             label="Created At",
             display_type=DisplayType.DATETIME,
             sortable=True,
-            formatter=lambda value: value.strftime("%Y-%m-%d %H:%M:%S")
-            if value
-            else "",
+            formatter=lambda value: (
+                value.strftime("%Y-%m-%d %H:%M:%S") if value else ""
+            ),
         ),
     ]
 
@@ -120,7 +122,9 @@ class UserRoleAdmin(ModelAdmin):
             user_choices: Dict[str, str] = {
                 str(user.id): user.username for user in users
             }
-            role_choices: Dict[str, str] = {str(role.id): role.name for role in roles}
+            role_choices: Dict[str, str] = {
+                str(role.id): role.name for role in roles
+            }
             return [
                 FormField(
                     "user_id",

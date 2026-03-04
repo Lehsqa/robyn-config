@@ -18,9 +18,16 @@ def resolve_adapter(
         return TortoiseAdapter()
     if orm == "sqlalchemy":
         if session_factory is None:
-            raise ValueError("session_factory is required for sqlalchemy adapter")
+            raise ValueError(
+                "session_factory is required for sqlalchemy adapter"
+            )
         return SQLAlchemyAdapter(session_factory=session_factory)
     raise ValueError(f"Unsupported ORM adapter: {orm}")
 
 
-__all__ = ["BaseORMAdapter", "TortoiseAdapter", "SQLAlchemyAdapter", "resolve_adapter"]
+__all__ = [
+    "BaseORMAdapter",
+    "TortoiseAdapter",
+    "SQLAlchemyAdapter",
+    "resolve_adapter",
+]

@@ -238,9 +238,7 @@ def _copy_template_tree(
     return created_files
 
 
-def _ensure_call_before_main_guard(
-    file_path: Path, call_line: str
-) -> None:
+def _ensure_call_before_main_guard(file_path: Path, call_line: str) -> None:
     if not file_path.exists():
         return
 
@@ -263,9 +261,7 @@ def _ensure_call_before_main_guard(
     file_path.write_text("\n".join(lines))
 
 
-def _ensure_route_registrar(
-    file_path: Path, registrar: str
-) -> bool:
+def _ensure_route_registrar(file_path: Path, registrar: str) -> bool:
     if not file_path.exists():
         return False
 
@@ -299,10 +295,7 @@ def _ensure_route_registrar(
         if end_idx is None:
             return False
 
-        if any(
-            registrar in lines[j]
-            for j in range(start_idx + 1, end_idx)
-        ):
+        if any(registrar in lines[j] for j in range(start_idx + 1, end_idx)):
             return True
 
         indent = None
@@ -311,9 +304,7 @@ def _ensure_route_registrar(
                 indent = re.match(r"(\s*)", lines[j]).group(1)
                 break
         if indent is None:
-            indent = (
-                re.match(r"(\s*)", lines[start_idx]).group(1) + "    "
-            )
+            indent = re.match(r"(\s*)", lines[start_idx]).group(1) + "    "
 
         lines.insert(end_idx, f"{indent}{registrar},")
         file_path.write_text("\n".join(lines))
@@ -422,7 +413,9 @@ def _repair_sqlalchemy_adminpanel_imports(target_root: Path) -> bool:
         return False
 
     content = init_file.read_text()
-    broken_import = "from .auth_models_sqlalchemy import AdminUser, Role, UserRole"
+    broken_import = (
+        "from .auth_models_sqlalchemy import AdminUser, Role, UserRole"
+    )
     fixed_models_import = "from .models_sqlalchemy import AdminUser"
     fixed_auth_import = "from .auth_models_sqlalchemy import Role, UserRole"
 
@@ -483,9 +476,7 @@ def _resolve_db_tables_path(
     return preferred
 
 
-def _ensure_symbols_in_all(
-    content: str, symbols: tuple[str, ...]
-) -> str:
+def _ensure_symbols_in_all(content: str, symbols: tuple[str, ...]) -> str:
     all_pattern = r"(__all__\s*=\s*\(\s*)(.*?)(\s*\))"
     match = re.search(all_pattern, content, re.DOTALL)
     if not match:
@@ -495,7 +486,8 @@ def _ensure_symbols_in_all(
     missing = [
         symbol
         for symbol in symbols
-        if f'"{symbol}"' not in current_items and f"'{symbol}'" not in current_items
+        if f'"{symbol}"' not in current_items
+        and f"'{symbol}'" not in current_items
     ]
     if not missing:
         return content
@@ -643,9 +635,7 @@ def add_adminpanel(project_path: Path) -> list[str]:
             "app.infrastructure.application",
             "adminpanel",
         )
-        inserted = _ensure_route_registrar(
-            server_path, "adminpanel.register"
-        )
+        inserted = _ensure_route_registrar(server_path, "adminpanel.register")
         if not inserted:
             _ensure_call_before_main_guard(
                 server_path, "adminpanel.register(app)"
@@ -659,6 +649,8 @@ def add_adminpanel(project_path: Path) -> list[str]:
         config, pyproject_path.read_text() if pyproject_path.exists() else ""
     )
     for dependency, version in ADMIN_DEPENDENCIES:
-        _ensure_dependency(pyproject_path, package_manager, dependency, version)
+        _ensure_dependency(
+            pyproject_path, package_manager, dependency, version
+        )
 
     return created_files

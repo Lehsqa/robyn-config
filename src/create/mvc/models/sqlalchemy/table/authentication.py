@@ -47,7 +47,9 @@ class UsersTable(BaseTable):
         return f"{salt.hex()}{key.hex()}"
 
     @staticmethod
-    def verify_password(stored_password: str | None, provided_password: str) -> bool:
+    def verify_password(
+        stored_password: str | None, provided_password: str
+    ) -> bool:
         if not stored_password:
             return False
         try:
@@ -70,8 +72,14 @@ class UsersTable(BaseTable):
         username: str,
         password: str,
     ) -> "UsersTable | None":
-        result = await session.execute(select(cls).where(cls.username == username))
+        result = await session.execute(
+            select(cls).where(cls.username == username)
+        )
         user = result.scalar_one_or_none()
-        if user and user.is_active and cls.verify_password(user.password, password):
+        if (
+            user
+            and user.is_active
+            and cls.verify_password(user.password, password)
+        ):
             return user
         return None

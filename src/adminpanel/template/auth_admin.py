@@ -16,7 +16,9 @@ class AdminUserAdmin(ModelAdmin):
         TableField("id", label="ID", hidden=True),
         TableField("username", label="Username", sortable=True),
         TableField("email", label="Email", sortable=True),
-        TableField("is_active", label="Active", display_type=DisplayType.BOOLEAN),
+        TableField(
+            "is_active", label="Active", display_type=DisplayType.BOOLEAN
+        ),
         TableField(
             "is_superuser",
             label="Superuser",
@@ -131,6 +133,8 @@ class UserRoleAdmin(ModelAdmin):
             label="Created At",
             display_type=DisplayType.DATETIME,
             sortable=True,
-            formatter=lambda value: value.strftime("%Y-%m-%d %H:%M:%S") if value else "",
+            formatter=lambda value: (
+                value.strftime("%Y-%m-%d %H:%M:%S") if value else ""
+            ),
         ),
     ]

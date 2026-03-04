@@ -39,7 +39,9 @@ class AdminSite:
         **_: Any,
     ) -> None:
         if session_factory is None:
-            raise ValueError("session_factory is required for SQLAlchemy admin")
+            raise ValueError(
+                "session_factory is required for SQLAlchemy admin"
+            )
 
         self.app = app
         self.title = title
@@ -63,9 +65,9 @@ class AdminSite:
 
     def get_text(self, key: str, lang: str | None = None) -> str:
         current_lang = lang or self.default_language
-        return TRANSLATIONS.get(current_lang, TRANSLATIONS[self.default_language]).get(
-            key, key
-        )
+        return TRANSLATIONS.get(
+            current_lang, TRANSLATIONS[self.default_language]
+        ).get(key, key)
 
     def _setup_templates(self) -> None:
         current_dir = Path(__file__).parent.parent
@@ -150,7 +152,9 @@ class AdminSite:
                 "language": language,
                 "copyright": self.copyright,
             }
-            return self.jinja_template.render_template("admin/index.html", **context)
+            return self.jinja_template.render_template(
+                "admin/index.html", **context
+            )
 
         @self.app.get(f"/{self.prefix}/login")
         async def admin_login(request: Request):
@@ -169,7 +173,9 @@ class AdminSite:
                 "site_title": self.title,
                 "copyright": self.copyright,
             }
-            return self.jinja_template.render_template("admin/login.html", **context)
+            return self.jinja_template.render_template(
+                "admin/login.html", **context
+            )
 
         @self.app.post(f"/{self.prefix}/login")
         async def admin_login_post(request: Request):
@@ -180,7 +186,9 @@ class AdminSite:
 
                 session = self.session_factory()
                 try:
-                    user = await AdminUser.authenticate(session, username, password)
+                    user = await AdminUser.authenticate(
+                        session, username, password
+                    )
                     if not user:
                         context = {
                             "error": "Invalid username or password",
@@ -215,7 +223,9 @@ class AdminSite:
                 )
             except Exception as exc:
                 traceback.print_exc()
-                return Response(status_code=500, description=f"Login failed: {exc}")
+                return Response(
+                    status_code=500, description=f"Login failed: {exc}"
+                )
 
         @self.app.get(f"/{self.prefix}/logout")
         async def admin_logout(request: Request):
@@ -246,7 +256,11 @@ class AdminSite:
                 return Response(status_code=404, description="Model not found")
 
             search_values = {
-                field.name: unquote(_first_value(request.query_params.get(f"search_{field.name}"), ""))
+                field.name: unquote(
+                    _first_value(
+                        request.query_params.get(f"search_{field.name}"), ""
+                    )
+                )
                 for field in model_admin.search_fields
                 if request.query_params.get(f"search_{field.name}")
             }
@@ -255,8 +269,12 @@ class AdminSite:
 
             data = []
             for obj in objects:
-                display = await model_admin.serialize_object(obj, for_display=True)
-                raw = await model_admin.serialize_object(obj, for_display=False)
+                display = await model_admin.serialize_object(
+                    obj, for_display=True
+                )
+                raw = await model_admin.serialize_object(
+                    obj, for_display=False
+                )
                 data.append({"display": display, "data": raw})
             return jsonify({"data": data})
 
@@ -273,7 +291,9 @@ class AdminSite:
 
             language = await self._get_language(request)
             if not await self.check_permission(request, route_id, "view"):
-                return Response(status_code=403, description="Permission denied")
+                return Response(
+                    status_code=403, description="Permission denied"
+                )
 
             model_admin = self.get_model_admin(route_id)
             if not model_admin:
@@ -299,7 +319,9 @@ class AdminSite:
                 "frontend_config": frontend_config,
                 "copyright": self.copyright,
             }
-            return self.jinja_template.render_template("admin/model_list.html", **context)
+            return self.jinja_template.render_template(
+                "admin/model_list.html", **context
+            )
 
         @self.app.post(f"/{self.prefix}/:route_id/add")
         async def model_add_post(request: Request):
@@ -308,7 +330,9 @@ class AdminSite:
             if not model_admin:
                 return Response(status_code=404, description="Model not found")
             if not await self.check_permission(request, route_id, "add"):
-                return Response(status_code=403, description="No create permission")
+                return Response(
+                    status_code=403, description="No create permission"
+                )
 
             params = parse_qs(_body_to_text(request.body))
             form_data = _parse_form_payload(params)
@@ -328,13 +352,19 @@ class AdminSite:
             if not model_admin:
                 return Response(status_code=404, description="Model not found")
             if not model_admin.enable_edit:
-                return Response(status_code=403, description="model not allow edit")
+                return Response(
+                    status_code=403, description="model not allow edit"
+                )
             if not await self.check_permission(request, route_id, "edit"):
-                return Response(status_code=403, description="No edit permission")
+                return Response(
+                    status_code=403, description="No edit permission"
+                )
 
             params = parse_qs(_body_to_text(request.body))
             form_data = _parse_form_payload(params)
-            success, message = await model_admin.handle_edit(request, object_id, form_data)
+            success, message = await model_admin.handle_edit(
+                request, object_id, form_data
+            )
             return Response(
                 status_code=200 if success else 400,
                 description=message,
@@ -353,9 +383,13 @@ class AdminSite:
             if not model_admin:
                 return Response(status_code=404, description="Model not found")
             if not await self.check_permission(request, route_id, "delete"):
-                return Response(status_code=403, description="No delete permission")
+                return Response(
+                    status_code=403, description="No delete permission"
+                )
 
-            success, message = await model_admin.handle_delete(request, object_id)
+            success, message = await model_admin.handle_delete(
+                request, object_id
+            )
             return Response(
                 status_code=200 if success else 400,
                 description=message,
@@ -378,10 +412,19 @@ class AdminSite:
                 "order": _first_value(params.get("order"), "asc"),
             }
             for key, value in params.items():
-                if key not in {"limit", "offset", "search", "sort", "order", "_"}:
+                if key not in {
+                    "limit",
+                    "offset",
+                    "search",
+                    "sort",
+                    "order",
+                    "_",
+                }:
                     query_params[key] = _first_value(value)
 
-            queryset, total = await model_admin.handle_query(request, query_params)
+            queryset, total = await model_admin.handle_query(
+                request, query_params
+            )
 
             data = []
             async for obj in queryset:
@@ -412,8 +455,8 @@ class AdminSite:
                     }
                 )
 
-            success, message, deleted_count = await model_admin.handle_batch_delete(
-                request, ids
+            success, message, deleted_count = (
+                await model_admin.handle_batch_delete(request, ids)
             )
             return jsonify(
                 {
@@ -438,7 +481,14 @@ class AdminSite:
                 return jsonify({"error": "Missing parameters"})
 
             data = await model_admin.get_inline_data(parent_id, inline_model)
-            return jsonify({"success": True, "data": data, "total": len(data), "fields": []})
+            return jsonify(
+                {
+                    "success": True,
+                    "data": data,
+                    "total": len(data),
+                    "fields": [],
+                }
+            )
 
         @self.app.post(f"/{self.prefix}/upload")
         async def file_upload(request: Request):
@@ -446,7 +496,11 @@ class AdminSite:
                 user = await self._get_current_user(request)
                 if not user:
                     return jsonify(
-                        {"code": 401, "message": "Not logged in", "success": False}
+                        {
+                            "code": 401,
+                            "message": "Not logged in",
+                            "success": False,
+                        }
                     )
 
                 files = request.files
@@ -459,7 +513,9 @@ class AdminSite:
                         }
                     )
 
-                upload_path = request.form_data.get("upload_path", "static/uploads")
+                upload_path = request.form_data.get(
+                    "upload_path", "static/uploads"
+                )
                 uploaded_files = []
                 for file_name, file_bytes in files.items():
                     lower_name = file_name.lower()
@@ -525,7 +581,9 @@ class AdminSite:
         async def set_language(request: Request):
             try:
                 params = parse_qs(_body_to_text(request.body))
-                language = _first_value(params.get("language"), self.default_language)
+                language = _first_value(
+                    params.get("language"), self.default_language
+                )
                 cookie_attrs = [
                     f"session={json.dumps({'language': language})}",
                     "HttpOnly",
@@ -537,7 +595,11 @@ class AdminSite:
                     headers={"Set-Cookie": "; ".join(cookie_attrs)},
                 )
             except Exception:
-                return Response(status_code=500, description="Set language failed")
+                return Response(
+                    status_code=500,
+                    description="Set language failed",
+                    headers={"Content-Type": "text/plain; charset=utf-8"},
+                )
 
         @self.app.post(f"/{self.prefix}/:route_id/import")
         async def handle_import(request: Request):
@@ -546,7 +608,10 @@ class AdminSite:
                 model_admin = self.get_model_admin(route_id)
                 if not model_admin or not model_admin.allow_import:
                     return jsonify(
-                        {"success": False, "message": "Import is not supported"}
+                        {
+                            "success": False,
+                            "message": "Import is not supported",
+                        }
                     )
 
                 files = request.files
@@ -557,9 +622,14 @@ class AdminSite:
 
                 filename = list(files.keys())[0]
                 file_data = next(iter(files.values()))
-                if not any(filename.endswith(ext) for ext in [".xlsx", ".xls", ".csv"]):
+                if not any(
+                    filename.endswith(ext) for ext in [".xlsx", ".xls", ".csv"]
+                ):
                     return jsonify(
-                        {"success": False, "message": "Only Excel or CSV files are supported"}
+                        {
+                            "success": False,
+                            "message": "Only Excel or CSV files are supported",
+                        }
                     )
 
                 import io
@@ -615,7 +685,9 @@ class AdminSite:
                 )
             except Exception as exc:
                 traceback.print_exc()
-                return jsonify({"success": False, "message": f"Import failed: {exc}"})
+                return jsonify(
+                    {"success": False, "message": f"Import failed: {exc}"}
+                )
 
     def register_model(
         self,
@@ -644,7 +716,9 @@ class AdminSite:
         timestamp = int(datetime.utcnow().timestamp())
         raw_token = f"{user_id}:{timestamp}:{secrets.token_hex(16)}"
         signature = _sign_token(raw_token, self.session_secret)
-        return base64.urlsafe_b64encode(f"{raw_token}:{signature}".encode()).decode()
+        return base64.urlsafe_b64encode(
+            f"{raw_token}:{signature}".encode()
+        ).decode()
 
     def _verify_session_token(self, token: str) -> tuple[bool, Optional[int]]:
         try:
@@ -655,7 +729,10 @@ class AdminSite:
                 return False, None
 
             user_id, timestamp, _ = raw_token.split(":", 2)
-            if datetime.utcnow().timestamp() - int(timestamp) > self.session_expire:
+            if (
+                datetime.utcnow().timestamp() - int(timestamp)
+                > self.session_expire
+            ):
                 return False, None
             return True, int(user_id)
         except Exception:
@@ -703,7 +780,9 @@ class AdminSite:
     def get_model_admin(self, route_id: str) -> Optional[ModelAdmin]:
         return self.models.get(route_id)
 
-    async def check_permission(self, request: Request, model_name: str, action: str) -> bool:
+    async def check_permission(
+        self, request: Request, model_name: str, action: str
+    ) -> bool:
         user = await self._get_current_user(request)
         if not user:
             return False
@@ -723,7 +802,10 @@ class AdminSite:
             for role in roles:
                 if role.accessible_models == ["*"]:
                     return True
-                if role.accessible_models and model_name in role.accessible_models:
+                if (
+                    role.accessible_models
+                    and model_name in role.accessible_models
+                ):
                     return True
             return False
         finally:

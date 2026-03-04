@@ -278,6 +278,15 @@ async function submitForm() {
             data.append(key, value);
         }
     }
+
+    for (const field of formFields) {
+        if (field.field_type === 'boolean' || field.field_type === 'switch') {
+            const input = form.querySelector(`[name="${field.name}"]`);
+            if (input && input.type === 'checkbox') {
+                data.set(field.name, input.checked ? 'true' : 'false');
+            }
+        }
+    }
     
     try {
         var currentData = modal.data('currentData');

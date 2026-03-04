@@ -86,4 +86,6 @@ TRANSLATIONS = {
 def get_text(key: str, lang: str | None = None) -> str:
     default_lang = "en_US"
     current_lang = lang or default_lang
-    return TRANSLATIONS.get(current_lang, TRANSLATIONS[default_lang]).get(key, key)
+    return TRANSLATIONS.get(current_lang, TRANSLATIONS[default_lang]).get(
+        key, key
+    )

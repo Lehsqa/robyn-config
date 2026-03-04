@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Type
 
+
 class BaseORMAdapter(ABC):
     """ORM adapter base for admin data operations."""
 
@@ -20,7 +21,9 @@ class BaseORMAdapter(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def update(self, model: Type[Any], identity: Any, **data) -> Any | None:
+    async def update(
+        self, model: Type[Any], identity: Any, **data
+    ) -> Any | None:
         """Update a model row by identity."""
         raise NotImplementedError
 

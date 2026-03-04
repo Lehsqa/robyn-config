@@ -6,7 +6,16 @@ from typing import Any, Callable, List, Optional, Type
 from urllib.parse import unquote
 
 from robyn import Request
-from sqlalchemy import DateTime, Integer, String, and_, delete, func, or_, select
+from sqlalchemy import (
+    DateTime,
+    Integer,
+    String,
+    and_,
+    delete,
+    func,
+    or_,
+    select,
+)
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.inspection import inspect as sa_inspect
@@ -33,7 +42,9 @@ class SQLAlchemyQuerySet:
     ) -> None:
         self.model = model
         self.session_factory = session_factory
-        self._state = state or _QueryState(filters=[], order=[], offset=0, limit=None)
+        self._state = state or _QueryState(
+            filters=[], order=[], offset=0, limit=None
+        )
 
     def _clone(self) -> "SQLAlchemyQuerySet":
         return SQLAlchemyQuerySet(
@@ -150,7 +161,9 @@ class ModelAdmin:
         session_factory: Callable[[], AsyncSession] | None = None,
     ) -> None:
         if session_factory is None:
-            raise ValueError("session_factory is required for SQLAlchemy admin")
+            raise ValueError(
+                "session_factory is required for SQLAlchemy admin"
+            )
 
         self.model = model
         self.session_factory = session_factory
@@ -163,8 +176,12 @@ class ModelAdmin:
         self.allow_export = getattr(self, "allow_export", True)
         self.per_page = getattr(self, "per_page", 10)
         self.default_ordering = getattr(self, "default_ordering", [])
-        self.add_form_title = getattr(self, "add_form_title", f"Add {self.verbose_name}")
-        self.edit_form_title = getattr(self, "edit_form_title", f"Edit {self.verbose_name}")
+        self.add_form_title = getattr(
+            self, "add_form_title", f"Add {self.verbose_name}"
+        )
+        self.edit_form_title = getattr(
+            self, "edit_form_title", f"Edit {self.verbose_name}"
+        )
         self.allow_import = getattr(self, "allow_import", False)
         self.import_fields = getattr(self, "import_fields", [])
 
@@ -187,11 +204,15 @@ class ModelAdmin:
         self.pk_name = pk_columns[0] if pk_columns else "id"
 
         self._process_fields()
-        self._inline_instances = [inline_class(self.model) for inline_class in self.inlines]
+        self._inline_instances = [
+            inline_class(self.model) for inline_class in self.inlines
+        ]
 
     def _process_fields(self) -> None:
         if not self.table_fields:
-            self.table_fields = [TableField(name=name) for name in self._columns.keys()]
+            self.table_fields = [
+                TableField(name=name) for name in self._columns.keys()
+            ]
 
         for field in self.table_fields:
             model_field = self._columns.get(field.name)
@@ -209,7 +230,9 @@ class ModelAdmin:
             if not hasattr(field, "editable") or field.editable is None:
                 field.editable = False
 
-        self.table_field_map = {field.name: field for field in self.table_fields}
+        self.table_field_map = {
+            field.name: field for field in self.table_fields
+        }
 
         if not self.form_fields:
             self.form_fields = [
@@ -223,15 +246,25 @@ class ModelAdmin:
                 if not field.readonly
             ]
 
-        self.list_display = [field.name for field in self.table_fields if field.visible]
+        self.list_display = [
+            field.name for field in self.table_fields if field.visible
+        ]
         self.list_display_links = [
-            field.name for field in self.table_fields if field.visible and field.is_link
+            field.name
+            for field in self.table_fields
+            if field.visible and field.is_link
         ]
-        self.list_filter = [field.name for field in self.table_fields if field.filterable]
+        self.list_filter = [
+            field.name for field in self.table_fields if field.filterable
+        ]
         self.list_editable = [
-            field.name for field in self.table_fields if field.editable and not field.readonly
+            field.name
+            for field in self.table_fields
+            if field.editable and not field.readonly
         ]
-        self.readonly_fields = [field.name for field in self.table_fields if field.readonly]
+        self.readonly_fields = [
+            field.name for field in self.table_fields if field.readonly
+        ]
 
         if not self.add_form_fields:
             self.add_form_fields = self.form_fields
@@ -239,11 +272,15 @@ class ModelAdmin:
     def get_field(self, field_name: str) -> Optional[TableField]:
         return self.table_field_map.get(field_name)
 
-    async def get_queryset(self, request: Request, params: dict) -> SQLAlchemyQuerySet:
+    async def get_queryset(
+        self, request: Request, params: dict
+    ) -> SQLAlchemyQuerySet:
         queryset = SQLAlchemyQuerySet(self.model, self.session_factory)
         normalized_params: dict[str, Any] = {}
         for key, value in params.items():
-            normalized_params[key] = unquote(value) if isinstance(value, str) else value
+            normalized_params[key] = (
+                unquote(value) if isinstance(value, str) else value
+            )
 
         search_value = normalized_params.get("search", "")
         if search_value:
@@ -267,11 +304,17 @@ class ModelAdmin:
             if not filter_value:
                 continue
             try:
-                query_dict = await filter_field.build_filter_query(filter_value)
+                query_dict = await filter_field.build_filter_query(
+                    filter_value
+                )
             except Exception:
                 query_dict = {}
             if isinstance(query_dict, dict):
-                query_dict = {k: v for k, v in query_dict.items() if not k.startswith("_")}
+                query_dict = {
+                    k: v
+                    for k, v in query_dict.items()
+                    if not k.startswith("_")
+                }
                 if query_dict:
                     queryset = queryset.filter(**query_dict)
 
@@ -323,7 +366,9 @@ class ModelAdmin:
         finally:
             await session.close()
 
-    async def serialize_object(self, obj: Any, for_display: bool = True) -> dict:
+    async def serialize_object(
+        self, obj: Any, for_display: bool = True
+    ) -> dict:
         result: dict[str, Any] = {}
         for field in self.table_fields:
             try:
@@ -337,16 +382,24 @@ class ModelAdmin:
                     if fk_value:
                         session = self.session_factory()
                         try:
-                            related_obj = await session.get(field.related_model, fk_value)
+                            related_obj = await session.get(
+                                field.related_model, fk_value
+                            )
                             if related_obj:
                                 model_name = field.related_model.__name__
                                 if field.name.startswith(model_name + "_"):
-                                    related_field = field.name[len(model_name + "_") :]
+                                    related_field = field.name[
+                                        len(model_name + "_") :
+                                    ]
                                 else:
                                     related_field = "id"
-                                related_value = getattr(related_obj, related_field, None)
+                                related_value = getattr(
+                                    related_obj, related_field, None
+                                )
                                 result[field.name] = (
-                                    str(related_value) if related_value is not None else ""
+                                    str(related_value)
+                                    if related_value is not None
+                                    else ""
                                 )
                                 continue
                         finally:
@@ -360,7 +413,9 @@ class ModelAdmin:
                     else:
                         result[field.name] = field.formatter(value)
                 else:
-                    result[field.name] = str(value) if value is not None else ""
+                    result[field.name] = (
+                        str(value) if value is not None else ""
+                    )
             except Exception:
                 result[field.name] = ""
         return result
@@ -370,7 +425,9 @@ class ModelAdmin:
         form_fields = await self.get_add_form_fields()
         for field in form_fields:
             if field.name in data:
-                processed_data[field.name] = field.process_value(data[field.name])
+                processed_data[field.name] = field.process_value(
+                    data[field.name]
+                )
         return processed_data
 
     async def get_filter_fields(self) -> List[FilterField]:
@@ -393,7 +450,8 @@ class ModelAdmin:
             "formFields": [field.to_dict() for field in form_fields],
             "addFormFields": [field.to_dict() for field in add_form_fields],
             "addFormTitle": self.add_form_title or f"Add {self.verbose_name}",
-            "editFormTitle": self.edit_form_title or f"Edit {self.verbose_name}",
+            "editFormTitle": self.edit_form_title
+            or f"Edit {self.verbose_name}",
             "searchFields": [field.to_dict() for field in search_fields],
             "filterFields": [field.to_dict() for field in filter_fields],
             "enableEdit": self.enable_edit,
@@ -447,7 +505,9 @@ class ModelAdmin:
         finally:
             await session.close()
 
-    async def handle_add(self, request: Request, data: dict) -> tuple[bool, str]:
+    async def handle_add(
+        self, request: Request, data: dict
+    ) -> tuple[bool, str]:
         session = self.session_factory()
         try:
             payload = await self.process_form_data(data)
@@ -503,9 +563,10 @@ class ModelAdmin:
         elif self.default_ordering:
             queryset = queryset.order_by(*self.default_ordering)
         total = await queryset.count()
-        queryset = queryset.offset(params.get("offset", 0)).limit(params.get("limit", self.per_page))
+        queryset = queryset.offset(params.get("offset", 0)).limit(
+            params.get("limit", self.per_page)
+        )
         return queryset, total
-
 
 
 def _get_model_column(model: type[Any], name: str):

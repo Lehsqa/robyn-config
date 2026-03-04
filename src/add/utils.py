@@ -687,7 +687,9 @@ def _add_mvc_templates(
             context=context,
         )
         if table_module_file:
-            created_files.append(str(table_module_file.relative_to(project_path)))
+            created_files.append(
+                str(table_module_file.relative_to(project_path))
+            )
     else:
         table_template = templates_path / "models" / orm / "table.py.jinja2"
         if models_file.exists() and table_template.exists():

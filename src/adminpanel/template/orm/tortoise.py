@@ -2,6 +2,7 @@ from typing import Any, Type
 from .base import BaseORMAdapter
 from tortoise.models import Model
 
+
 class TortoiseAdapter(BaseORMAdapter):
     """Tortoise-ORM适配器"""
 

@@ -81,7 +81,6 @@ class SQLAlchemyAdapter(BaseORMAdapter):
             await session.close()
 
 
-
 def _primary_key_name(model: Type[Any]) -> str:
     mapper = sa_inspect(model)
     pk = [column.name for column in mapper.primary_key]

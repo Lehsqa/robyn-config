@@ -40,7 +40,9 @@ class UsersTable(BaseTable):
         return f"{salt.hex()}{key.hex()}"
 
     @staticmethod
-    def verify_password(stored_password: str | None, provided_password: str) -> bool:
+    def verify_password(
+        stored_password: str | None, provided_password: str
+    ) -> bool:
         if not stored_password:
             return False
         try:
@@ -57,8 +59,14 @@ class UsersTable(BaseTable):
             return False
 
     @classmethod
-    async def authenticate(cls, username: str, password: str) -> "UsersTable | None":
+    async def authenticate(
+        cls, username: str, password: str
+    ) -> "UsersTable | None":
         user = await cls.get_or_none(username=username)
-        if user and user.is_active and cls.verify_password(user.password, password):
+        if (
+            user
+            and user.is_active
+            and cls.verify_password(user.password, password)
+        ):
             return user
         return None

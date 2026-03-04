@@ -110,6 +110,16 @@ def _tables_init_file(project_dir: Path, design: str) -> Path:
     return project_dir / "src" / "app" / "models" / "table" / "__init__.py"
 
 
+def _admin_form_modal_file(project_dir: Path, design: str) -> Path:
+    return (
+        _admin_root(project_dir, design)
+        / "templates"
+        / "admin"
+        / "components"
+        / "form_modal.html"
+    )
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize("design,orm", COMBINATIONS)
 def test_adminpanel_command_scaffolds_for_all_design_and_orm_combinations(
@@ -140,6 +150,17 @@ def test_adminpanel_command_scaffolds_for_all_design_and_orm_combinations(
     table_init = _tables_init_file(project_dir, design).read_text()
     assert "Role" in table_init
     assert "UserRole" in table_init
+
+    fields_content = (admin_root / "core" / "fields.py").read_text()
+    assert "self.field_type in {DisplayType.BOOLEAN, DisplayType.SWITCH}" in fields_content
+    assert "normalized in {\"1\", \"true\", \"t\", \"yes\", \"y\", \"on\"}" in fields_content
+
+    form_modal_content = _admin_form_modal_file(project_dir, design).read_text()
+    assert (
+        "field.field_type === 'boolean' || field.field_type === 'switch'"
+        in form_modal_content
+    )
+    assert "data.set(field.name, input.checked ? 'true' : 'false');" in form_modal_content
 
     init_content = admin_init.read_text()
     if orm == "sqlalchemy":

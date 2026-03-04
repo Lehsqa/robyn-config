@@ -22,6 +22,9 @@ COMBINATIONS = [
     ("mvc", "sqlalchemy"),
     ("mvc", "tortoise"),
 ]
+ADMIN_USER_ROUTE = "AdminUserAdmin"
+ROLE_ROUTE = "RoleAdmin"
+USER_ROLE_ROUTE = "UserRoleAdmin"
 
 
 def run_cli_create(destination: Path, design: str, orm: str) -> None:
@@ -185,6 +188,39 @@ def clear_mailhog_queue() -> None:
         pass
 
 
+def _admin_login(
+    client: httpx.Client, username: str, password: str
+) -> httpx.Response:
+    return client.post(
+        "/admin/login",
+        content=f"username={username}&password={password}",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+
+
+def _admin_data(client: httpx.Client, route_id: str) -> dict:
+    response = client.get(
+        f"/admin/{route_id}/data",
+        params={"limit": 200, "offset": 0},
+    )
+    response.raise_for_status()
+    payload = response.json()
+    assert "total" in payload
+    assert "data" in payload
+    return payload
+
+
+def _find_row_by_field(
+    rows: list[dict], field_name: str, field_value: str
+) -> dict | None:
+    expected = str(field_value)
+    for row in rows:
+        data = row.get("data", {})
+        if str(data.get(field_name, "")) == expected:
+            return row
+    return None
+
+
 def test_wait_for_health_includes_app_logs_on_failure(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -259,6 +295,291 @@ def test_generate_app_and_run_endpoints(
             "password": "12Qwerty%",
         }
         with httpx.Client(base_url=APP_BASE_URL, timeout=10.0) as client:
+            # === Test Admin Panel endpoints (from adminpanel command) ===
+            # Test GET /admin (unauthenticated redirect)
+            unauth_admin_response = client.get("/admin")
+            assert unauth_admin_response.status_code in {
+                303,
+                307,
+            }, f"Unexpected unauthenticated /admin response: {unauth_admin_response.status_code}"
+            assert unauth_admin_response.headers.get("Location") == "/admin/login"
+
+            # Test POST /admin/login (invalid credentials)
+            invalid_admin_login = _admin_login(
+                client, username="admin", password="wrong-password"
+            )
+            assert (
+                invalid_admin_login.status_code == 200
+            ), f"Unexpected invalid login status: {invalid_admin_login.status_code}"
+            assert "Invalid username or password" in invalid_admin_login.text
+
+            # Test POST /admin/login (valid credentials)
+            admin_login_response = _admin_login(
+                client, username="admin", password="admin"
+            )
+            assert (
+                admin_login_response.status_code == 303
+            ), f"Admin login failed: {admin_login_response.text}"
+
+            # Test GET /admin (index)
+            admin_index_response = client.get("/admin")
+            assert (
+                admin_index_response.status_code == 200
+            ), f"Admin index failed: {admin_index_response.text}"
+
+            # Test GET /admin/:route_id (model list)
+            admin_model_list_response = client.get(f"/admin/{ADMIN_USER_ROUTE}")
+            assert (
+                admin_model_list_response.status_code == 200
+            ), f"Admin model list failed: {admin_model_list_response.text}"
+
+            # Test POST /admin/set_language
+            set_language_response = client.post(
+                "/admin/set_language",
+                content="language=en_US",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            assert (
+                set_language_response.status_code == 200
+            ), f"Set language failed: {set_language_response.text}"
+
+            # Test GET /admin/:route_id/data (admin users data)
+            admin_users_payload = _admin_data(client, ADMIN_USER_ROUTE)
+            admin_users_total = int(admin_users_payload["total"])
+            admin_rows = admin_users_payload["data"]
+            assert admin_rows, "Expected admin users data to contain at least one record"
+            admin_id = str(admin_rows[0]["data"]["id"])
+
+            # Test GET /admin/:route_id/search
+            admin_search_response = client.get(f"/admin/{ADMIN_USER_ROUTE}/search")
+            assert (
+                admin_search_response.status_code == 200
+            ), f"Admin search failed: {admin_search_response.text}"
+            search_payload = admin_search_response.json()
+            assert "data" in search_payload
+
+            # Test POST /admin/:route_id/:id/edit (boolean fields)
+            admin_edit_response = client.post(
+                f"/admin/{ADMIN_USER_ROUTE}/{admin_id}/edit",
+                content="is_active=on&is_superuser=on",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            assert (
+                admin_edit_response.status_code == 200
+            ), f"Admin edit failed: {admin_edit_response.text}"
+
+            run_id = uuid.uuid4().hex[:8]
+
+            # Test POST /admin/:route_id/add (single create)
+            single_username = f"admin-single-{run_id}"
+            single_email = f"{single_username}@example.com"
+            admin_add_single_response = client.post(
+                f"/admin/{ADMIN_USER_ROUTE}/add",
+                content=(
+                    f"username={single_username}&email={single_email}"
+                    "&password=admin123&is_active=true&is_superuser=false"
+                ),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            assert (
+                admin_add_single_response.status_code == 200
+            ), f"Admin add failed: {admin_add_single_response.text}"
+
+            users_after_single_add = _admin_data(client, ADMIN_USER_ROUTE)
+            assert int(users_after_single_add["total"]) == admin_users_total + 1
+            single_user_row = _find_row_by_field(
+                users_after_single_add["data"], "username", single_username
+            )
+            assert (
+                single_user_row is not None
+            ), "Newly created admin user not found"
+            single_user_id = str(single_user_row["data"]["id"])
+
+            # Test POST /admin/:route_id/:id/edit (single edit)
+            single_edit_response = client.post(
+                f"/admin/{ADMIN_USER_ROUTE}/{single_user_id}/edit",
+                content="is_active=false&is_superuser=false",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            assert (
+                single_edit_response.status_code == 200
+            ), f"Single-user edit failed: {single_edit_response.text}"
+
+            # Test POST /admin/:route_id/:id/delete (single delete)
+            single_delete_response = client.post(
+                f"/admin/{ADMIN_USER_ROUTE}/{single_user_id}/delete"
+            )
+            assert (
+                single_delete_response.status_code == 200
+            ), f"Single-user delete failed: {single_delete_response.text}"
+
+            users_after_single_delete = _admin_data(client, ADMIN_USER_ROUTE)
+            assert int(users_after_single_delete["total"]) == admin_users_total
+
+            # Test POST /admin/:route_id/add + /batch_delete (bulk users)
+            batch_users: list[tuple[str, str]] = []
+            for index in range(2):
+                username = f"admin-batch-{run_id}-{index}"
+                email = f"{username}@example.com"
+                batch_users.append((username, email))
+                batch_add_response = client.post(
+                    f"/admin/{ADMIN_USER_ROUTE}/add",
+                    content=(
+                        f"username={username}&email={email}"
+                        "&password=admin123&is_active=true&is_superuser=false"
+                    ),
+                    headers={
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                )
+                assert (
+                    batch_add_response.status_code == 200
+                ), f"Batch admin add failed: {batch_add_response.text}"
+
+            users_after_batch_add = _admin_data(client, ADMIN_USER_ROUTE)
+            assert int(users_after_batch_add["total"]) == admin_users_total + 2
+            batch_user_ids: list[str] = []
+            for username, _ in batch_users:
+                row = _find_row_by_field(
+                    users_after_batch_add["data"], "username", username
+                )
+                assert row is not None, f"Batch admin user {username} not found"
+                batch_user_ids.append(str(row["data"]["id"]))
+
+            batch_delete_response = client.post(
+                f"/admin/{ADMIN_USER_ROUTE}/batch_delete",
+                content=(
+                    f"ids%5B%5D={batch_user_ids[0]}&"
+                    f"ids%5B%5D={batch_user_ids[1]}"
+                ),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            assert (
+                batch_delete_response.status_code == 200
+            ), f"Batch delete request failed: {batch_delete_response.text}"
+            batch_delete_payload = batch_delete_response.json()
+            assert batch_delete_payload["success"] is True
+            assert (
+                batch_delete_payload["data"]["deleted_count"] == 2
+            ), f"Unexpected deleted count: {batch_delete_payload}"
+
+            users_after_batch_delete = _admin_data(client, ADMIN_USER_ROUTE)
+            assert int(users_after_batch_delete["total"]) == admin_users_total
+
+            # Test POST /admin/RoleAdmin/add + /delete
+            roles_before_payload = _admin_data(client, ROLE_ROUTE)
+            roles_before_total = int(roles_before_payload["total"])
+            role_name = f"role-{run_id}"
+            role_add_response = client.post(
+                f"/admin/{ROLE_ROUTE}/add",
+                content=(
+                    f"name={role_name}&description=E2E-role"
+                    "&accessible_models=%5B%22AdminUserAdmin%22%5D"
+                ),
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            assert (
+                role_add_response.status_code == 200
+            ), f"Role add failed: {role_add_response.text}"
+
+            roles_after_add_payload = _admin_data(client, ROLE_ROUTE)
+            assert int(roles_after_add_payload["total"]) == roles_before_total + 1
+            created_role_row = _find_row_by_field(
+                roles_after_add_payload["data"], "name", role_name
+            )
+            assert created_role_row is not None, "Created role not found"
+            created_role_id = str(created_role_row["data"]["id"])
+
+            # Test POST /admin/UserRoleAdmin/add + /delete
+            user_roles_before_payload = _admin_data(client, USER_ROLE_ROUTE)
+            user_roles_before_total = int(user_roles_before_payload["total"])
+            user_role_ids_before = {
+                str(row.get("data", {}).get("id"))
+                for row in user_roles_before_payload["data"]
+                if row.get("data", {}).get("id") is not None
+            }
+            user_role_add_response = client.post(
+                f"/admin/{USER_ROLE_ROUTE}/add",
+                content=f"user_id={admin_id}&role_id={created_role_id}",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            assert (
+                user_role_add_response.status_code == 200
+            ), f"User-role add failed: {user_role_add_response.text}"
+
+            user_roles_after_add_payload = _admin_data(client, USER_ROLE_ROUTE)
+            assert (
+                int(user_roles_after_add_payload["total"])
+                == user_roles_before_total + 1
+            )
+            user_role_ids_after = {
+                str(row.get("data", {}).get("id"))
+                for row in user_roles_after_add_payload["data"]
+                if row.get("data", {}).get("id") is not None
+            }
+            created_user_role_ids = sorted(
+                user_role_ids_after - user_role_ids_before
+            )
+            assert created_user_role_ids, "Created user-role relation not found"
+            created_user_role_id = created_user_role_ids[0]
+
+            user_role_delete_response = client.post(
+                f"/admin/{USER_ROLE_ROUTE}/{created_user_role_id}/delete"
+            )
+            assert (
+                user_role_delete_response.status_code == 200
+            ), f"User-role delete failed: {user_role_delete_response.text}"
+            user_roles_after_delete_payload = _admin_data(client, USER_ROLE_ROUTE)
+            assert (
+                int(user_roles_after_delete_payload["total"])
+                == user_roles_before_total
+            )
+
+            role_delete_response = client.post(
+                f"/admin/{ROLE_ROUTE}/{created_role_id}/delete"
+            )
+            assert (
+                role_delete_response.status_code == 200
+            ), f"Role delete failed: {role_delete_response.text}"
+            roles_after_delete_payload = _admin_data(client, ROLE_ROUTE)
+            assert int(roles_after_delete_payload["total"]) == roles_before_total
+
+            # Test GET /admin/:route_id/inline_data (missing params)
+            inline_data_response = client.get(
+                f"/admin/{USER_ROLE_ROUTE}/inline_data"
+            )
+            assert (
+                inline_data_response.status_code == 200
+            ), f"Inline data request failed: {inline_data_response.text}"
+            assert (
+                inline_data_response.json().get("error") == "Missing parameters"
+            )
+
+            # Test POST /admin/upload (no file)
+            upload_response = client.post("/admin/upload")
+            assert (
+                upload_response.status_code == 200
+            ), f"Upload endpoint failed: {upload_response.text}"
+            upload_payload = upload_response.json()
+            assert upload_payload["success"] is False
+            assert upload_payload["code"] == 400
+            assert upload_payload["message"] == "No file uploaded"
+
+            # Test POST /admin/:route_id/import (unsupported by default)
+            import_response = client.post(f"/admin/{ADMIN_USER_ROUTE}/import")
+            assert (
+                import_response.status_code == 200
+            ), f"Import endpoint failed: {import_response.text}"
+            import_payload = import_response.json()
+            assert import_payload["success"] is False
+            assert import_payload["message"] == "Import is not supported"
+
+            # Test GET /admin/logout
+            logout_response = client.get("/admin/logout")
+            assert (
+                logout_response.status_code == 303
+            ), f"Admin logout failed: {logout_response.text}"
+
             # === Test User endpoints ===
             create_response = client.post("/users", json=user_payload)
             create_response.raise_for_status()

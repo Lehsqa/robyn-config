@@ -162,11 +162,11 @@ if TEXTUAL_AVAILABLE:
             yield Vertical(
                 Static("robyn-config create", id="title"),
                 Static("Interactive project scaffold", id="subtitle"),
-                    Vertical(
-                        VerticalScroll(
-                            Horizontal(
-                                Vertical(
-                                    Label("Project name"),
+                Vertical(
+                    VerticalScroll(
+                        Horizontal(
+                            Vertical(
+                                Label("Project name"),
                                 Input(
                                     value=self.defaults.name,
                                     placeholder="my-service",
@@ -214,10 +214,10 @@ if TEXTUAL_AVAILABLE:
                                 classes="column",
                             ),
                             id="form-grid",
-                            ),
-                            Static("", id="error"),
-                            id="fields",
                         ),
+                        Static("", id="error"),
+                        id="fields",
+                    ),
                     Horizontal(
                         Button("Cancel", id="cancel"),
                         Button("Create", id="create"),
