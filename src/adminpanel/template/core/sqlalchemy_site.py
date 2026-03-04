@@ -34,6 +34,8 @@ class AdminSite:
         session_factory: Optional[Callable[[], Any]] = None,
         generate_schemas: bool = False,
         default_language: str = "en_US",
+        default_admin_username: str = "admin",
+        default_admin_password: str = "admin",
         startup_function: Optional[Callable] = None,
         orm: str = "sqlalchemy",
         **_: Any,
@@ -49,6 +51,8 @@ class AdminSite:
         self.models: Dict[str, ModelAdmin] = {}
         self.model_registry: Dict[str, list[ModelAdmin]] = {}
         self.default_language = default_language
+        self.default_admin_username = default_admin_username
+        self.default_admin_password = default_admin_password
         self.menu_manager = MenuManager()
         self.copyright = copyright
         self.startup_function = startup_function
@@ -99,7 +103,7 @@ class AdminSite:
             result = await session.execute(
                 select(AdminUser).where(
                     or_(
-                        AdminUser.username == "admin",
+                        AdminUser.username == self.default_admin_username,
                         AdminUser.email == "admin@example.com",
                     )
                 )
@@ -108,8 +112,10 @@ class AdminSite:
             if admin_user is None:
                 session.add(
                     AdminUser(
-                        username="admin",
-                        password=AdminUser.hash_password("admin"),
+                        username=self.default_admin_username,
+                        password=AdminUser.hash_password(
+                            self.default_admin_password
+                        ),
                         email="admin@example.com",
                         is_superuser=True,
                         is_active=True,

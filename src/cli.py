@@ -237,6 +237,22 @@ def add(name: str, project_path: Path) -> None:
 
 
 @cli.command("adminpanel")
+@click.option(
+    "-u",
+    "--username",
+    "admin_username",
+    default="admin",
+    show_default=True,
+    help="Default superadmin username for generated admin panel.",
+)
+@click.option(
+    "-p",
+    "--password",
+    "admin_password",
+    default="admin",
+    show_default=True,
+    help="Default superadmin password for generated admin panel.",
+)
 @click.argument(
     "project_path",
     type=click.Path(
@@ -244,15 +260,25 @@ def add(name: str, project_path: Path) -> None:
     ),
     default=".",
 )
-def adminpanel(project_path: Path) -> None:
+def adminpanel(
+    admin_username: str, admin_password: str, project_path: Path
+) -> None:
     """Add admin panel scaffolding to an existing robyn-config project."""
     backup_dir: Path | None = None
     backup_path: Path | None = None
     project_path = project_path.resolve()
 
     try:
+        if not admin_username.strip():
+            raise click.ClickException("Admin username cannot be empty.")
+        if not admin_password:
+            raise click.ClickException("Admin password cannot be empty.")
         backup_dir, backup_path = _backup_project(project_path)
-        add_adminpanel(project_path)
+        add_adminpanel(
+            project_path,
+            admin_username=admin_username,
+            admin_password=admin_password,
+        )
         click.echo(
             click.style(
                 "Successfully added admin panel scaffolding!",

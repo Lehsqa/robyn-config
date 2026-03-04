@@ -34,6 +34,8 @@ class AdminSite:
         modules: Optional[Dict[str, List[Union[str, ModuleType]]]] = None,
         generate_schemas: bool = True,
         default_language: str = "en_US",
+        default_admin_username: str = "admin",
+        default_admin_password: str = "admin",
         startup_function: Optional[Callable] = None,
     ):
         """
@@ -53,6 +55,8 @@ class AdminSite:
         self.models: Dict[str, ModelAdmin] = {}
         self.model_registry = {}
         self.default_language = default_language
+        self.default_admin_username = default_admin_username
+        self.default_admin_password = default_admin_password
         self.menu_manager = MenuManager()
         self.copyright = copyright  # 添加版权属性
         self.startup_function = startup_function
@@ -179,13 +183,15 @@ class AdminSite:
                 try:
                     # 检查是否已存在管理员账号
                     existing_admin = await AdminUser.filter(
-                        username="admin"
+                        username=self.default_admin_username
                     ).first()
                     if not existing_admin:
                         print("Creating default admin user...")
                         await AdminUser.create(
-                            username="admin",
-                            password=AdminUser.hash_password("admin"),
+                            username=self.default_admin_username,
+                            password=AdminUser.hash_password(
+                                self.default_admin_password
+                            ),
                             email="admin@example.com",
                             is_superuser=True,
                             is_active=True,

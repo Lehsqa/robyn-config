@@ -45,17 +45,27 @@ def run_cli_create(
     )
 
 
-def run_cli_adminpanel(project_path: Path) -> subprocess.CompletedProcess:
+def run_cli_adminpanel(
+    project_path: Path,
+    *,
+    username: str | None = None,
+    password: str | None = None,
+) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT / "src")
+    cmd = [
+        sys.executable,
+        "-m",
+        "cli",
+        "adminpanel",
+    ]
+    if username is not None:
+        cmd.extend(["-u", username])
+    if password is not None:
+        cmd.extend(["-p", password])
+    cmd.append(str(project_path))
     return subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "cli",
-            "adminpanel",
-            str(project_path),
-        ],
+        cmd,
         capture_output=True,
         text=True,
         env=env,
@@ -163,6 +173,8 @@ def test_adminpanel_command_scaffolds_for_all_design_and_orm_combinations(
     assert "data.set(field.name, input.checked ? 'true' : 'false');" in form_modal_content
 
     init_content = admin_init.read_text()
+    assert 'default_admin_username="admin"' in init_content
+    assert 'default_admin_password="admin"' in init_content
     if orm == "sqlalchemy":
         assert "TORTOISE_ORM" not in init_content
         assert "MODEL_MODULES" not in init_content
@@ -195,3 +207,25 @@ def test_adminpanel_command_scaffolds_for_all_design_and_orm_combinations(
     server_content = server_path.read_text()
     assert "adminpanel.register" in server_content
     assert "adminpanel.register))" not in server_content
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("design,orm", COMBINATIONS)
+def test_adminpanel_command_supports_custom_superadmin_credentials(
+    tmp_path: Path, design: str, orm: str
+) -> None:
+    project_dir = tmp_path / f"{design}-{orm}-custom-admin"
+    fake_bin = create_fake_package_managers(tmp_path)
+
+    run_cli_create(project_dir, design, orm, fake_bin)
+    result = run_cli_adminpanel(
+        project_dir,
+        username="superadmin",
+        password="super-secret-password",
+    )
+
+    assert result.returncode == 0, result.stderr
+    admin_init = _admin_root(project_dir, design) / "__init__.py"
+    init_content = admin_init.read_text()
+    assert 'default_admin_username="superadmin"' in init_content
+    assert 'default_admin_password="super-secret-password"' in init_content

@@ -576,7 +576,12 @@ def _ensure_application_adminpanel(project_path: Path) -> None:
     target_path.write_text(DDD_APP_PANEL_TEMPLATE)
 
 
-def add_adminpanel(project_path: Path) -> list[str]:
+def add_adminpanel(
+    project_path: Path,
+    *,
+    admin_username: str = "admin",
+    admin_password: str = "admin",
+) -> list[str]:
     """Add admin panel scaffolding to an existing robyn-config project."""
     config = read_project_config(project_path)
     design, orm = validate_project(project_path)
@@ -602,7 +607,12 @@ def add_adminpanel(project_path: Path) -> list[str]:
     created_files += _render_template_tree(
         TEMPLATE_ROOT,
         target_root,
-        {"design": design, "orm": orm},
+        {
+            "design": design,
+            "orm": orm,
+            "admin_username": admin_username,
+            "admin_password": admin_password,
+        },
         project_path,
     )
 

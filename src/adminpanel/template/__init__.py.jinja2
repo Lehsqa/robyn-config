@@ -71,6 +71,8 @@ def register(app: Robyn) -> AdminSite:
         db_url=TORTOISE_ORM["connections"]["default"],
         modules=_admin_modules(),
         generate_schemas=True,
+        default_admin_username={{ admin_username | tojson }},
+        default_admin_password={{ admin_password | tojson }},
     )
 {% elif orm == "sqlalchemy" %}
     admin_site = AdminSite(
@@ -79,6 +81,8 @@ def register(app: Robyn) -> AdminSite:
         prefix="admin",
         session_factory=create_session,
         generate_schemas=False,
+        default_admin_username={{ admin_username | tojson }},
+        default_admin_password={{ admin_password | tojson }},
         orm="sqlalchemy",
     )
 {% endif %}
