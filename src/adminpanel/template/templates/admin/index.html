@@ -1,38 +1,99 @@
 {% extends "admin/base.html" %}
 
+{% block title %}{{ site_title }} | Dashboard{% endblock %}
+
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col">
-            <h1>{{ get_text('welcome', language) }}</h1>
-            <p>{{ get_text('home', language) }}</p>
-            
-            {% for group_name, items in menus.items() %}
-            <div class="card mb-4">
-                <div class="card-header">
-                    <h5 class="mb-0">
-                        <i class="{{ items.icon }}"></i>
-                        {{ group_name }}
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div class="list-group">
-                        {% for model_name, model_admin in models.items() %}
-                            {% if model_admin.menu_group == group_name %}
-                            <a href="/admin/{{ model_name }}" 
-                               class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                                <div>
-                                    <i class="{{ model_admin.menu_icon }}"></i>
-                                    {{ model_admin.verbose_name }}
-                                </div>
-                            </a>
-                            {% endif %}
-                        {% endfor %}
-                    </div>
-                </div>
-            </div>
-            {% endfor %}
+<div class="space-y-6">
+    <div class="flex flex-wrap items-end justify-between gap-4">
+        <div>
+            <h1 class="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Dashboard</h1>
+            <p class="text-sm text-slate-600 dark:text-slate-400">Recent admin actions and application logs.</p>
+        </div>
+        <div class="inline-flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white/70 dark:bg-slate-800/40 px-3 py-2 text-xs text-slate-600 dark:text-slate-300">
+            <span class="material-symbols-outlined text-[16px]">description</span>
+            {{ resolved_log_path }}
         </div>
     </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-surface-light dark:bg-surface-dark p-5">
+            <p class="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">Models</p>
+            <p class="mt-2 text-3xl font-black text-slate-900 dark:text-white">{{ models|length }}</p>
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Registered in admin panel</p>
+        </div>
+        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-surface-light dark:bg-surface-dark p-5">
+            <p class="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">Users Area Models</p>
+            <p class="mt-2 text-3xl font-black text-slate-900 dark:text-white">{{ users_models|length }}</p>
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">User/auth related resources</p>
+        </div>
+        <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-surface-light dark:bg-surface-dark p-5">
+            <p class="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">Recent Actions</p>
+            <p class="mt-2 text-3xl font-black text-slate-900 dark:text-white">{{ recent_actions|length }}</p>
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Latest events in memory</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <section class="xl:col-span-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-surface-light dark:bg-surface-dark p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-bold text-slate-900 dark:text-white">Quick Access</h2>
+                <a href="/admin/models" class="text-sm font-semibold text-primary hover:underline">View all</a>
+            </div>
+            <div class="space-y-2">
+                {% if models %}
+                    {% for route_id, model_admin in models.items() %}
+                    <a href="/admin/{{ route_id }}" class="flex items-center justify-between rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-900 dark:text-white">{{ model_admin.verbose_name }}</p>
+                        </div>
+                        <span class="material-symbols-outlined text-slate-400">arrow_forward</span>
+                    </a>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-sm text-slate-500 dark:text-slate-400">No models available for your account.</p>
+                {% endif %}
+            </div>
+        </section>
+
+        <section class="rounded-xl border border-slate-200 dark:border-slate-700 bg-surface-light dark:bg-surface-dark p-5">
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white mb-4">Recent Actions</h2>
+            <div class="space-y-3 max-h-[380px] overflow-y-auto admin-scroll pr-1">
+                {% if recent_actions %}
+                    {% for action in recent_actions %}
+                    <div class="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">
+                        <div class="flex items-start justify-between gap-2">
+                            <p class="text-sm font-semibold text-slate-900 dark:text-white">{{ action.action }}</p>
+                            <p class="text-[11px] text-slate-500 dark:text-slate-400">{{ action.timestamp }}</p>
+                        </div>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                            {{ action.username }}{% if action.target %} -> {{ action.target }}{% endif %}
+                        </p>
+                        {% if action.details %}
+                        <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">{{ action.details }}</p>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-sm text-slate-500 dark:text-slate-400">No recent actions yet.</p>
+                {% endif %}
+            </div>
+        </section>
+    </div>
+
+    <section class="rounded-xl border border-slate-200 dark:border-slate-700 bg-surface-light dark:bg-surface-dark overflow-hidden">
+        <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between gap-2">
+            <h2 class="text-lg font-bold text-slate-900 dark:text-white">Application Logs</h2>
+            <span class="text-xs text-slate-500 dark:text-slate-400">Showing last {{ admin_settings.log_tail_lines if admin_settings else 200 }} lines</span>
+        </div>
+        <div class="bg-slate-950 text-slate-200 text-xs leading-5 max-h-[420px] overflow-auto admin-scroll p-4 font-mono">
+            {% if log_lines %}
+                {% for line in log_lines %}
+                <div>{{ line }}</div>
+                {% endfor %}
+            {% else %}
+                <div>No log data.</div>
+            {% endif %}
+        </div>
+    </section>
 </div>
-{% endblock %} 
+{% endblock %}

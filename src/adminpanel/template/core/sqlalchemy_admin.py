@@ -226,6 +226,9 @@ class ModelAdmin:
                 field.sortable = True
                 if not field.display_type:
                     field.display_type = DisplayType.DATETIME
+            elif _is_boolean_column(model_field):
+                if not field.display_type:
+                    field.display_type = DisplayType.BOOLEAN
 
             if not hasattr(field, "editable") or field.editable is None:
                 field.editable = False
@@ -620,3 +623,10 @@ def _build_filter_expression(model: type[Any], key: str, value: Any):
     if operator_name == "lt":
         return column < value
     return None
+
+
+def _is_boolean_column(column: Any) -> bool:
+    try:
+        return column.type.python_type is bool
+    except Exception:
+        return False

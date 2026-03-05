@@ -5,59 +5,71 @@
 {% from "admin/components/inline_modal.html" import inline_modal_scripts %}
 
 {% block content %}
-<div class="container-fluid">
-    <div class="row">
-        <div class="col">
-            {# 添加导入模态框 #}
-            {% if frontend_config.allowImport %}
-            <div class="modal fade" id="importModal" tabindex="-1">
-                <div class="modal-dialog">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">{{ get_text('import_data', language) }}</h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <form id="importForm">
-                                <div class="mb-3">
-                                    <label class="form-label">{{ get_text('select_file', language) }}</label>
-                                    <div class="custom-file">
-                                        <input type="file" class="form-control" id="importFile" 
-                                               accept=".xlsx,.xls,.csv" required
-                                               data-browse="{{ get_text('choose_file', language) }}"
-                                               data-placeholder="{{ get_text('no_file_chosen', language) }}">
-                                    </div>
-                                    <small class="form-text text-muted">
-                                        {{ get_text('supported_formats', language) }}<br>
-                                        {{ get_text('required_fields', language) }}: {{ frontend_config.import_fields|join(', ') }}
-                                    </small>
-                                </div>
-                            </form>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ get_text('cancel', language) }}</button>
-                            <button type="button" class="btn btn-primary" onclick="handleImport()">{{ get_text('import_button', language) }}</button>
-                        </div>
-                    </div>
-                </div>
+<div class="space-y-6">
+    <div class="rounded-xl border border-slate-200 dark:border-slate-700 bg-surface-light dark:bg-surface-dark p-5">
+        <div class="flex flex-wrap items-end justify-between gap-3">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                    {{ verbose_name }}
+                </h1>
+                <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                    Full CRUD view for route <span class="font-mono">{{ current_model }}</span>
+                </p>
             </div>
-            {% endif %}
-            
-            {# 添加表单模态框组件 #}
-            {% include "admin/components/form_modal.html" %}
-            
-            {# 添加内联数据模态框组件 #}
-            {% include "admin/components/inline_modal.html" %}
-            
-            {# 只在非内联模型时显示数据表格 #}
-            {% if not frontend_config.is_inline %}
-                {# 传递过滤器配置并显示数据表格 #}
-                {% with filters = frontend_config.filterFields %}
-                    {% include "admin/components/data_table.html" %}
-                {% endwith %}
-            {% endif %}
+            <a href="/admin/{% if active_tab == 'users' %}users{% else %}models{% endif %}" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 dark:border-slate-700 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                Back to {{ active_tab|capitalize }}
+            </a>
         </div>
     </div>
+
+    {# Import modal #}
+    {% if frontend_config.allowImport %}
+    <div class="modal fade" id="importModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">{{ get_text('import_data', language) }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="importForm">
+                        <div class="mb-3">
+                            <label class="form-label">{{ get_text('select_file', language) }}</label>
+                            <div class="custom-file">
+                                <input type="file" class="form-control" id="importFile"
+                                       accept=".xlsx,.xls,.csv" required
+                                       data-browse="{{ get_text('choose_file', language) }}"
+                                       data-placeholder="{{ get_text('no_file_chosen', language) }}">
+                            </div>
+                            <small class="form-text text-muted">
+                                {{ get_text('supported_formats', language) }}<br>
+                                {{ get_text('required_fields', language) }}: {{ frontend_config.import_fields|join(', ') }}
+                            </small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ get_text('cancel', language) }}</button>
+                    <button type="button" class="btn btn-primary" onclick="handleImport()">{{ get_text('import_button', language) }}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Form modal #}
+    {% include "admin/components/form_modal.html" %}
+
+    {# Inline data modal #}
+    {% include "admin/components/inline_modal.html" %}
+
+    {# Data table for non-inline models #}
+    {% if not frontend_config.is_inline %}
+        {% with filters = frontend_config.filterFields %}
+            {% include "admin/components/data_table.html" %}
+        {% endwith %}
+    {% endif %}
 </div>
 {% endblock %}
 

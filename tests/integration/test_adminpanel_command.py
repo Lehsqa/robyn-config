@@ -175,6 +175,13 @@ def test_adminpanel_command_scaffolds_for_all_design_and_orm_combinations(
     init_content = admin_init.read_text()
     assert 'default_admin_username="admin"' in init_content
     assert 'default_admin_password="admin"' in init_content
+    assert "_discover_project_models" in init_content
+    assert "for model in _discover_project_models():" in init_content
+    assert "register_model(project_tables.UsersTable" not in init_content
+    assert (
+        "register_model(\n        project_tables.NewsLetterSubscriptionsTable"
+        not in init_content
+    )
     if orm == "sqlalchemy":
         assert "TORTOISE_ORM" not in init_content
         assert "MODEL_MODULES" not in init_content
@@ -182,6 +189,7 @@ def test_adminpanel_command_scaffolds_for_all_design_and_orm_combinations(
         assert "from .models_sqlalchemy import AdminUser" in init_content
         assert "from .auth_models_sqlalchemy import Role, UserRole" in init_content
         assert "from .auth_models_sqlalchemy import AdminUser" not in init_content
+        assert "from sqlalchemy.inspection import inspect as sa_inspect" in init_content
         assert (admin_root / "core" / "sqlalchemy_admin.py").exists()
         assert (admin_root / "core" / "sqlalchemy_site.py").exists()
         assert (admin_root / "auth_models_sqlalchemy.py").exists()
@@ -201,6 +209,7 @@ def test_adminpanel_command_scaffolds_for_all_design_and_orm_combinations(
     else:
         assert "TORTOISE_ORM" in init_content
         assert "MODEL_MODULES" in init_content
+        assert "from tortoise import Model as TortoiseModel" in init_content
         assert 'orm="tortoise"' not in init_content
 
     server_path = project_dir / "src" / "app" / "server.py"

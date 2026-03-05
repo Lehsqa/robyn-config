@@ -4,6 +4,7 @@ import base64
 import json
 import secrets
 import traceback
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Type
@@ -14,7 +15,6 @@ from robyn.templating import JinjaTemplate
 from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
-from ..auth_admin_sqlalchemy import AdminUserAdmin, RoleAdmin, UserRoleAdmin
 from ..auth_models_sqlalchemy import Role, UserRole
 from ..i18n.translations import TRANSLATIONS
 from ..models_sqlalchemy import AdminUser
@@ -24,6 +24,8 @@ from .sqlalchemy_admin import ModelAdmin
 
 class AdminSite:
     """SQLAlchemy-backed admin site."""
+    INTERNAL_AUTH_ROUTE_IDS = {"AdminUserAdmin", "RoleAdmin", "UserRoleAdmin"}
+    USERS_TAB_TABLE_NAMES = {"users", "robyn_admin_roles", "robyn_admin_user_roles"}
 
     def __init__(
         self,
@@ -66,6 +68,154 @@ class AdminSite:
 
         self.session_secret = secrets.token_hex(32)
         self.session_expire = 24 * 60 * 60
+        self.max_recent_actions = 100
+        self.recent_actions: list[dict[str, str]] = []
+        self.default_settings: dict[str, Any] = {
+            "log_file_path": "logs/app.log",
+            "log_tail_lines": 200,
+            "theme": "dark",
+        }
+
+    async def _get_visible_models(
+        self, request: Request
+    ) -> dict[str, ModelAdmin]:
+        visible: dict[str, ModelAdmin] = {}
+        for route_id, model_admin in self.models.items():
+            if await self.check_permission(request, route_id, "view"):
+                visible[route_id] = model_admin
+        return visible
+
+    def _get_model_table_name(self, model_admin: ModelAdmin) -> str:
+        model = getattr(model_admin, "model", None)
+        table_name = getattr(model, "__tablename__", None).upper().replace("_", " ")
+        if isinstance(table_name, str) and table_name:
+            return table_name
+
+        meta = getattr(model, "_meta", None)
+        db_table = getattr(meta, "db_table", None)
+        if isinstance(db_table, str) and db_table:
+            return db_table
+        return ""
+
+    def _is_user_model(self, route_id: str, model_admin: ModelAdmin) -> bool:
+        table_name = self._get_model_table_name(model_admin).lower()
+        return bool(table_name) and (
+            table_name.endswith("users")
+            or table_name in self.USERS_TAB_TABLE_NAMES
+        )
+
+    def _prefer_route_for_same_table(
+        self, current_route_id: str, candidate_route_id: str
+    ) -> bool:
+        current_is_internal = current_route_id in self.INTERNAL_AUTH_ROUTE_IDS
+        candidate_is_internal = candidate_route_id in self.INTERNAL_AUTH_ROUTE_IDS
+        if current_is_internal and not candidate_is_internal:
+            return True
+        return False
+
+    def _split_models_by_tab(
+        self, visible_models: dict[str, ModelAdmin]
+    ) -> tuple[dict[str, ModelAdmin], dict[str, ModelAdmin]]:
+        users_models: dict[str, ModelAdmin] = {}
+        other_models: dict[str, ModelAdmin] = {}
+        users_route_by_table: dict[str, str] = {}
+        for route_id, model_admin in visible_models.items():
+            if self._is_user_model(route_id, model_admin):
+                table_key = self._get_model_table_name(model_admin).lower() or route_id
+                existing_route_id = users_route_by_table.get(table_key)
+                if existing_route_id is None:
+                    users_route_by_table[table_key] = route_id
+                    users_models[route_id] = model_admin
+                elif self._prefer_route_for_same_table(
+                    existing_route_id, route_id
+                ):
+                    users_models.pop(existing_route_id, None)
+                    users_route_by_table[table_key] = route_id
+                    users_models[route_id] = model_admin
+            else:
+                other_models[route_id] = model_admin
+        return users_models, other_models
+
+    def _record_action(
+        self,
+        username: str,
+        action: str,
+        target: str = "",
+        details: str = "",
+    ) -> None:
+        self.recent_actions.append(
+            {
+                "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "username": username or "system",
+                "action": action,
+                "target": target,
+                "details": details,
+            }
+        )
+        if len(self.recent_actions) > self.max_recent_actions:
+            self.recent_actions = self.recent_actions[-self.max_recent_actions :]
+
+    def _get_admin_settings(self, request: Request) -> dict[str, Any]:
+        settings = dict(self.default_settings)
+        cookie_header = request.headers.get("Cookie")
+        if not cookie_header:
+            return settings
+
+        cookies = _parse_cookie_header(cookie_header)
+        raw = cookies.get("admin_settings")
+        if not raw:
+            return settings
+
+        try:
+            payload = _decode_cookie_payload(raw)
+            decoded = json.loads(payload)
+            if isinstance(decoded, dict):
+                log_path = decoded.get("log_file_path")
+                if isinstance(log_path, str) and log_path.strip():
+                    settings["log_file_path"] = log_path.strip()
+
+                log_tail = decoded.get("log_tail_lines")
+                if isinstance(log_tail, int):
+                    settings["log_tail_lines"] = max(20, min(log_tail, 2000))
+
+                theme = decoded.get("theme")
+                if theme in {"dark", "light"}:
+                    settings["theme"] = theme
+        except Exception:
+            return settings
+        return settings
+
+    def _build_settings_cookie(self, settings: dict[str, Any]) -> str:
+        payload = json.dumps(settings, separators=(",", ":"))
+        encoded = _encode_cookie_payload(payload)
+        attrs = [
+            f"admin_settings={encoded}",
+            "Path=/",
+            "Max-Age=2592000",
+            "SameSite=Lax",
+        ]
+        return "; ".join(attrs)
+
+    def _read_log_lines(
+        self, log_file_path: str, max_lines: int
+    ) -> tuple[list[str], str]:
+        max_lines = max(20, min(int(max_lines), 2000))
+        candidate = Path(log_file_path)
+        if not candidate.is_absolute():
+            candidate = Path.cwd() / candidate
+
+        resolved_path = str(candidate)
+        if not candidate.exists():
+            return [f"Log file does not exist: {resolved_path}"], resolved_path
+
+        try:
+            with candidate.open("r", encoding="utf-8", errors="replace") as handle:
+                lines = [line.rstrip("\n") for line in deque(handle, maxlen=max_lines)]
+            if not lines:
+                return ["Log file is empty."], resolved_path
+            return lines, resolved_path
+        except Exception as exc:
+            return [f"Failed to read log file: {exc}"], resolved_path
 
     def get_text(self, key: str, lang: str | None = None) -> str:
         current_lang = lang or self.default_language
@@ -84,7 +234,6 @@ class AdminSite:
         @self.app.startup_handler
         async def init_admin() -> None:
             try:
-                self.init_register_auth_models()
                 await self._ensure_default_admin()
                 if self.startup_function:
                     await self.startup_function()
@@ -93,9 +242,8 @@ class AdminSite:
                 raise
 
     def init_register_auth_models(self) -> None:
-        self.register_model(AdminUser, AdminUserAdmin)
-        self.register_model(Role, RoleAdmin)
-        self.register_model(UserRole, UserRoleAdmin)
+        # Kept for backward compatibility with older templates.
+        return None
 
     async def _ensure_default_admin(self) -> None:
         session = self.session_factory()
@@ -145,21 +293,169 @@ class AdminSite:
                 )
 
             language = await self._get_language(request)
-            filtered_models = {}
-            for route_id, model_admin in self.models.items():
-                if await self.check_permission(request, route_id, "view"):
-                    filtered_models[route_id] = model_admin
+            settings = self._get_admin_settings(request)
+            filtered_models = await self._get_visible_models(request)
+            users_models, other_models = self._split_models_by_tab(filtered_models)
+            recent_actions = list(reversed(self.recent_actions[-20:]))
+            log_lines, resolved_log_path = self._read_log_lines(
+                str(settings["log_file_path"]),
+                int(settings["log_tail_lines"]),
+            )
 
             context = {
                 "site_title": self.title,
                 "models": filtered_models,
-                "menus": self.menu_manager.get_menu_tree(),
+                "users_models": users_models,
+                "models_tab_models": other_models,
                 "user": user,
                 "language": language,
                 "copyright": self.copyright,
+                "active_tab": "dashboard",
+                "recent_actions": recent_actions,
+                "log_lines": log_lines,
+                "resolved_log_path": resolved_log_path,
+                "admin_settings": settings,
             }
             return self.jinja_template.render_template(
                 "admin/index.html", **context
+            )
+
+        @self.app.get(f"/{self.prefix}/users")
+        async def users_index(request: Request):
+            user = await self._get_current_user(request)
+            if not user:
+                return Response(
+                    status_code=307,
+                    description="Location login page",
+                    headers={"Location": f"/{self.prefix}/login"},
+                )
+
+            language = await self._get_language(request)
+            settings = self._get_admin_settings(request)
+            filtered_models = await self._get_visible_models(request)
+            users_models, other_models = self._split_models_by_tab(filtered_models)
+            context = {
+                "site_title": self.title,
+                "models": filtered_models,
+                "users_models": users_models,
+                "models_tab_models": other_models,
+                "user": user,
+                "language": language,
+                "copyright": self.copyright,
+                "active_tab": "users",
+                "admin_settings": settings,
+            }
+            return self.jinja_template.render_template(
+                "admin/users.html", **context
+            )
+
+        @self.app.get(f"/{self.prefix}/models")
+        async def models_index(request: Request):
+            user = await self._get_current_user(request)
+            if not user:
+                return Response(
+                    status_code=307,
+                    description="Location login page",
+                    headers={"Location": f"/{self.prefix}/login"},
+                )
+
+            language = await self._get_language(request)
+            settings = self._get_admin_settings(request)
+            filtered_models = await self._get_visible_models(request)
+            users_models, other_models = self._split_models_by_tab(filtered_models)
+            context = {
+                "site_title": self.title,
+                "models": filtered_models,
+                "users_models": users_models,
+                "models_tab_models": other_models,
+                "user": user,
+                "language": language,
+                "copyright": self.copyright,
+                "active_tab": "models",
+                "admin_settings": settings,
+            }
+            return self.jinja_template.render_template(
+                "admin/models.html", **context
+            )
+
+        @self.app.get(f"/{self.prefix}/settings")
+        async def settings_page(request: Request):
+            user = await self._get_current_user(request)
+            if not user:
+                return Response(
+                    status_code=307,
+                    description="Location login page",
+                    headers={"Location": f"/{self.prefix}/login"},
+                )
+
+            language = await self._get_language(request)
+            settings = self._get_admin_settings(request)
+            filtered_models = await self._get_visible_models(request)
+            users_models, other_models = self._split_models_by_tab(filtered_models)
+            context = {
+                "site_title": self.title,
+                "models": filtered_models,
+                "users_models": users_models,
+                "models_tab_models": other_models,
+                "user": user,
+                "language": language,
+                "copyright": self.copyright,
+                "active_tab": "settings",
+                "admin_settings": settings,
+            }
+            return self.jinja_template.render_template(
+                "admin/settings.html", **context
+            )
+
+        @self.app.post(f"/{self.prefix}/settings")
+        async def settings_save(request: Request):
+            user = await self._get_current_user(request)
+            if not user:
+                return Response(
+                    status_code=307,
+                    description="Location login page",
+                    headers={"Location": f"/{self.prefix}/login"},
+                )
+
+            current_settings = self._get_admin_settings(request)
+            params = parse_qs(_body_to_text(request.body))
+            log_file_path = _first_value(
+                params.get("log_file_path"), current_settings["log_file_path"]
+            )
+            if not isinstance(log_file_path, str) or not log_file_path.strip():
+                log_file_path = str(current_settings["log_file_path"])
+
+            raw_log_tail = _first_value(
+                params.get("log_tail_lines"), current_settings["log_tail_lines"]
+            )
+            try:
+                log_tail_lines = int(raw_log_tail)
+            except Exception:
+                log_tail_lines = int(current_settings["log_tail_lines"])
+            log_tail_lines = max(20, min(log_tail_lines, 2000))
+
+            theme = _first_value(params.get("theme"), current_settings["theme"])
+            if theme not in {"dark", "light"}:
+                theme = current_settings["theme"]
+
+            updated_settings = {
+                "log_file_path": str(log_file_path).strip(),
+                "log_tail_lines": log_tail_lines,
+                "theme": theme,
+            }
+            self._record_action(
+                username=user.username,
+                action="settings_updated",
+                target="admin",
+                details=f"log_file_path={updated_settings['log_file_path']}",
+            )
+            return Response(
+                status_code=303,
+                description="Settings saved",
+                headers={
+                    "Location": f"/{self.prefix}/settings",
+                    "Set-Cookie": self._build_settings_cookie(updated_settings),
+                },
             )
 
         @self.app.get(f"/{self.prefix}/login")
@@ -173,11 +469,14 @@ class AdminSite:
                 )
 
             language = await self._get_language(request)
+            settings = self._get_admin_settings(request)
             context = {
                 "user": None,
                 "language": language,
                 "site_title": self.title,
                 "copyright": self.copyright,
+                "active_tab": "",
+                "admin_settings": settings,
             }
             return self.jinja_template.render_template(
                 "admin/login.html", **context
@@ -196,11 +495,16 @@ class AdminSite:
                         session, username, password
                     )
                     if not user:
+                        language = await self._get_language(request)
+                        settings = self._get_admin_settings(request)
                         context = {
                             "error": "Invalid username or password",
                             "user": None,
+                            "language": language,
                             "site_title": self.title,
                             "copyright": self.copyright,
+                            "active_tab": "",
+                            "admin_settings": settings,
                         }
                         return self.jinja_template.render_template(
                             "admin/login.html", **context
@@ -208,6 +512,11 @@ class AdminSite:
 
                     user.last_login = datetime.utcnow()
                     await session.commit()
+                    self._record_action(
+                        username=user.username,
+                        action="login",
+                        target="admin",
+                    )
                 finally:
                     await session.close()
 
@@ -241,6 +550,13 @@ class AdminSite:
                 "Path=/",
                 "Max-Age=0",
             ]
+            user = await self._get_current_user(request)
+            if user:
+                self._record_action(
+                    username=user.username,
+                    action="logout",
+                    target="admin",
+                )
             return Response(
                 status_code=303,
                 description="",
@@ -309,21 +625,24 @@ class AdminSite:
             frontend_config["language"] = language
             frontend_config["default_language"] = self.default_language
 
-            filtered_models = {}
-            for rid, madmin in self.models.items():
-                if await self.check_permission(request, rid, "view"):
-                    filtered_models[rid] = madmin
+            settings = self._get_admin_settings(request)
+            filtered_models = await self._get_visible_models(request)
+            users_models, other_models = self._split_models_by_tab(filtered_models)
+            active_tab = "users" if self._is_user_model(route_id, model_admin) else "models"
 
             context = {
                 "site_title": self.title,
                 "models": filtered_models,
-                "menus": self.menu_manager.get_menu_tree(),
+                "users_models": users_models,
+                "models_tab_models": other_models,
                 "user": user,
                 "language": language,
                 "current_model": route_id,
                 "verbose_name": model_admin.verbose_name,
                 "frontend_config": frontend_config,
                 "copyright": self.copyright,
+                "active_tab": active_tab,
+                "admin_settings": settings,
             }
             return self.jinja_template.render_template(
                 "admin/model_list.html", **context
@@ -343,6 +662,14 @@ class AdminSite:
             params = parse_qs(_body_to_text(request.body))
             form_data = _parse_form_payload(params)
             success, message = await model_admin.handle_add(request, form_data)
+            if success:
+                user = await self._get_current_user(request)
+                if user:
+                    self._record_action(
+                        username=user.username,
+                        action="create",
+                        target=route_id,
+                    )
             return Response(
                 status_code=200 if success else 400,
                 description=message,
@@ -371,6 +698,14 @@ class AdminSite:
             success, message = await model_admin.handle_edit(
                 request, object_id, form_data
             )
+            if success:
+                user = await self._get_current_user(request)
+                if user:
+                    self._record_action(
+                        username=user.username,
+                        action="update",
+                        target=f"{route_id}:{object_id}",
+                    )
             return Response(
                 status_code=200 if success else 400,
                 description=message,
@@ -396,6 +731,12 @@ class AdminSite:
             success, message = await model_admin.handle_delete(
                 request, object_id
             )
+            if success and user:
+                self._record_action(
+                    username=user.username,
+                    action="delete",
+                    target=f"{route_id}:{object_id}",
+                )
             return Response(
                 status_code=200 if success else 400,
                 description=message,
@@ -464,6 +805,13 @@ class AdminSite:
             success, message, deleted_count = (
                 await model_admin.handle_batch_delete(request, ids)
             )
+            if success and user:
+                self._record_action(
+                    username=user.username,
+                    action="batch_delete",
+                    target=route_id,
+                    details=f"deleted_count={deleted_count}",
+                )
             return jsonify(
                 {
                     "code": 200 if success else 500,
@@ -682,6 +1030,14 @@ class AdminSite:
                 finally:
                     await session.close()
 
+                user = await self._get_current_user(request)
+                if user:
+                    self._record_action(
+                        username=user.username,
+                        action="import",
+                        target=route_id,
+                        details=f"success={success_count},failed={error_count}",
+                    )
                 return jsonify(
                     {
                         "success": True,
@@ -706,7 +1062,10 @@ class AdminSite:
         instance = admin_class(model, session_factory=self.session_factory)
         instance.site = self
 
-        route_id = admin_class.__name__
+        if admin_class is ModelAdmin:
+            route_id = f"{model.__name__}Admin"
+        else:
+            route_id = admin_class.__name__
         base_route_id = route_id
         counter = 1
         while route_id in self.models:
@@ -857,3 +1216,12 @@ def _parse_form_payload(params: dict[str, list[str]]) -> dict[str, Any]:
         except Exception:
             data[key] = raw
     return data
+
+
+def _encode_cookie_payload(payload: str) -> str:
+    return base64.urlsafe_b64encode(payload.encode()).decode().rstrip("=")
+
+
+def _decode_cookie_payload(encoded: str) -> str:
+    padding = "=" * (-len(encoded) % 4)
+    return base64.urlsafe_b64decode(f"{encoded}{padding}".encode()).decode()

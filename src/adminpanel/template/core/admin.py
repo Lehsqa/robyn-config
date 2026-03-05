@@ -123,6 +123,9 @@ class ModelAdmin:
                 field.sortable = True
                 if not field.display_type:
                     field.display_type = DisplayType.DATETIME
+            elif isinstance(model_field, fields.BooleanField):
+                if not field.display_type:
+                    field.display_type = DisplayType.BOOLEAN
             # all column editable is False
             if not hasattr(field, "editable") or field.editable is None:
                 field.editable = False
@@ -397,10 +400,27 @@ class ModelAdmin:
         processed_data = {}
         form_filds = await self.get_add_form_fields()
         for field in form_filds:
+            model_field = self.model._meta.fields_map.get(field.name)
+            is_fk = isinstance(
+                model_field, fields.relational.ForeignKeyFieldInstance
+            )
+            fallback_fk_key = f"{field.name}_id"
+
+            if is_fk:
+                source_key = None
+                if fallback_fk_key in data:
+                    source_key = fallback_fk_key
+                elif field.name in data:
+                    source_key = field.name
+
+                if source_key is not None:
+                    processed_data[fallback_fk_key] = field.process_value(
+                        data[source_key]
+                    )
+                continue
+
             if field.name in data:
-                processed_data[field.name] = field.process_value(
-                    data[field.name]
-                )
+                processed_data[field.name] = field.process_value(data[field.name])
 
         return processed_data
 

@@ -3,12 +3,14 @@ from __future__ import annotations
 from robyn import Robyn
 
 {% if orm == "tortoise" %}
-from .auth_admin import AdminUserAdmin, RoleAdmin, UserRoleAdmin
+from tortoise import Model as TortoiseModel
+
 from .auth_models import AdminUser, Role, UserRole
 from .core import AdminSite, MenuItem, ModelAdmin
 from . import auth_models, models
 {% elif orm == "sqlalchemy" %}
-from .auth_admin_sqlalchemy import AdminUserAdmin, RoleAdmin, UserRoleAdmin
+from sqlalchemy.inspection import inspect as sa_inspect
+
 from .models_sqlalchemy import AdminUser
 from .auth_models_sqlalchemy import Role, UserRole
 from .core.menu import MenuItem
@@ -25,9 +27,6 @@ __all__ = [
     "AdminUser",
     "Role",
     "UserRole",
-    "AdminUserAdmin",
-    "RoleAdmin",
-    "UserRoleAdmin",
     "models",
     "auth_models",
     "register",
@@ -48,12 +47,64 @@ from app.models.database import create_session
 {% endif %}
 
 
-class UsersAdmin(ModelAdmin):
-    verbose_name = "Users"
+{% if orm == "sqlalchemy" %}
+def _is_project_model(candidate: object) -> bool:
+    if not isinstance(candidate, type):
+        return False
+
+    table_name = getattr(candidate, "__tablename__", None)
+    if not isinstance(table_name, str) or not table_name:
+        return False
+
+    try:
+        sa_inspect(candidate)
+    except Exception:
+        return False
+    return True
 
 
-class NewsLetterSubscriptionsAdmin(ModelAdmin):
-    verbose_name = "Newsletter Subscriptions"
+def _model_sort_key(model: type) -> tuple[str, str]:
+    return (str(getattr(model, "__tablename__", "")), model.__name__)
+{% elif orm == "tortoise" %}
+def _is_project_model(candidate: object) -> bool:
+    if not isinstance(candidate, type):
+        return False
+    if not issubclass(candidate, TortoiseModel) or candidate is TortoiseModel:
+        return False
+
+    meta = getattr(candidate, "_meta", None)
+    if meta is None or getattr(meta, "abstract", False):
+        return False
+    return bool(getattr(meta, "db_table", None))
+
+
+def _model_sort_key(model: type) -> tuple[str, str]:
+    table_name = getattr(getattr(model, "_meta", None), "db_table", "")
+    return (str(table_name), model.__name__)
+{% endif %}
+
+
+def _discover_project_models() -> list[type]:
+    exported = getattr(project_tables, "__all__", None)
+    if isinstance(exported, (tuple, list)):
+        names = [item for item in exported if isinstance(item, str)]
+    else:
+        names = [name for name in dir(project_tables) if not name.startswith("_")]
+
+    discovered: list[type] = []
+    seen: set[tuple[str, str]] = set()
+    for name in names:
+        candidate = getattr(project_tables, name, None)
+        if not _is_project_model(candidate):
+            continue
+
+        marker = (candidate.__module__, candidate.__name__)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        discovered.append(candidate)
+
+    return sorted(discovered, key=_model_sort_key)
 
 
 {% if orm == "tortoise" %}
@@ -86,9 +137,6 @@ def register(app: Robyn) -> AdminSite:
         orm="sqlalchemy",
     )
 {% endif %}
-    admin_site.register_model(project_tables.UsersTable, UsersAdmin)
-    admin_site.register_model(
-        project_tables.NewsLetterSubscriptionsTable,
-        NewsLetterSubscriptionsAdmin,
-    )
+    for model in _discover_project_models():
+        admin_site.register_model(model, ModelAdmin)
     return admin_site

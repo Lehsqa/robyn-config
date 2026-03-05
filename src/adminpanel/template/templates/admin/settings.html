@@ -1,0 +1,66 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ site_title }} | Settings{% endblock %}
+
+{% block content %}
+<div class="space-y-6 max-w-3xl">
+    <div>
+        <h1 class="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Settings</h1>
+        <p class="text-sm text-slate-600 dark:text-slate-400">Configure dashboard log source and visual theme.</p>
+    </div>
+
+    <form method="post" action="/admin/settings" class="rounded-xl border border-slate-200 dark:border-slate-700 bg-surface-light dark:bg-surface-dark p-6 space-y-5">
+        <div>
+            <label for="log_file_path" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">App log file path</label>
+            <input
+                id="log_file_path"
+                name="log_file_path"
+                type="text"
+                value="{{ admin_settings.log_file_path if admin_settings else 'logs/app.log' }}"
+                placeholder="logs/app.log"
+                class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-2 focus:ring-primary/30"
+                required
+            >
+            <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Relative paths are resolved from the app working directory.</p>
+        </div>
+
+        <div>
+            <label for="log_tail_lines" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Log lines to display</label>
+            <input
+                id="log_tail_lines"
+                name="log_tail_lines"
+                type="number"
+                min="20"
+                max="2000"
+                value="{{ admin_settings.log_tail_lines if admin_settings else 200 }}"
+                class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-2 focus:ring-primary/30"
+                required
+            >
+        </div>
+
+        <div>
+            <label for="theme" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Theme</label>
+            <select
+                id="theme"
+                name="theme"
+                class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-2 focus:ring-primary/30"
+            >
+                {% set selected_theme = admin_settings.theme if admin_settings else 'dark' %}
+                <option value="dark" {% if selected_theme == 'dark' %}selected{% endif %}>Dark</option>
+                <option value="light" {% if selected_theme == 'light' %}selected{% endif %}>Light</option>
+            </select>
+        </div>
+
+        <div class="pt-2 flex items-center gap-3">
+            <button
+                type="submit"
+                class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primary/90 transition-colors"
+            >
+                <span class="material-symbols-outlined text-[16px]">save</span>
+                Save settings
+            </button>
+            <span class="text-xs text-slate-500 dark:text-slate-400">Settings are stored in your browser cookie.</span>
+        </div>
+    </form>
+</div>
+{% endblock %}

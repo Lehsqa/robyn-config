@@ -1,198 +1,273 @@
 <!DOCTYPE html>
-<html lang="en">
+{% set theme = 'dark' %}
+{% if admin_settings is defined and admin_settings and admin_settings.theme in ['dark', 'light'] %}
+    {% set theme = admin_settings.theme %}
+{% endif %}
+{% set current_tab = active_tab if active_tab is defined else '' %}
+<html lang="en" class="{% if theme == 'dark' %}dark{% endif %}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}{{ site_title }}{% endblock %}</title>
+
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#137fec",
+                        "background-light": "#f6f7f8",
+                        "background-dark": "#101922",
+                        "surface-light": "#ffffff",
+                        "surface-dark": "#15202b",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.25rem",
+                        lg: "0.5rem",
+                        xl: "0.75rem",
+                        full: "9999px",
+                    },
+                },
+            },
+        };
+    </script>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-table@1.22.1/dist/bootstrap-table.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+
     <style>
+        .material-symbols-outlined {
+            font-variation-settings: "FILL" 1, "wght" 450, "GRAD" 0, "opsz" 24;
+        }
+
         body {
-            padding-top: 56px;  /* 为固定顶部导航栏留出空间 */
-        }
-        
-        .wrapper {
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-        }
-        
-        .container-fluid {
-            flex: 1;
-            padding-top: 1rem;
-        }
-        
-        /* 侧边栏样式 */
-        .sidebar {
-            position: sticky;
-            top: 56px;  /* 与顶部导航栏对齐 */
-            height: calc(100vh - 56px);
-            padding-top: 1rem;
-            overflow-x: hidden;
-            overflow-y: auto;
-            background-color: #343a40;
-            z-index: 100;
-        }
-        
-        .sidebar-sticky {
-            position: relative;
-            top: 0;
-            height: calc(100vh - 48px);
-            padding-top: .5rem;
-            overflow-x: hidden;
-            overflow-y: auto;
+            font-family: "Inter", sans-serif;
         }
 
-        /* 菜单组样式 */
-        .nav-group {
-            margin-bottom: 0.5rem;
+        .admin-scroll::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
         }
 
-        .nav-group-toggle {
-            color: rgba(255, 255, 255, 0.8) !important;
-            padding: 0.5rem 1rem;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            text-decoration: none;
-            cursor: pointer;
-            transition: all 0.3s;
+        .admin-scroll::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.08);
         }
 
-        .nav-group-toggle:hover {
-            color: #fff !important;
-            background-color: rgba(255, 255, 255, 0.1);
+        .admin-scroll::-webkit-scrollbar-thumb {
+            background: rgba(71, 85, 105, 0.45);
+            border-radius: 999px;
         }
 
-        .nav-group-toggle::after {
-            content: '\F282';
-            font-family: 'bootstrap-icons';
-            transition: transform 0.3s;
+        .dark .admin-scroll::-webkit-scrollbar-track {
+            background: rgba(148, 163, 184, 0.08);
         }
 
-        .nav-group-toggle[aria-expanded="true"]::after {
-            transform: rotate(90deg);
+        .dark .admin-scroll::-webkit-scrollbar-thumb {
+            background: rgba(148, 163, 184, 0.45);
         }
 
-        /* 子菜单样式 */
-        .nav-group .nav-item .nav-link {
-            color: rgba(255, 255, 255, 0.6);
-            padding: 0.5rem 1rem 0.5rem 2.5rem;
-            font-size: 0.9rem;
-            transition: all 0.3s;
+        .card {
+            border: 1px solid rgb(226 232 240);
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
         }
 
-        .nav-group .nav-item .nav-link:hover {
-            color: #fff;
-            background-color: rgba(255, 255, 255, 0.1);
+        .dark .card {
+            border-color: rgb(51 65 85);
+            background-color: rgb(21 32 43);
+            color: rgb(226 232 240);
+            box-shadow: none;
         }
 
-        .nav-group .nav-item .nav-link.active {
-            color: #fff;
-            background-color: rgba(255, 255, 255, 0.2);
+        .modal-content {
+            border-radius: 0.75rem;
+            border-color: rgb(226 232 240);
         }
 
-        /* 图标样式 */
-        .nav-link i {
-            margin-right: 0.5rem;
-            font-size: 1.1rem;
-            width: 1.5rem;
-            text-align: center;
+        .dark .modal-content {
+            border-color: rgb(51 65 85);
+            background-color: rgb(21 32 43);
+            color: rgb(226 232 240);
         }
 
-        /* 自定义滚动条 */
-        .sidebar-sticky::-webkit-scrollbar {
-            width: 6px;
+        .dark .modal-header,
+        .dark .modal-footer {
+            border-color: rgb(51 65 85);
         }
 
-        .sidebar-sticky::-webkit-scrollbar-track {
-            background: rgba(255, 255, 255, 0.1);
+        .dark .form-control,
+        .dark .form-select,
+        .dark .form-check-input,
+        .dark .form-control:focus,
+        .dark .form-select:focus {
+            color: rgb(226 232 240);
+            background-color: rgb(15 23 42);
+            border-color: rgb(71 85 105);
         }
 
-        .sidebar-sticky::-webkit-scrollbar-thumb {
-            background-color: rgba(255, 255, 255, 0.3);
-            border-radius: 3px;
+        .dark .table {
+            color: rgb(226 232 240);
         }
 
-        .sidebar-sticky::-webkit-scrollbar-thumb:hover {
-            background-color: rgba(255, 255, 255, 0.4);
+        .dark .table-striped > tbody > tr:nth-of-type(odd) > * {
+            color: rgb(226 232 240);
+            background-color: rgb(15 23 42);
         }
 
-        /* 页脚样式 */
-        .footer {
-            padding: 1rem 0;
-            background: #f8f9fa;
-            border-top: 1px solid #dee2e6;
-            margin-top: auto;
+        .dark .table-hover > tbody > tr:hover > * {
+            color: rgb(248 250 252);
+            background-color: rgb(30 41 59);
         }
 
-        /* 内容区域样式 */
-        .main-content {
-            padding: 1rem 0;
+        .dark .dropdown-menu {
+            background-color: rgb(21 32 43);
+            border-color: rgb(51 65 85);
+        }
+
+        .dark .dropdown-item {
+            color: rgb(226 232 240);
+        }
+
+        .dark .dropdown-item:hover {
+            background-color: rgb(30 41 59);
+            color: rgb(248 250 252);
+        }
+
+        .bootstrap-table .fixed-table-toolbar .btn,
+        .bootstrap-table .fixed-table-pagination .btn,
+        .bootstrap-table .fixed-table-pagination .page-link {
+            border-radius: 0.5rem;
+        }
+
+        .bootstrap-table .search input {
+            border-radius: 0.5rem;
         }
     </style>
+    {% block extra_head %}{% endblock %}
 </head>
-<body>
-    <div class="wrapper">
-        {% if user %}
-            {% include "admin/components/header.html" %}
-        {% endif %}
-        
-        <div class="container-fluid">
-            <div class="row">
-                {% if user %}
-                    <div class="col-md-3 col-lg-2 px-0">
-                        {% include "admin/components/sidebar.html" %}
-                    </div>
-                    <div class="col-md-9 col-lg-10 px-md-4 main-content">
-                        {% block content %}{% endblock %}
-                    </div>
-                {% else %}
-                    <div class="col-12 main-content">
-                        {{ self.content() }}
-                    </div>
-                {% endif %}
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 min-h-screen">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+    {% if user %}
+    <header class="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark px-5 py-3 shrink-0">
+        <div class="flex items-center gap-3 text-slate-900 dark:text-slate-100">
+            <div class="text-primary flex items-center justify-center">
+                <span class="material-symbols-outlined text-[26px]">rocket_launch</span>
+            </div>
+            <div>
+                <h1 class="text-base font-bold leading-tight">{{ site_title }}</h1>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">Admin Control Panel</p>
             </div>
         </div>
-        
-        {% if copyright %}
-        <footer class="footer">
-            <div class="container-fluid">
-                <div class="row text-muted">
-                    <div class="col-12 text-center">
-                        <p class="mb-0">
-                            {{ copyright }}
-                        </p>
-                    </div>
+        <div class="flex items-center gap-3">
+            <div class="hidden sm:flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-500 dark:text-slate-300">
+                <span class="material-symbols-outlined text-[16px]">person</span>
+                {{ user.username }}
+            </div>
+            <a href="/{{ prefix | default('admin') }}/logout" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors">
+                <span class="material-symbols-outlined text-[16px]">logout</span>
+                Logout
+            </a>
+        </div>
+    </header>
+
+    <nav class="md:hidden grid grid-cols-4 border-b border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark">
+        <a href="/{{ prefix | default('admin') }}" class="flex flex-col items-center gap-1 px-2 py-2 text-[11px] font-semibold {% if current_tab == 'dashboard' %}text-primary{% else %}text-slate-500 dark:text-slate-300{% endif %}">
+            <span class="material-symbols-outlined text-[18px]">dashboard</span>
+            Dashboard
+        </a>
+        <a href="/{{ prefix | default('admin') }}/users" class="flex flex-col items-center gap-1 px-2 py-2 text-[11px] font-semibold {% if current_tab == 'users' %}text-primary{% else %}text-slate-500 dark:text-slate-300{% endif %}">
+            <span class="material-symbols-outlined text-[18px]">group</span>
+            Users
+        </a>
+        <a href="/{{ prefix | default('admin') }}/models" class="flex flex-col items-center gap-1 px-2 py-2 text-[11px] font-semibold {% if current_tab == 'models' %}text-primary{% else %}text-slate-500 dark:text-slate-300{% endif %}">
+            <span class="material-symbols-outlined text-[18px]">database</span>
+            Models
+        </a>
+        <a href="/{{ prefix | default('admin') }}/settings" class="flex flex-col items-center gap-1 px-2 py-2 text-[11px] font-semibold {% if current_tab == 'settings' %}text-primary{% else %}text-slate-500 dark:text-slate-300{% endif %}">
+            <span class="material-symbols-outlined text-[18px]">settings</span>
+            Settings
+        </a>
+    </nav>
+
+    <div class="flex flex-1 overflow-hidden">
+        <aside class="hidden md:flex md:w-72 flex-col border-r border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark p-4 admin-scroll overflow-y-auto">
+            <nav class="flex flex-col gap-1">
+                <a href="/{{ prefix | default('admin') }}" class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors {% if current_tab == 'dashboard' %}bg-primary/15 text-primary{% else %}text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                    <span class="material-symbols-outlined text-[20px]">dashboard</span>
+                    Dashboard
+                </a>
+                <a href="/{{ prefix | default('admin') }}/users" class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors {% if current_tab == 'users' %}bg-primary/15 text-primary{% else %}text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                    <span class="material-symbols-outlined text-[20px]">group</span>
+                    Users
+                </a>
+                <a href="/{{ prefix | default('admin') }}/models" class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors {% if current_tab == 'models' %}bg-primary/15 text-primary{% else %}text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                    <span class="material-symbols-outlined text-[20px]">database</span>
+                    Models
+                </a>
+                <a href="/{{ prefix | default('admin') }}/settings" class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors {% if current_tab == 'settings' %}bg-primary/15 text-primary{% else %}text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
+                    <span class="material-symbols-outlined text-[20px]">settings</span>
+                    Settings
+                </a>
+            </nav>
+
+            <div class="mt-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-4">
+                <p class="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">Models Summary</p>
+                <div class="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                    <div class="flex justify-between"><span>Total</span><span class="font-semibold">{{ models|length if models is defined else 0 }}</span></div>
+                    <div class="flex justify-between"><span>Users</span><span class="font-semibold">{{ users_models|length if users_models is defined else 0 }}</span></div>
+                    <div class="flex justify-between"><span>Other</span><span class="font-semibold">{{ models_tab_models|length if models_tab_models is defined else 0 }}</span></div>
                 </div>
             </div>
-        </footer>
-        {% endif %}
-    </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/jquery/dist/jquery.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap-table@1.22.1/dist/bootstrap-table.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap-table@1.22.1/dist/locale/bootstrap-table-en-US.min.js"></script>
-    
-    {% block extra_js %}
-    <script>
-    function setLanguage(lang) {
-        $.ajax({
-            url: '/admin/set_language',
-            method: 'POST',
-            data: { language: lang },
-            success: function() {
-                location.reload();
-            },
-            error: function() {
-                alert('Failed to switch language');
-            }
-        });
-    }
-    </script>
-    {% endblock %}
+            {% if copyright %}
+            <p class="mt-auto pt-6 text-xs text-slate-500 dark:text-slate-400">{{ copyright }}</p>
+            {% endif %}
+        </aside>
+
+        <main class="flex-1 overflow-y-auto admin-scroll p-4 sm:p-6 lg:p-8">
+            <div class="mx-auto max-w-7xl">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
+    {% else %}
+    <main class="min-h-screen flex items-center justify-center p-4 sm:p-8">
+        {{ self.content() }}
+    </main>
+    {% endif %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jquery/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap-table@1.22.1/dist/bootstrap-table.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap-table@1.22.1/dist/locale/bootstrap-table-en-US.min.js"></script>
+
+{% block extra_js %}
+<script>
+function setLanguage(lang) {
+    $.ajax({
+        url: '/admin/set_language',
+        method: 'POST',
+        data: { language: lang },
+        success: function() {
+            location.reload();
+        },
+        error: function() {
+            alert('Failed to switch language');
+        }
+    });
+}
+</script>
+{% endblock %}
 </body>
-</html> 
+</html>

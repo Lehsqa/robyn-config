@@ -1,149 +1,63 @@
 {% extends "admin/base.html" %}
 
+{% block title %}{{ site_title }} | Login{% endblock %}
+
 {% block content %}
-{# 添加一个外层容器用于全屏居中 #}
-<div class="login-container">
-    <div class="container">
-        <div class="row justify-content-center align-items-center min-vh-50">
-            <div class="col-md-6 col-lg-4">
-                <div class="text-center mb-4">
-                    <h2 class="fw-bold text-primary">{{ site_title }}</h2>
-                </div>
-                
-                <div class="card shadow-sm">
-                    <div class="card-body p-4">
-                        <h4 class="card-title text-center mb-4">{{ get_text('login', language) }}</h4>
-                        
-                        {% if error %}
-                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                            {{ error }}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-                        </div>
-                        {% endif %}
-                        
-                        <form method="post">
-                            <div class="mb-3">
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light border-end-0">
-                                        <i class="bi bi-person text-muted"></i>
-                                    </span>
-                                    <input type="text" 
-                                           class="form-control border-start-0 ps-0" 
-                                           id="username" 
-                                           name="username" 
-                                           placeholder="{{ get_text('username', language) }}"
-                                           required>
-                                </div>
-                            </div>
-                            
-                            <div class="mb-4">
-                                <div class="input-group">
-                                    <span class="input-group-text bg-light border-end-0">
-                                        <i class="bi bi-lock text-muted"></i>
-                                    </span>
-                                    <input type="password" 
-                                           class="form-control border-start-0 ps-0" 
-                                           id="password" 
-                                           name="password" 
-                                           placeholder="{{ get_text('password', language) }}"
-                                           required>
-                                </div>
-                            </div>
-                            
-                            <button type="submit" class="btn btn-primary w-100 mb-3">
-                                <i class="bi bi-box-arrow-in-right me-2"></i>
-                                {{ get_text('login', language) }}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-                
-                <div class="text-center mt-4 text-muted small">
-                    {% if copyright %}
-                        <p class="mb-0">{{ copyright }}</p>
-                    {% endif %}
-                </div>
+<div class="w-full max-w-md">
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 bg-surface-light dark:bg-surface-dark shadow-xl p-8">
+        <div class="flex items-center justify-center gap-3 mb-8">
+            <div class="text-primary">
+                <span class="material-symbols-outlined text-[34px]">rocket_launch</span>
+            </div>
+            <div>
+                <h1 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{{ site_title }}</h1>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Sign in to continue</p>
             </div>
         </div>
+
+        {% if error %}
+        <div class="mb-4 rounded-lg border border-rose-300 bg-rose-50 text-rose-700 px-4 py-3 text-sm dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="post" class="space-y-4">
+            <div>
+                <label for="username" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Username</label>
+                <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    required
+                    placeholder="Enter username"
+                    class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30"
+                >
+            </div>
+
+            <div>
+                <label for="password" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Password</label>
+                <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    required
+                    placeholder="Enter password"
+                    class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30"
+                >
+            </div>
+
+            <button
+                type="submit"
+                class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primary/90 transition-colors"
+            >
+                <span class="material-symbols-outlined text-[18px]">login</span>
+                Log in
+            </button>
+        </form>
+
+        {% if copyright %}
+        <p class="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">{{ copyright }}</p>
+        {% endif %}
     </div>
 </div>
-
-<style>
-/* 添加全屏容器样式 */
-.login-container {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: #f8f9fa;  /* 可选: 添加背景色 */
-}
-
-/* 确保内部容器不会超出视窗 */
-.login-container .container {
-    width: 100%;
-    max-width: 100%;
-    margin: 0 auto;
-    padding: 1rem;
-}
-
-/* 其他样式保持不变 */
-.input-group-text {
-    background-color: #f8f9fa;
-    border-right: none;
-}
-
-.form-control {
-    border-left: none;
-}
-
-.form-control:focus {
-    box-shadow: none;
-    border-color: #dee2e6;
-}
-
-.form-control:focus + .input-group-text {
-    border-color: #dee2e6;
-}
-
-.input-group-text i {
-    width: 1rem;
-    text-align: center;
-}
-
-.btn-primary:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    transition: all 0.3s ease;
-}
-
-.card {
-    transition: all 0.3s ease;
-}
-
-.card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 8px 16px rgba(0,0,0,0.1) !important;
-}
-
-.alert {
-    border-radius: 8px;
-    border: none;
-}
-
-/* 响应式调整 */
-@media (max-width: 576px) {
-    .login-container .container {
-        padding: 0 15px;
-    }
-    
-    .card {
-        border-radius: 12px;
-        margin: 0 -15px;
-    }
-}
-</style>
-{% endblock %} 
+{% endblock %}

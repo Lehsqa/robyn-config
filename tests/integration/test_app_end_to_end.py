@@ -22,9 +22,10 @@ COMBINATIONS = [
     ("mvc", "sqlalchemy"),
     ("mvc", "tortoise"),
 ]
-ADMIN_USER_ROUTE = "AdminUserAdmin"
+ADMIN_USER_ROUTE = "UsersTableAdmin"
 ROLE_ROUTE = "RoleAdmin"
 USER_ROLE_ROUTE = "UserRoleAdmin"
+PRODUCT_ROUTE = "ProductTableAdmin"
 
 
 def run_cli_create(destination: Path, design: str, orm: str) -> None:
@@ -333,6 +334,12 @@ def test_generate_app_and_run_endpoints(
                 admin_model_list_response.status_code == 200
             ), f"Admin model list failed: {admin_model_list_response.text}"
 
+            # Test GET /admin/models (models tab)
+            admin_models_tab_response = client.get("/admin/models")
+            assert (
+                admin_models_tab_response.status_code == 200
+            ), f"Admin models tab failed: {admin_models_tab_response.text}"
+
             # Test POST /admin/set_language
             set_language_response = client.post(
                 "/admin/set_language",
@@ -358,6 +365,60 @@ def test_generate_app_and_run_endpoints(
             search_payload = admin_search_response.json()
             assert "data" in search_payload
 
+            run_id = uuid.uuid4().hex[:8]
+
+            # Test autodiscovered model CRUD for ProductTableAdmin
+            products_before_payload = _admin_data(client, PRODUCT_ROUTE)
+            products_before_total = int(products_before_payload["total"])
+
+            admin_product_name = f"admin-product-{run_id}"
+            product_add_response = client.post(
+                f"/admin/{PRODUCT_ROUTE}/add",
+                content=f"name={admin_product_name}",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            assert (
+                product_add_response.status_code == 200
+            ), f"Admin product add failed: {product_add_response.text}"
+
+            products_after_add_payload = _admin_data(client, PRODUCT_ROUTE)
+            assert (
+                int(products_after_add_payload["total"]) == products_before_total + 1
+            )
+            created_product_row = _find_row_by_field(
+                products_after_add_payload["data"], "name", admin_product_name
+            )
+            assert created_product_row is not None, "Created admin product not found"
+            created_product_id = str(created_product_row["data"]["id"])
+
+            edited_admin_product_name = f"{admin_product_name}-edited"
+            product_edit_response = client.post(
+                f"/admin/{PRODUCT_ROUTE}/{created_product_id}/edit",
+                content=f"name={edited_admin_product_name}",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            assert (
+                product_edit_response.status_code == 200
+            ), f"Admin product edit failed: {product_edit_response.text}"
+
+            products_after_edit_payload = _admin_data(client, PRODUCT_ROUTE)
+            edited_product_row = _find_row_by_field(
+                products_after_edit_payload["data"],
+                "name",
+                edited_admin_product_name,
+            )
+            assert edited_product_row is not None, "Edited admin product not found"
+
+            product_delete_response = client.post(
+                f"/admin/{PRODUCT_ROUTE}/{created_product_id}/delete"
+            )
+            assert (
+                product_delete_response.status_code == 200
+            ), f"Admin product delete failed: {product_delete_response.text}"
+
+            products_after_delete_payload = _admin_data(client, PRODUCT_ROUTE)
+            assert int(products_after_delete_payload["total"]) == products_before_total
+
             # Test POST /admin/:route_id/:id/edit (boolean fields)
             admin_edit_response = client.post(
                 f"/admin/{ADMIN_USER_ROUTE}/{admin_id}/edit",
@@ -367,8 +428,6 @@ def test_generate_app_and_run_endpoints(
             assert (
                 admin_edit_response.status_code == 200
             ), f"Admin edit failed: {admin_edit_response.text}"
-
-            run_id = uuid.uuid4().hex[:8]
 
             # Test POST /admin/:route_id/add (single create)
             single_username = f"admin-single-{run_id}"
@@ -474,7 +533,7 @@ def test_generate_app_and_run_endpoints(
                 f"/admin/{ROLE_ROUTE}/add",
                 content=(
                     f"name={role_name}&description=E2E-role"
-                    "&accessible_models=%5B%22AdminUserAdmin%22%5D"
+                    "&accessible_models=%5B%22UsersTableAdmin%22%5D"
                 ),
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
@@ -500,7 +559,10 @@ def test_generate_app_and_run_endpoints(
             }
             user_role_add_response = client.post(
                 f"/admin/{USER_ROLE_ROUTE}/add",
-                content=f"user_id={admin_id}&role_id={created_role_id}",
+                content=(
+                    f"{'user_id' if orm == 'sqlalchemy' else 'user'}={admin_id}&"
+                    f"{'role_id' if orm == 'sqlalchemy' else 'role'}={created_role_id}"
+                ),
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
             )
             assert (
