@@ -3,41 +3,79 @@
 {% block title %}{{ site_title }} | Models{% endblock %}
 
 {% block content %}
-<div class="space-y-6">
-    <div>
-        <h1 class="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Models</h1>
-        <p class="text-sm text-slate-600 dark:text-slate-400">Browse and manage application data models.</p>
+<div class="space-y-8">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <h1 class="text-3xl font-black tracking-tight text-slate-900 dark:text-white">Site administration</h1>
+        <div class="w-full md:w-96">
+            <div class="admin-model-search-shell relative flex items-center w-full bg-white dark:bg-slate-900">
+                <span class="models-search-icon-shell">
+                    <span class="material-symbols-outlined text-slate-400">search</span>
+                </span>
+                <input id="modelsSearch" class="admin-themed-input w-full h-full bg-transparent border-none focus:ring-0 text-sm px-3 text-slate-900 dark:text-white placeholder:text-slate-400" placeholder="Search model or category..." type="text"/>
+            </div>
+        </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {% if models_tab_models %}
-            {% for route_id, model_admin in models_tab_models.items() %}
-            {% set table_label_map = {'users': 'Users', 'robyn_admin_roles': 'Role', 'robyn_admin_user_roles': 'User Role'} %}
-            {% set table_name = model_admin.model.__tablename__ if model_admin.model.__tablename__ is defined else (model_admin.model._meta.db_table if model_admin.model._meta is defined and model_admin.model._meta.db_table is defined else model_admin.verbose_name) %}
-            {% set display_name = table_label_map.get(table_name, table_name) %}
-            <article class="rounded-xl border border-slate-200 dark:border-slate-700 bg-surface-light dark:bg-surface-dark p-5 flex flex-col gap-4">
-                <div>
-                    <h2 class="text-lg font-bold text-slate-900 dark:text-white">{{ display_name }}</h2>
+    {% if model_categories %}
+        <div class="space-y-6">
+            {% for category in model_categories %}
+            <section class="rounded-xl border border-slate-200 dark:border-slate-700 admin-border-soft bg-surface-light dark:bg-surface-dark overflow-hidden" data-category="{{ category.name }}">
+                <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700 admin-border-soft-divider bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
+                    <h2 class="text-lg font-bold text-slate-900 dark:text-white">{{ category.name }}</h2>
+                    <span class="text-xs text-slate-500 dark:text-slate-400">{{ category.models|length }} models</span>
                 </div>
-                <div class="grid grid-cols-2 gap-2 text-xs text-slate-500 dark:text-slate-400">
-                    <div class="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">Add: {% if model_admin.allow_add %}yes{% else %}no{% endif %}</div>
-                    <div class="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">Edit: {% if model_admin.enable_edit %}yes{% else %}no{% endif %}</div>
-                    <div class="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">Delete: {% if model_admin.allow_delete %}yes{% else %}no{% endif %}</div>
-                    <div class="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2">Import: {% if model_admin.allow_import %}yes{% else %}no{% endif %}</div>
+                <div class="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {% for model in category.models %}
+                    <div class="flex items-center justify-between gap-3 px-5 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors group" data-model-name="{{ model.display_name|lower }}">
+                        <a href="/admin/{{ model.route_id }}" class="text-sm font-medium text-primary hover:underline flex-1">
+                            {{ model.display_name }}
+                        </a>
+                        <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            {% if model.model_admin.allow_add %}
+                            <a href="/admin/{{ model.route_id }}" class="px-3 py-1.5 text-xs font-medium rounded bg-primary/10 text-primary hover:bg-primary hover:text-white transition-colors">
+                                Add
+                            </a>
+                            {% endif %}
+                            <a href="/admin/{{ model.route_id }}" class="px-3 py-1.5 text-xs font-medium rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors">
+                                Change
+                            </a>
+                        </div>
+                    </div>
+                    {% endfor %}
                 </div>
-                <div class="mt-auto">
-                    <a href="/admin/{{ route_id }}" class="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition-colors">
-                        Open CRUD view
-                        <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
-                    </a>
-                </div>
-            </article>
+            </section>
             {% endfor %}
-        {% else %}
-            <div class="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-6 text-sm text-slate-500 dark:text-slate-400">
-                No non-user models are available for your current permissions.
-            </div>
-        {% endif %}
-    </div>
+        </div>
+    {% else %}
+        <div class="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40 p-6 text-sm text-slate-500 dark:text-slate-400">
+            No models are available for your current permissions.
+        </div>
+    {% endif %}
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+const modelsSearch = document.getElementById("modelsSearch");
+if (modelsSearch) {
+    modelsSearch.addEventListener("input", function (event) {
+        const query = (event.target.value || "").toLowerCase().trim();
+        const categories = document.querySelectorAll("[data-category]");
+        categories.forEach(function (category) {
+            const categoryName = (category.getAttribute("data-category") || "").toLowerCase();
+            let visibleRows = 0;
+            category.querySelectorAll("[data-model-name]").forEach(function (row) {
+                const modelName = row.getAttribute("data-model-name") || "";
+                const matches = !query || modelName.includes(query) || categoryName.includes(query);
+                row.style.display = matches ? "" : "none";
+                if (matches) {
+                    visibleRows += 1;
+                }
+            });
+            category.style.display = visibleRows > 0 ? "" : "none";
+        });
+    });
+}
+</script>
 {% endblock %}

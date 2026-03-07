@@ -423,14 +423,54 @@ class ModelAdmin:
                 result[field.name] = ""
         return result
 
-    async def process_form_data(self, data: dict[str, Any]) -> dict[str, Any]:
+    async def process_form_data(
+        self,
+        data: dict[str, Any],
+        *,
+        skip_empty_password: bool = False,
+        current_object: Any | None = None,
+    ) -> dict[str, Any]:
         processed_data: dict[str, Any] = {}
         form_fields = await self.get_add_form_fields()
         for field in form_fields:
             if field.name in data:
-                processed_data[field.name] = field.process_value(
-                    data[field.name]
+                field_value = data[field.name]
+                is_password_field = (
+                    field.field_type == DisplayType.PASSWORD
+                    or "password" in str(field.name).lower()
                 )
+                if (
+                    skip_empty_password
+                    and is_password_field
+                    and isinstance(field_value, str)
+                    and field_value.strip() == ""
+                ):
+                    continue
+                if (
+                    skip_empty_password
+                    and is_password_field
+                    and current_object is not None
+                    and isinstance(field_value, str)
+                ):
+                    current_password = getattr(
+                        current_object, field.name, None
+                    )
+                    if (
+                        isinstance(current_password, str)
+                        and field_value == current_password
+                    ):
+                        continue
+                processed_value = field.process_value(field_value)
+                if (
+                    is_password_field
+                    and isinstance(processed_value, str)
+                    and processed_value.strip()
+                    and field.processor is None
+                ):
+                    hash_password = getattr(self.model, "hash_password", None)
+                    if callable(hash_password):
+                        processed_value = hash_password(processed_value)
+                processed_data[field.name] = processed_value
         return processed_data
 
     async def get_filter_fields(self) -> List[FilterField]:
@@ -448,6 +488,7 @@ class ModelAdmin:
         return {
             "tableFields": [field.to_dict() for field in self.table_fields],
             "modelName": self.model.__name__,
+            "pkName": self.pk_name,
             "route_id": self.route_id,
             "pageSize": self.per_page,
             "formFields": [field.to_dict() for field in form_fields],
@@ -496,7 +537,11 @@ class ModelAdmin:
             )
             if not obj:
                 return False, "Record not found"
-            processed = await self.process_form_data(data)
+            processed = await self.process_form_data(
+                data,
+                skip_empty_password=True,
+                current_object=obj,
+            )
             for field, value in processed.items():
                 if field in self._columns:
                     setattr(obj, field, value)
@@ -566,9 +611,9 @@ class ModelAdmin:
         elif self.default_ordering:
             queryset = queryset.order_by(*self.default_ordering)
         total = await queryset.count()
-        queryset = queryset.offset(params.get("offset", 0)).limit(
-            params.get("limit", self.per_page)
-        )
+        offset = max(0, int(params.get("offset", 0)))
+        limit = max(1, int(params.get("limit", self.per_page)))
+        queryset = queryset.offset(offset).limit(limit)
         return queryset, total
 
 

@@ -94,7 +94,7 @@ def _ddd_paths_from_config(project_dir: Path, add_cfg: dict[str, str]) -> dict[s
             "database_repository_path", "src/app/infrastructure/database/repository"
         ),
         "db_tables": project_dir / add_cfg.get(
-            "database_table_path", "src/app/infrastructure/database/table/__init__.py"
+            "database_table_path", "src/app/infrastructure/database/tables/__init__.py"
         ),
     }
 
@@ -104,7 +104,7 @@ def _mvc_paths_from_config(project_dir: Path, add_cfg: dict[str, str]) -> dict[s
         "views": project_dir / add_cfg.get("views_path", "src/app/views"),
         "db_repo": project_dir / add_cfg.get("database_repository_path", "src/app/models/repository.py"),
         "db_tables": project_dir / add_cfg.get(
-            "database_table_path", "src/app/models/table/__init__.py"
+            "database_table_path", "src/app/models/tables/__init__.py"
         ),
         "urls": project_dir / add_cfg.get("urls_path", "src/app/urls.py"),
     }

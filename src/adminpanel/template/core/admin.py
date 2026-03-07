@@ -97,6 +97,7 @@ class ModelAdmin:
         if not hasattr(self, "menu_group") or not self.menu_group:
             self.menu_group = "System Management"
 
+        self.pk_name = getattr(self.model._meta, "pk_attr", "id")
         self._process_fields()
 
         # 初始化内联管理类
@@ -395,7 +396,13 @@ class ModelAdmin:
 
         return result
 
-    async def process_form_data(self, data):
+    async def process_form_data(
+        self,
+        data,
+        *,
+        skip_empty_password: bool = False,
+        current_object=None,
+    ):
         """处理表单数据"""
         processed_data = {}
         form_filds = await self.get_add_form_fields()
@@ -420,7 +427,43 @@ class ModelAdmin:
                 continue
 
             if field.name in data:
-                processed_data[field.name] = field.process_value(data[field.name])
+                field_value = data[field.name]
+                is_password_field = (
+                    field.field_type == DisplayType.PASSWORD
+                    or "password" in str(field.name).lower()
+                )
+                if (
+                    skip_empty_password
+                    and is_password_field
+                    and isinstance(field_value, str)
+                    and field_value.strip() == ""
+                ):
+                    continue
+                if (
+                    skip_empty_password
+                    and is_password_field
+                    and current_object is not None
+                    and isinstance(field_value, str)
+                ):
+                    current_password = getattr(
+                        current_object, field.name, None
+                    )
+                    if (
+                        isinstance(current_password, str)
+                        and field_value == current_password
+                    ):
+                        continue
+                processed_value = field.process_value(field_value)
+                if (
+                    is_password_field
+                    and isinstance(processed_value, str)
+                    and processed_value.strip()
+                    and field.processor is None
+                ):
+                    hash_password = getattr(self.model, "hash_password", None)
+                    if callable(hash_password):
+                        processed_value = hash_password(processed_value)
+                processed_data[field.name] = processed_value
 
         return processed_data
 
@@ -457,6 +500,7 @@ class ModelAdmin:
         config = {
             "tableFields": [field.to_dict() for field in self.table_fields],
             "modelName": self.model.__name__,
+            "pkName": self.pk_name,
             "route_id": self.route_id,
             "pageSize": self.per_page,
             "formFields": [field.to_dict() for field in form_fields],
@@ -596,7 +640,11 @@ class ModelAdmin:
             if not obj:
                 return False, "Record not found"
             # 处理表单数据
-            processed_data = await self.process_form_data(data)
+            processed_data = await self.process_form_data(
+                data,
+                skip_empty_password=True,
+                current_object=obj,
+            )
             # 更新对象
             for field, value in processed_data.items():
                 setattr(obj, field, value)
@@ -717,7 +765,9 @@ class ModelAdmin:
             # 获取总记录数
             total = await queryset.count()
             # 分页
-            queryset = queryset.offset(params["offset"]).limit(params["limit"])
+            limit = max(1, int(params.get("limit", self.per_page)))
+            offset = max(0, int(params.get("offset", 0)))
+            queryset = queryset.offset(offset).limit(limit)
             return queryset, total
 
         except Exception as e:

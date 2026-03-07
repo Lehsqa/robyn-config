@@ -6,7 +6,7 @@ from tortoise.queryset import QuerySet
 from ..schemas import UserFlat, UserUncommitted
 from ..utils import DatabaseError, NotFoundError, UnprocessableError
 from .database import Session
-from .table import ConcreteTable, UsersTable
+from .tables import ConcreteTable, UsersTable
 
 
 class BaseRepository(Session, Generic[ConcreteTable]):

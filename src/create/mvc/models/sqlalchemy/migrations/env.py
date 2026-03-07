@@ -6,7 +6,7 @@ from typing import Mapping
 
 from alembic import context
 from app.config import settings
-from app.models.table import Base
+from app.models.tables import Base
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 

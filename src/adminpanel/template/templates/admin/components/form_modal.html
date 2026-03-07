@@ -265,6 +265,19 @@ async function submitForm() {
     // handle form data
     for(let [key, value] of formData.entries()) {
         const field = formFields.find(f => f.name === key);
+        const isPasswordField =
+            field &&
+            (
+                field.field_type === 'password' ||
+                String(field.name || '').toLowerCase().includes('password')
+            );
+        if (
+            action === 'edit' &&
+            isPasswordField &&
+            String(value || '').trim() === ''
+        ) {
+            continue;
+        }
         if (field && field.field_type === 'json') {
             try {
                 // validate JSON format

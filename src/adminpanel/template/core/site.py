@@ -1,6 +1,8 @@
-from typing import Type, Optional, Dict, List, Union
+from typing import Any, Type, Optional, Dict, List, Union
 from types import ModuleType
-from tortoise import Model, Tortoise
+import asyncio
+from tortoise import Model, Tortoise, connections
+from tortoise.exceptions import IntegrityError as TortoiseIntegrityError
 from robyn import Robyn, Request, Response, jsonify
 from robyn.templating import JinjaTemplate
 from pathlib import Path
@@ -15,7 +17,7 @@ import hashlib
 import base64
 import atexit
 
-from ..auth_models import AdminUser, Role, UserRole
+from ..auth_models import AdminUser, UserRole
 from .admin import ModelAdmin
 from .menu import MenuManager, MenuItem
 from typing import Callable
@@ -23,8 +25,6 @@ from typing import Callable
 
 class AdminSite:
     """Admin站点主类"""
-    INTERNAL_AUTH_ROUTE_IDS = {"AdminUserAdmin", "RoleAdmin", "UserRoleAdmin"}
-    USERS_TAB_TABLE_NAMES = {"users", "robyn_admin_roles", "robyn_admin_user_roles"}
 
     def __init__(
         self,
@@ -59,6 +59,8 @@ class AdminSite:
         self.default_language = default_language
         self.default_admin_username = default_admin_username
         self.default_admin_password = default_admin_password
+        self._default_admin_initialized = False
+        self._default_admin_init_lock = asyncio.Lock()
         self.menu_manager = MenuManager()
         self.copyright = copyright  # 添加版权属性
         self.startup_function = startup_function
@@ -117,44 +119,76 @@ class AdminSite:
             return db_table
         return ""
 
-    def _is_user_model(self, route_id: str, model_admin: ModelAdmin) -> bool:
-        table_name = self._get_model_table_name(model_admin).lower()
-        return bool(table_name) and (
-            table_name.endswith("users")
-            or table_name in self.USERS_TAB_TABLE_NAMES
+    def _get_model_source_filename(self, model_admin: ModelAdmin) -> str:
+        model = getattr(model_admin, "model", None)
+        module_name = getattr(model, "__module__", "")
+        if not isinstance(module_name, str) or not module_name:
+            return "Models"
+
+        module_parts = module_name.split(".")
+        file_name = module_parts[-1]
+        if file_name == "__init__" and len(module_parts) > 1:
+            file_name = module_parts[-2]
+        return self._format_label(file_name or "models", pluralize=True)
+
+    @staticmethod
+    def _pluralize_word(word: str) -> str:
+        lower_word = word.lower()
+        if lower_word.endswith("s"):
+            return word
+        if lower_word.endswith(("x", "z", "ch", "sh")):
+            return f"{word}es"
+        if (
+            lower_word.endswith("y")
+            and len(lower_word) > 1
+            and lower_word[-2] not in {"a", "e", "i", "o", "u"}
+        ):
+            return f"{word[:-1]}ies"
+        return f"{word}s"
+
+    def _format_label(self, raw_value: str, pluralize: bool) -> str:
+        normalized = raw_value.strip().replace("-", "_").replace(" ", "_")
+        parts = [part for part in normalized.split("_") if part]
+        if not parts:
+            return "Models" if pluralize else "Model"
+
+        if pluralize:
+            parts[-1] = self._pluralize_word(parts[-1])
+
+        return " ".join(part.capitalize() for part in parts)
+
+    def _get_model_display_name(self, model_admin: ModelAdmin) -> str:
+        table_name = self._get_model_table_name(model_admin)
+        if table_name:
+            return self._format_label(table_name, pluralize=False)
+        return self._format_label(
+            str(model_admin.verbose_name), pluralize=False
         )
 
-    def _prefer_route_for_same_table(
-        self, current_route_id: str, candidate_route_id: str
-    ) -> bool:
-        current_is_internal = current_route_id in self.INTERNAL_AUTH_ROUTE_IDS
-        candidate_is_internal = candidate_route_id in self.INTERNAL_AUTH_ROUTE_IDS
-        if current_is_internal and not candidate_is_internal:
-            return True
-        return False
-
-    def _split_models_by_tab(
+    def _build_model_categories(
         self, visible_models: Dict[str, ModelAdmin]
-    ) -> tuple[Dict[str, ModelAdmin], Dict[str, ModelAdmin]]:
-        users_models: Dict[str, ModelAdmin] = {}
-        other_models: Dict[str, ModelAdmin] = {}
-        users_route_by_table: Dict[str, str] = {}
+    ) -> List[Dict[str, object]]:
+        grouped: Dict[str, List[Dict[str, object]]] = {}
         for route_id, model_admin in visible_models.items():
-            if self._is_user_model(route_id, model_admin):
-                table_key = self._get_model_table_name(model_admin).lower() or route_id
-                existing_route_id = users_route_by_table.get(table_key)
-                if existing_route_id is None:
-                    users_route_by_table[table_key] = route_id
-                    users_models[route_id] = model_admin
-                elif self._prefer_route_for_same_table(
-                    existing_route_id, route_id
-                ):
-                    users_models.pop(existing_route_id, None)
-                    users_route_by_table[table_key] = route_id
-                    users_models[route_id] = model_admin
-            else:
-                other_models[route_id] = model_admin
-        return users_models, other_models
+            category_name = self._get_model_source_filename(model_admin)
+            grouped.setdefault(category_name, []).append(
+                {
+                    "route_id": route_id,
+                    "model_admin": model_admin,
+                    "display_name": self._get_model_display_name(model_admin),
+                }
+            )
+
+        categories: List[Dict[str, object]] = []
+        for category_name in sorted(grouped.keys()):
+            models_in_category = sorted(
+                grouped[category_name],
+                key=lambda item: str(item["display_name"]).lower(),
+            )
+            categories.append(
+                {"name": category_name, "models": models_in_category}
+            )
+        return categories
 
     def _record_action(
         self,
@@ -165,7 +199,9 @@ class AdminSite:
     ) -> None:
         self.recent_actions.append(
             {
-                "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "timestamp": datetime.utcnow().strftime(
+                    "%Y-%m-%d %H:%M:%S UTC"
+                ),
                 "username": username or "system",
                 "action": action,
                 "target": target,
@@ -173,7 +209,9 @@ class AdminSite:
             }
         )
         if len(self.recent_actions) > self.max_recent_actions:
-            self.recent_actions = self.recent_actions[-self.max_recent_actions :]
+            self.recent_actions = self.recent_actions[
+                -self.max_recent_actions :
+            ]
 
     def _get_admin_settings(self, request: Request) -> Dict[str, object]:
         settings = dict(self.default_settings)
@@ -229,8 +267,13 @@ class AdminSite:
             return [f"Log file does not exist: {resolved_path}"], resolved_path
 
         try:
-            with candidate.open("r", encoding="utf-8", errors="replace") as handle:
-                lines = [line.rstrip("\n") for line in deque(handle, maxlen=max_lines)]
+            with candidate.open(
+                "r", encoding="utf-8", errors="replace"
+            ) as handle:
+                lines = [
+                    line.rstrip("\n")
+                    for line in deque(handle, maxlen=max_lines)
+                ]
             if not lines:
                 return ["Log file is empty."], resolved_path
             return lines, resolved_path
@@ -324,14 +367,46 @@ class AdminSite:
                     await Tortoise.generate_schemas()
                     print("Database schemas generated successfully")
 
-                # 触发信号来创建管理员账号
-                try:
-                    # 检查是否已存在管理员账号
+                await self._ensure_default_admin()
+
+                if self.startup_function:
+                    await self.startup_function()
+
+            except Exception as e:
+                print(f"Error in database initialization: {str(e)}")
+                traceback.print_exc()
+                raise
+
+    async def _ensure_default_admin(self):
+        if self._default_admin_initialized:
+            return
+
+        async with self._default_admin_init_lock:
+            if self._default_admin_initialized:
+                return
+
+            advisory_lock_acquired = False
+            advisory_lock_id = 193384911
+            db_url = str(self.db_url or "").strip().lower()
+            using_postgres = db_url.startswith("postgres")
+            try:
+                if using_postgres:
+                    connection = connections.get("default")
+                    await connection.execute_query(
+                        f"SELECT pg_advisory_lock({advisory_lock_id})"
+                    )
+                    advisory_lock_acquired = True
+
+                existing_admin = await AdminUser.filter(
+                    username=self.default_admin_username
+                ).first()
+                if not existing_admin:
                     existing_admin = await AdminUser.filter(
-                        username=self.default_admin_username
+                        email="admin@example.com"
                     ).first()
-                    if not existing_admin:
-                        print("Creating default admin user...")
+                if not existing_admin:
+                    print("Creating default admin user...")
+                    try:
                         await AdminUser.create(
                             username=self.default_admin_username,
                             password=AdminUser.hash_password(
@@ -342,17 +417,24 @@ class AdminSite:
                             is_active=True,
                         )
                         print("Default admin user created successfully")
-                except Exception as e:
-                    print(f"Error creating admin user: {str(e)}")
-                    traceback.print_exc()
-
-                if self.startup_function:
-                    await self.startup_function()
-
+                    except TortoiseIntegrityError:
+                        # Another process created the same default admin
+                        # concurrently. Treat as success.
+                        pass
+                self._default_admin_initialized = True
             except Exception as e:
-                print(f"Error in database initialization: {str(e)}")
+                print(f"Error creating admin user: {str(e)}")
                 traceback.print_exc()
                 raise
+            finally:
+                if advisory_lock_acquired:
+                    try:
+                        connection = connections.get("default")
+                        await connection.execute_query(
+                            f"SELECT pg_advisory_unlock({advisory_lock_id})"
+                        )
+                    except Exception:
+                        pass
 
     def _setup_routes(self):
         """设置路由"""
@@ -370,7 +452,7 @@ class AdminSite:
             language = await self._get_language(request)
             settings = self._get_admin_settings(request)
             filtered_models = await self._get_visible_models(request)
-            users_models, other_models = self._split_models_by_tab(filtered_models)
+            model_categories = self._build_model_categories(filtered_models)
             recent_actions = list(reversed(self.recent_actions[-20:]))
             log_lines, resolved_log_path = self._read_log_lines(
                 str(settings["log_file_path"]),
@@ -380,8 +462,7 @@ class AdminSite:
             context = {
                 "site_title": self.title,
                 "models": filtered_models,
-                "users_models": users_models,
-                "models_tab_models": other_models,
+                "model_categories": model_categories,
                 "user": user,
                 "language": language,
                 "copyright": self.copyright,
@@ -393,35 +474,6 @@ class AdminSite:
             }
             return self.jinja_template.render_template(
                 "admin/index.html", **context
-            )
-
-        @self.app.get(f"/{self.prefix}/users")
-        async def users_index(request: Request):
-            user = await self._get_current_user(request)
-            if not user:
-                return Response(
-                    status_code=307,
-                    description="Location login page",
-                    headers={"Location": f"/{self.prefix}/login"},
-                )
-
-            language = await self._get_language(request)
-            settings = self._get_admin_settings(request)
-            filtered_models = await self._get_visible_models(request)
-            users_models, other_models = self._split_models_by_tab(filtered_models)
-            context = {
-                "site_title": self.title,
-                "models": filtered_models,
-                "users_models": users_models,
-                "models_tab_models": other_models,
-                "user": user,
-                "language": language,
-                "copyright": self.copyright,
-                "active_tab": "users",
-                "admin_settings": settings,
-            }
-            return self.jinja_template.render_template(
-                "admin/users.html", **context
             )
 
         @self.app.get(f"/{self.prefix}/models")
@@ -437,12 +489,11 @@ class AdminSite:
             language = await self._get_language(request)
             settings = self._get_admin_settings(request)
             filtered_models = await self._get_visible_models(request)
-            users_models, other_models = self._split_models_by_tab(filtered_models)
+            model_categories = self._build_model_categories(filtered_models)
             context = {
                 "site_title": self.title,
                 "models": filtered_models,
-                "users_models": users_models,
-                "models_tab_models": other_models,
+                "model_categories": model_categories,
                 "user": user,
                 "language": language,
                 "copyright": self.copyright,
@@ -451,6 +502,21 @@ class AdminSite:
             }
             return self.jinja_template.render_template(
                 "admin/models.html", **context
+            )
+
+        @self.app.get(f"/{self.prefix}/users")
+        async def users_alias(request: Request):
+            user = await self._get_current_user(request)
+            if not user:
+                return Response(
+                    status_code=307,
+                    description="Location login page",
+                    headers={"Location": f"/{self.prefix}/login"},
+                )
+            return Response(
+                status_code=303,
+                description="Users tab moved to models",
+                headers={"Location": f"/{self.prefix}/models"},
             )
 
         @self.app.get(f"/{self.prefix}/settings")
@@ -466,12 +532,11 @@ class AdminSite:
             language = await self._get_language(request)
             settings = self._get_admin_settings(request)
             filtered_models = await self._get_visible_models(request)
-            users_models, other_models = self._split_models_by_tab(filtered_models)
+            model_categories = self._build_model_categories(filtered_models)
             context = {
                 "site_title": self.title,
                 "models": filtered_models,
-                "users_models": users_models,
-                "models_tab_models": other_models,
+                "model_categories": model_categories,
                 "user": user,
                 "language": language,
                 "copyright": self.copyright,
@@ -533,7 +598,9 @@ class AdminSite:
                 description="Settings saved",
                 headers={
                     "Location": f"/{self.prefix}/settings",
-                    "Set-Cookie": self._build_settings_cookie(updated_settings),
+                    "Set-Cookie": self._build_settings_cookie(
+                        updated_settings
+                    ),
                 },
             )
 
@@ -728,6 +795,13 @@ class AdminSite:
                         description="Not logged in",
                     )
 
+                if route_id == "users":
+                    return Response(
+                        status_code=303,
+                        headers={"Location": f"/{self.prefix}/models"},
+                        description="Users tab moved to models",
+                    )
+
                 language = await self._get_language(request)
 
                 if not await self.check_permission(request, route_id, "view"):
@@ -753,23 +827,22 @@ class AdminSite:
 
                 settings = self._get_admin_settings(request)
                 filtered_models = await self._get_visible_models(request)
-                users_models, other_models = self._split_models_by_tab(filtered_models)
-                active_tab = (
-                    "users" if self._is_user_model(route_id, model_admin) else "models"
+                model_categories = self._build_model_categories(
+                    filtered_models
                 )
+                display_name = self._get_model_display_name(model_admin)
 
                 context = {
                     "site_title": self.title,
                     "models": filtered_models,
-                    "users_models": users_models,
-                    "models_tab_models": other_models,
+                    "model_categories": model_categories,
                     "user": user,
                     "language": language,
                     "current_model": route_id,
-                    "verbose_name": model_admin.verbose_name,
+                    "verbose_name": display_name,
                     "frontend_config": frontend_config,
                     "copyright": self.copyright,
-                    "active_tab": active_tab,
+                    "active_tab": "models",
                     "admin_settings": settings,
                 }
                 return self.jinja_template.render_template(
@@ -783,6 +856,175 @@ class AdminSite:
                     status_code=500,
                     headers={"Content-Type": "text/html"},
                     description=f"Failed to load list page: {str(e)}",
+                )
+
+        @self.app.get(f"/{self.prefix}/:route_id/add")
+        async def model_add(request: Request):
+            try:
+                route_id: str = request.path_params.get("route_id")
+                user = await self._get_current_user(request)
+                if not user:
+                    return Response(
+                        status_code=303,
+                        headers={"Location": f"/{self.prefix}/login"},
+                        description="Not logged in",
+                    )
+
+                model_admin = self.get_model_admin(route_id)
+                if not model_admin:
+                    return Response(
+                        status_code=404,
+                        headers={"Content-Type": "text/html"},
+                        description="model not found",
+                    )
+
+                if not await self.check_permission(request, route_id, "add"):
+                    return Response(
+                        status_code=403,
+                        headers={"Content-Type": "text/html"},
+                        description="No create permission",
+                    )
+
+                language = await self._get_language(request)
+                form_fields = [
+                    field.to_dict()
+                    for field in await model_admin.get_form_fields()
+                ]
+                can_add = (
+                    model_admin.allow_add
+                    and await self.check_permission(request, route_id, "add")
+                )
+
+                settings = self._get_admin_settings(request)
+                filtered_models = await self._get_visible_models(request)
+                model_categories = self._build_model_categories(
+                    filtered_models
+                )
+                display_name = self._get_model_display_name(model_admin)
+                context = {
+                    "site_title": self.title,
+                    "models": filtered_models,
+                    "model_categories": model_categories,
+                    "user": user,
+                    "language": language,
+                    "current_model": route_id,
+                    "verbose_name": display_name,
+                    "route_id": route_id,
+                    "object_id": "",
+                    "form_fields": form_fields,
+                    "form_data": {},
+                    "can_edit": can_add,
+                    "can_delete": False,
+                    "is_add_mode": True,
+                    "copyright": self.copyright,
+                    "active_tab": "models",
+                    "admin_settings": settings,
+                }
+                return self.jinja_template.render_template(
+                    "admin/model_change.html", **context
+                )
+            except Exception as e:
+                print(f"Error in model_add: {str(e)}")
+                traceback.print_exc()
+                return Response(
+                    status_code=500,
+                    headers={"Content-Type": "text/html"},
+                    description=f"Failed to load add page: {str(e)}",
+                )
+
+        @self.app.get(f"/{self.prefix}/:route_id/:id/change")
+        async def model_change(request: Request):
+            try:
+                route_id: str = request.path_params.get("route_id")
+                object_id: str = unquote(
+                    str(request.path_params.get("id", ""))
+                )
+                user = await self._get_current_user(request)
+                if not user:
+                    return Response(
+                        status_code=303,
+                        headers={"Location": f"/{self.prefix}/login"},
+                        description="Not logged in",
+                    )
+
+                if not await self.check_permission(request, route_id, "view"):
+                    return Response(
+                        status_code=403,
+                        headers={"Content-Type": "text/html"},
+                        description="Permission denied",
+                    )
+
+                model_admin = self.get_model_admin(route_id)
+                if not model_admin:
+                    return Response(
+                        status_code=404,
+                        headers={"Content-Type": "text/html"},
+                        description="model not found",
+                    )
+
+                obj = await model_admin.get_object(object_id)
+                if not obj:
+                    return Response(
+                        status_code=404,
+                        headers={"Content-Type": "text/html"},
+                        description="Record not found",
+                    )
+
+                language = await self._get_language(request)
+                form_fields = [
+                    field.to_dict()
+                    for field in await model_admin.get_form_fields()
+                ]
+                form_data = await model_admin.serialize_object(
+                    obj, for_display=False
+                )
+
+                settings = self._get_admin_settings(request)
+                filtered_models = await self._get_visible_models(request)
+                model_categories = self._build_model_categories(
+                    filtered_models
+                )
+                display_name = self._get_model_display_name(model_admin)
+                can_edit = (
+                    model_admin.enable_edit
+                    and await self.check_permission(request, route_id, "edit")
+                )
+                can_delete = (
+                    model_admin.allow_delete
+                    and await self.check_permission(
+                        request, route_id, "delete"
+                    )
+                )
+
+                context = {
+                    "site_title": self.title,
+                    "models": filtered_models,
+                    "model_categories": model_categories,
+                    "user": user,
+                    "language": language,
+                    "current_model": route_id,
+                    "verbose_name": display_name,
+                    "route_id": route_id,
+                    "object_id": object_id,
+                    "form_fields": form_fields,
+                    "form_data": form_data,
+                    "can_edit": can_edit,
+                    "can_delete": can_delete,
+                    "is_add_mode": False,
+                    "copyright": self.copyright,
+                    "active_tab": "models",
+                    "admin_settings": settings,
+                }
+                return self.jinja_template.render_template(
+                    "admin/model_change.html", **context
+                )
+            except Exception as e:
+                print(f"Error in model_change: {str(e)}")
+                traceback.print_exc()
+                return Response(
+                    status_code=500,
+                    headers={"Content-Type": "text/html"},
+                    description=f"Failed to load change page: {str(e)}",
                 )
 
         @self.app.post(f"/{self.prefix}/:route_id/add")
@@ -992,11 +1234,15 @@ class AdminSite:
                 # 解析查询参数
                 params: dict = request.query_params.to_dict()
                 query_params = {
-                    "limit": int(params.get("limit", ["10"])[0]),
-                    "offset": int(params.get("offset", ["0"])[0]),
-                    "search": params.get("search", [""])[0],
-                    "sort": params.get("sort", [""])[0],
-                    "order": params.get("order", ["asc"])[0],
+                    "limit": max(
+                        1, _to_int(_first_value(params.get("limit"), 10), 10)
+                    ),
+                    "offset": max(
+                        0, _to_int(_first_value(params.get("offset"), 0), 0)
+                    ),
+                    "search": _first_value(params.get("search"), ""),
+                    "sort": _first_value(params.get("sort"), ""),
+                    "order": _first_value(params.get("order"), "asc"),
                 }
 
                 # 添加其他过滤参数
@@ -1009,7 +1255,7 @@ class AdminSite:
                         "order",
                         "_",
                     ]:
-                        query_params[key] = value[0]
+                        query_params[key] = _first_value(value)
 
                 # 调用模型管理类的处理方法
                 queryset, total = await model_admin.handle_query(
@@ -1259,12 +1505,12 @@ class AdminSite:
                     )
 
                 params: dict = request.query_params.to_dict()
-                parent_id = params.get("parent_id", [""])[0]
-                inline_model = params.get("inline_model", [""])[0]
+                parent_id = _first_value(params.get("parent_id"), "")
+                inline_model = _first_value(params.get("inline_model"), "")
 
                 # 获取排序参数
-                sort_field = params.get("sort", [""])[0]
-                sort_order = params.get("order", ["asc"])[0]
+                sort_field = _first_value(params.get("sort"), "")
+                sort_order = _first_value(params.get("order"), "asc")
 
                 if not parent_id or not inline_model:
                     return jsonify({"error": "Missing parameters"})
@@ -1687,3 +1933,18 @@ def _encode_cookie_payload(payload: str) -> str:
 def _decode_cookie_payload(encoded: str) -> str:
     padding = "=" * (-len(encoded) % 4)
     return base64.urlsafe_b64decode(f"{encoded}{padding}".encode()).decode()
+
+
+def _first_value(value: Any, default: Any = None) -> Any:
+    if isinstance(value, list):
+        return value[0] if value else default
+    if value is None:
+        return default
+    return value
+
+
+def _to_int(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default

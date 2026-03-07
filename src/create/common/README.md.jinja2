@@ -219,9 +219,14 @@ Useful Makefile commands:
 If you run inside Docker, execute the same commands through `docker compose exec app ...`.
 
 Environment variables are passed to the container via `SETTINGS__*` prefixes so the app
-picks up the correct infra hosts/ports. Logs are written via Loguru to `logs/robyn_app.log`
-inside the container, and the default Compose file stores `/app/logs` in a named Docker
-volume (`app-logs`) to avoid host permission issues.
+picks up the correct infra hosts/ports. Logs are always emitted to stderr, so:
+
+- local runs show logs directly in your terminal
+- Docker runs show logs via `docker compose logs -f app`
+
+By default, logs are also written via Loguru to `logs/app.log` inside the container (stored
+in the `app-logs` Docker volume). Set `SETTINGS__LOGGING__FILE=` (empty value) to disable
+file logging and keep stream-only logs.
 
 Use `docker compose logs -f app` for streaming logs. If you prefer host-visible log files,
 replace `app-logs:/app/logs` with `./logs:/app/logs` in `docker-compose.yml` and ensure the

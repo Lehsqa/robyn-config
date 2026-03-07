@@ -1,19 +1,15 @@
-{# 表格组件 #}
-{% if filters %}
-    {% include "admin/components/filter_panel.html" %}
-{% endif %}
-<div class="card">
-    <div class="card-body mb-4">
-        <div id="toolbar" class="mb-3"></div>
-        <div class="table-responsive">
-            <table id="dataTable"></table>
-        </div>
+{# Table component #}
+<div class="rounded-xl border border-slate-200 dark:border-slate-700 admin-border-soft bg-surface-light dark:bg-surface-dark shadow-sm">
+    <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-700 admin-border-soft-divider bg-slate-50/70 dark:bg-slate-900/30">
+        <div id="toolbar" class="flex flex-wrap items-center gap-2"></div>
+    </div>
+    <div class="table-responsive overflow-x-auto">
+        <table id="dataTable"></table>
     </div>
 </div>
 
 {% macro table_scripts() %}
 <script>
-// 只保留功能相关的翻译
 var translations = {
     selected_items: "{{ get_text('selected_items', language) }}",
     clear_selection: "{{ get_text('clear_selection', language) }}",
@@ -31,139 +27,14 @@ var translations = {
     batch_delete: "{{ get_text('batch_delete', language) }}",
     export: "{{ get_text('export', language) }}",
     import: "{{ get_text('import', language) }}",
-    operation: "{{ get_text('operation', language) }}",
-    row_delete: "{{ get_text('row_delete', language) }}",
 };
 console.log('Translations:', translations);
 function renderToolbar() {
     var $toolbar = $('#toolbar');
-    var config = window.serverConfig;
-    console.log('Rendering toolbar with full config:', config);
-    console.log('Allow add:', config.allowAdd);
-    console.log('Allow delete:', config.allowDelete);
-    console.log('Allow export:', config.allowExport);
-    console.log('Allow import:', config.allowImport);
-    
-    var buttons = [];
-    
-    // 添加按钮
-    if (config.allowAdd) {
-        console.log('Adding add button');
-        buttons.push(`
-            <button class="btn btn-primary" onclick="showFormModal('add')">
-                <i class="bi bi-plus-lg"></i> ${translations.add || 'Add'}
-            </button>
-        `);
+    if (!$toolbar.length) {
+        return;
     }
-    
-    // 导入按钮
-    if (config.allowImport) {
-        console.log('Adding import button');
-        buttons.push(`
-            <button class="btn btn-success" onclick="showImportModal()">
-                <i class="bi bi-upload"></i> ${translations.import || 'Import'}
-            </button>
-        `);
-    }
-    
-    // 批量删除按钮
-    if (config.allowDelete) {
-        console.log('Adding delete button');
-        buttons.push(`
-            <button id="batchDelete" class="btn btn-danger" disabled>
-                <i class="bi bi-trash"></i> ${translations.batch_delete || 'Batch Delete'}
-            </button>
-        `);
-    }
-    
-    // 导出按钮
-    if (config.allowExport) {
-        buttons.push(`
-            <div class="btn-group">
-                <button id="exportBtn" class="btn btn-success">
-                    <i class="bi bi-download"></i> ${translations.export || 'Export'}
-                </button>
-                <button type="button" class="btn btn-success dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
-                    <span class="visually-hidden">Toggle Dropdown</span>
-                </button>
-                <ul class="dropdown-menu">
-                    <li><a class="dropdown-item" href="#" onclick="exportData('all')">
-                        ${translations.export_current || 'Export current page'}
-                    </a></li>
-                    <li><a class="dropdown-item" href="#" onclick="exportData('selected')">
-                        ${translations.export_selected || 'Export selected'}
-                    </a></li>
-                </ul>
-            </div>
-        `);
-    }
-    
-    // 渲按钮
-    $toolbar.empty().append(buttons.join(''));
-}
-
-// 初始化滤器功能
-function initializeFilter($table) {
-    // 处理过滤表单提交
-    $('#filterForm').on('submit', function(e) {
-        e.preventDefault();
-        
-        // 收集滤条件
-        var filterData = {};
-        
-        // 遍历所有过滤字段
-        $('.filter-field').each(function() {
-            var $field = $(this);
-            var name = $field.attr('name');
-            var value = $field.val();
-            
-            // 如果字段有值才添加到过滤条件中
-            if (value) {
-                filterData[name] = value;
-            }
-        });
-        
-        // 获取当前的查询参数
-        var options = $table.bootstrapTable('getOptions');
-        
-        // 合并现有参数和过滤参数
-        var params = {
-            limit: options.pageSize,
-            offset: 0,  // 重置到第一页
-            search: options.searchText || '',
-            sort: options.sortName,
-            order: options.sortOrder,
-            ...filterData  // 添加过滤参数
-        };
-        
-        // 刷新表格
-        $table.bootstrapTable('refreshOptions', {
-            pageNumber: 1,  // 重置到第一页
-            queryParams: function(p) {
-                return { ...p, ...params };
-            }
-        });
-    });
-    
-    // 处理重置按钮
-    $('#filterForm button[type="reset"]').on('click', function() {
-        // 清空所有输入框和选择框
-        $('.filter-field').val('');
-        
-        // 重置表格查询参数
-        $table.bootstrapTable('refreshOptions', {
-            pageNumber: 1,
-            queryParams: function(p) {
-                return {
-                    limit: p.limit,
-                    offset: p.offset,
-                    search: p.search,
-                    sort: p.sort,
-                    order: p.order
-                };
-            }
-        });
-    });
+    $toolbar.empty();
 }
 
 $(document).ready(function() {
@@ -176,17 +47,149 @@ $(document).ready(function() {
     console.log('Table config:', config);
     console.log('Inlines:', config.inlines);
     
-    // 确保在获取到配置后再渲染工具栏
     renderToolbar();
+    const primaryKeyField = String(config.pkName || 'id');
+    const primaryKeyFieldLower = primaryKeyField.toLowerCase();
+    const selectedRows = new Map();
+    let $table = null;
+
+    function getRowId(row) {
+        if (!row || row[primaryKeyField] === undefined || row[primaryKeyField] === null) {
+            return null;
+        }
+        return String(row[primaryKeyField]);
+    }
+
+    function addSelectedRows(rows) {
+        if (!Array.isArray(rows)) {
+            return;
+        }
+        rows.forEach(function(row) {
+            const rowId = getRowId(row);
+            if (rowId !== null) {
+                selectedRows.set(rowId, row);
+            }
+        });
+    }
+
+    function removeSelectedRows(rows) {
+        if (!Array.isArray(rows)) {
+            return;
+        }
+        rows.forEach(function(row) {
+            const rowId = getRowId(row);
+            if (rowId !== null) {
+                selectedRows.delete(rowId);
+            }
+        });
+    }
+
+    function syncCurrentPageSelectionCache() {
+        if (!$table) {
+            return;
+        }
+        const currentPageRows =
+            $table.bootstrapTable('getData', { useCurrentPage: true }) || [];
+        const currentPageIds = new Set();
+        currentPageRows.forEach(function(row) {
+            const rowId = getRowId(row);
+            if (rowId !== null) {
+                currentPageIds.add(rowId);
+            }
+        });
+
+        currentPageIds.forEach(function(rowId) {
+            selectedRows.delete(rowId);
+        });
+
+        const selectedOnPage = $table.bootstrapTable('getSelections') || [];
+        selectedOnPage.forEach(function(row) {
+            const rowId = getRowId(row);
+            if (rowId !== null) {
+                selectedRows.set(rowId, row);
+            }
+        });
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function getFieldPriority(field) {
+        const fieldName = String(field.name || '').toLowerCase();
+        const fieldType = String(field.field_type || '').toLowerCase();
+        const displayType = String(field.display_type || '').toLowerCase();
+        const isDateTimeField = (
+            ['datetime', 'date', 'time'].includes(fieldType) ||
+            ['datetime', 'date', 'time'].includes(displayType) ||
+            fieldName.endsWith('_at')
+        );
+
+        if (fieldName === primaryKeyFieldLower || fieldName === 'id') {
+            return 0;
+        }
+        if (isDateTimeField) {
+            return 2;
+        }
+        return 1;
+    }
+
+    const orderedFields = (config.tableFields || [])
+        .map((field, index) => ({ field, index }))
+        .sort((left, right) => {
+            const leftPriority = getFieldPriority(left.field);
+            const rightPriority = getFieldPriority(right.field);
+            if (leftPriority !== rightPriority) {
+                return leftPriority - rightPriority;
+            }
+            return left.index - right.index;
+        })
+        .map(item => item.field);
 
     // 构建表格列配置
     var columns = [{checkbox: true}];
-    config.tableFields.forEach(function(field) {
+    orderedFields.forEach(function(field) {
         if (!field.hidden) {
             var column = {
                 field: field.name,
                 title: field.label,
                 formatter: function(value, row) {
+                    const isPasswordField = (
+                        field.field_type === 'password' ||
+                        field.display_type === 'password' ||
+                        String(field.name || '').toLowerCase().includes('password')
+                    );
+                    if (isPasswordField) {
+                        const rawPassword = (
+                            row.data && row.data[field.name] !== undefined
+                        ) ? row.data[field.name] : value;
+                        return rawPassword ? '••••••••' : '';
+                    }
+
+                    const isPrimaryKeyColumn =
+                        String(field.name || '').toLowerCase() === primaryKeyFieldLower;
+                    if (isPrimaryKeyColumn) {
+                        const rawId = (
+                            row[primaryKeyField] !== undefined
+                                ? row[primaryKeyField]
+                                : (
+                                    row.data && row.data[primaryKeyField] !== undefined
+                                        ? row.data[primaryKeyField]
+                                        : value
+                                )
+                        );
+                        if (rawId !== undefined && rawId !== null && rawId !== '') {
+                            const safeId = escapeHtml(rawId);
+                            const encodedId = encodeURIComponent(String(rawId));
+                            return `<a class="admin-row-link" href="/admin/${config.route_id}/${encodedId}/change">${safeId}</a>`;
+                        }
+                    }
+
                     // 处理 switch 类型
                     if (field.display_type === 'switch') {
                         // 确定当前值是否为"开启"状态
@@ -258,102 +261,6 @@ $(document).ready(function() {
         }
     });
 
-    // 只有在 enableEdit 或 allowDelete 为 true 时才添加操作列
-    if (config.enableEdit || config.allowDelete || config.inlines) {
-        columns.push({
-            field: 'operate',
-            title: translations.operation,
-            width: 150,
-            formatter: function(value, row) {
-                try {
-                    // 获取完整的行数据
-                    const rowData = row.data || row;
-                    const id = rowData.id;
-                    
-                    // 创建一个新对象来存储处理后的数据
-                    const safeData = {};
-                    
-                    // 遍历所有字段
-                    Object.keys(rowData).forEach(key => {
-                        if (key === 'display') return; // 跳过 display 字段
-                        
-                        let value = rowData[key];
-                        if (value === null || value === undefined) {
-                            safeData[key] = '';
-                            return;
-                        }
-                        
-                        // 检查是否为 JSON 字段
-                        const field = config.tableFields.find(f => f.name === key);
-                        if (field && field.display_type === 'json') {
-                            // 如果已经是字符串形式，检查是否为有效的 JSON
-                            if (typeof value === 'string') {
-                                try {
-                                    JSON.parse(value); // 验证 JSON 格式
-                                    safeData[key] = value;
-                                } catch (e) {
-                                    safeData[key] = '[]';
-                                }
-                            } else if (Array.isArray(value)) {
-                                // 如果是数组，转换为字符串
-                                safeData[key] = JSON.stringify(value);
-                            } else if (typeof value === 'object') {
-                                // 如果是对象，转换为字符串
-                                safeData[key] = JSON.stringify(value);
-                            } else {
-                                safeData[key] = '[]';
-                            }
-                        } else {
-                            // 非 JSON 字段直接赋值
-                            safeData[key] = value;
-                        }
-                    });
-                    
-                    // 打印处理后的数据用于调试
-                    console.log('Row data for ID ' + id + ':', safeData);
-                    
-                    // 编码数据
-                    const encodedData = encodeURIComponent(JSON.stringify(safeData));
-                    
-                    let buttons = [];
-                    
-                    if (config.enableEdit) {
-                        buttons.push(`
-                            <button class="btn btn-sm btn-warning" 
-                                    onclick="handleAction('edit', '${id}', '${encodedData}')">
-                                <i class="bi bi-pencil"></i> ${translations.edit || 'Edit'}
-                            </button>
-                        `);
-                    }
-                    
-                    if (config.allowDelete) {
-                        buttons.push(`
-                            <button class="btn btn-sm btn-danger" 
-                                    onclick="handleAction('delete', '${id}')">
-                                <i class="bi bi-trash"></i> ${translations.row_delete || 'Delete'}
-                            </button>
-                        `);
-                    }
-
-                    if (config.inlines && config.inlines.length > 0) {
-                        const inline = config.inlines[0];
-                        buttons.push(`
-                            <button class="btn btn-sm btn-info" 
-                                    onclick="handleCustomAction('view_documents', '${id}', '${inline.model}')">
-                                <i class="bi bi-file-text"></i> Details
-                            </button>
-                        `);
-                    }
-                    
-                    return buttons.join(' ');
-                } catch (error) {
-                    console.error('Error formatting operation buttons:', error, row);
-                    return '<button class="btn btn-sm btn-warning" disabled>Edit</button>';
-                }
-            }
-        });
-    }
-
     // 初始化表格并保存到全局变量
     window.$table = $('#dataTable').bootstrapTable({
         url: `/admin/${config.route_id}/data`,
@@ -369,6 +276,9 @@ $(document).ready(function() {
         showColumns: true,
         showRefresh: true,
         showToggle: true,
+        idField: primaryKeyField,
+        uniqueId: primaryKeyField,
+        smartDisplay: false,
         clickToSelect: true,
         toolbar: '#toolbar',
         locale: 'en-US',
@@ -376,33 +286,13 @@ $(document).ready(function() {
         maintainMetaData: true,
         queryParamsType: 'limit',
         queryParams: function(params) {
-            console.log('Original params:', params);
-            
-            // 获取所有过滤字段值
-            var filterData = {};
-            $('.filter-field').each(function() {
-                var $field = $(this);
-                var name = $field.attr('name');
-                var value = $field.val();
-                if (value) {
-                    filterData[name] = value;
-                }
-            });
-
-            console.log('Filter data:', filterData);
-
-            // 合并所有参数
-            var finalParams = {
+            return {
                 limit: params.limit,
                 offset: params.offset,
                 search: params.search,
                 sort: params.sort,
-                order: params.order,
-                ...filterData  // 添加过滤参数
+                order: params.order
             };
-            
-            console.log('Final params:', finalParams);
-            return finalParams;
         },
         responseHandler: function(res) {
             console.log('Server response:', res);
@@ -428,6 +318,26 @@ $(document).ready(function() {
             console.log('Table data loaded:', data);
             console.log('Total records:', data.total);
             console.log('Current page data:', data.rows.length);
+
+            const currentRows = Array.isArray(data.rows) ? data.rows : [];
+            const currentPageSelectedIds = [];
+            currentRows.forEach(function(row) {
+                const rowId = getRowId(row);
+                if (rowId !== null && selectedRows.has(rowId)) {
+                    selectedRows.set(rowId, row);
+                    currentPageSelectedIds.push(rowId);
+                }
+            });
+            if (currentPageSelectedIds.length) {
+                $table.bootstrapTable('checkBy', {
+                    field: primaryKeyField,
+                    values: currentPageSelectedIds,
+                });
+            }
+            setTimeout(function() {
+                syncCurrentPageSelectionCache();
+                syncSelectionState();
+            }, 0);
         },
         onLoadError: function(status, res) {
             console.error('Table load error:', status, res);
@@ -440,25 +350,72 @@ $(document).ready(function() {
 
     // 确保表格已初始化
     console.log('Table initialized:', window.$table);
+    $table = window.$table;
 
-    // 初始化过滤器
-    initializeFilter($table);
+    function syncSelectionState() {
+        const selectedCount = selectedRows.size;
+        $('#batchDelete').prop('disabled', selectedCount === 0);
+        updateSelectionInfo(selectedCount);
+    }
 
     // 监听表格选择事件
-    $table.on('check.bs.table uncheck.bs.table check-all.bs.table uncheck-all.bs.table',
-        function () {
-            var selections = $table.bootstrapTable('getSelections');
-            $('#batchDelete').prop('disabled', !selections.length);
-            // 更新选中提示
-            updateSelectionInfo(selections.length);
-        }
-    );
+    $table.on('check.bs.table', function(_event, row) {
+        addSelectedRows([row]);
+        syncCurrentPageSelectionCache();
+        syncSelectionState();
+    });
+
+    $table.on('uncheck.bs.table', function(_event, row) {
+        removeSelectedRows([row]);
+        syncCurrentPageSelectionCache();
+        syncSelectionState();
+    });
+
+    $table.on('check-all.bs.table', function(_event, rows) {
+        const pageRows = Array.isArray(rows)
+            ? rows
+            : ($table.bootstrapTable('getData', { useCurrentPage: true }) || []);
+        addSelectedRows(pageRows);
+        syncCurrentPageSelectionCache();
+        syncSelectionState();
+    });
+
+    $table.on('uncheck-all.bs.table', function(_event, rows) {
+        const pageRows = Array.isArray(rows)
+            ? rows
+            : ($table.bootstrapTable('getData', { useCurrentPage: true }) || []);
+        removeSelectedRows(pageRows);
+        syncCurrentPageSelectionCache();
+        syncSelectionState();
+    });
+
+    function bindSelectAllToggle() {
+        const $selectAll = $('#dataTable thead input[name="btSelectAll"]');
+        $selectAll.off('click.adminSelectAll').on('click.adminSelectAll', function() {
+            const shouldSelectAll = this.checked;
+            const currentPageRows = $table.bootstrapTable('getData', { useCurrentPage: true }) || [];
+            setTimeout(function() {
+                if (shouldSelectAll) {
+                    addSelectedRows(currentPageRows);
+                } else {
+                    removeSelectedRows(currentPageRows);
+                }
+                syncCurrentPageSelectionCache();
+                syncSelectionState();
+            }, 0);
+        });
+    }
+
+    $table.on('post-header.bs.table post-body.bs.table', function() {
+        bindSelectAllToggle();
+    });
+    bindSelectAllToggle();
 
     // 添加选中信息提示区域
     var $toolbar = $('#toolbar');
     $('<div/>', {
         id: 'selectionInfo',
-        class: 'alert alert-info d-none mt-2',
+        class: 'admin-selection-box d-none',
         role: 'alert'
     }).appendTo($toolbar);
 
@@ -467,8 +424,9 @@ $(document).ready(function() {
         var $info = $('#selectionInfo');
         if (count > 0) {
             $info.html(
-                translations.selected_items.replace('{count}', count) + 
-                ` <button class="btn btn-link btn-sm p-0 ms-2" onclick="clearSelection()">
+                `<i class="bi bi-check2-circle"></i>
+                <span>${translations.selected_items.replace('{count}', count)}</span>
+                <button class="admin-selection-clear" onclick="clearSelection()">
                     ${translations.clear_selection}
                 </button>`
             );
@@ -480,24 +438,30 @@ $(document).ready(function() {
 
     // ��除选择
     window.clearSelection = function() {
+        selectedRows.clear();
         $table.bootstrapTable('uncheckAll');
+        syncSelectionState();
+    };
+
+    window.removeSelectionById = function(id) {
+        if (id === undefined || id === null) {
+            return;
+        }
+        selectedRows.delete(String(id));
+        syncSelectionState();
     };
 
     // 批量删除功能
     $('#batchDelete').click(function() {
-        var selections = $table.bootstrapTable('getSelections');
-        if (!selections.length) {
+        var ids = Array.from(selectedRows.keys());
+        if (!ids.length) {
             alert(translations.please_select_items);
             return;
         }
 
-        if (!confirm(translations.confirm_batch_delete.replace('{count}', selections.length))) {
+        if (!confirm(translations.confirm_batch_delete.replace('{count}', ids.length))) {
             return;
         }
-
-        var ids = selections.map(function(item) {
-            return item.id;
-        });
 
         // 显示加载提示
         var $btn = $(this);
@@ -507,7 +471,7 @@ $(document).ready(function() {
 
         // 发送批量删除请求
         $.ajax({
-            url: `/admin/${config.modelName}/batch_delete`,
+            url: `/admin/${config.route_id}/batch_delete`,
             method: 'POST',
             data: { ids: ids },
             dataType: 'json',  // 指定应类 JSON
@@ -529,10 +493,9 @@ $(document).ready(function() {
                     }, 3000);
 
                     // 刷新表格
+                    selectedRows.clear();
                     $table.bootstrapTable('refresh');
-                    
-                    // 清除选择
-                    $table.bootstrapTable('uncheckAll');
+                    syncSelectionState();
                 } else {
                     // 显示错误提示
                     var $alert = $('<div/>', {
@@ -590,9 +553,19 @@ $(document).ready(function() {
     };
 
     // 导出数据功能
-    $('#exportBtn').click(function() {
-        // 获取当前表格的所有数据
-        var data = $table.bootstrapTable('getData');
+    window.exportData = function(scope) {
+        var exportScope = scope || 'all';
+
+        // 获取当前表格数据或选中数据
+        var data = exportScope === 'selected'
+            ? Array.from(selectedRows.values())
+            : $table.bootstrapTable('getData');
+        if (!data.length) {
+            alert(exportScope === 'selected'
+                ? translations.please_select_items
+                : translations.export_current);
+            return;
+        }
         
         // 获取显示的列（排除操作列和复选框列）
         var visibleColumns = $table.bootstrapTable('getVisibleColumns')
@@ -656,8 +629,14 @@ $(document).ready(function() {
         URL.revokeObjectURL(url);
         
         // 提示用户
-        var message = translations.export_current;
+        var message = exportScope === 'selected'
+            ? translations.export_selected
+            : translations.export_current;
         alert(message);
+    };
+
+    $('#exportBtn').click(function() {
+        exportData('all');
     });
 
     // 添加自定义操作处理函数
@@ -710,11 +689,6 @@ $(document).ready(function() {
                         </div>
                         <div class="modal-body">
                             <div class="table-responsive">
-                                <div class="mb-3">
-                                    <button class="btn btn-primary" onclick="addInlineRecord('${options.model}', '${options.parentId}')">
-                                        <i class="bi bi-plus-lg"></i> Add record
-                                    </button>
-                                </div>
                                 <table class="table table-striped table-hover">
                                     <thead>
                                         <tr>
@@ -785,11 +759,6 @@ $(document).ready(function() {
             </tr>
         `).join('');
     }
-
-    // add inline record
-    window.addInlineRecord = function(model, parentId) {
-        showFormModal('add', { [window.serverConfig.inlines[0].fk_field]: parentId });
-    };
 
     // edit inline record
     window.editInlineRecord = function(model, id) {

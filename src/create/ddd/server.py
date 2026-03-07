@@ -1,4 +1,5 @@
 import logging
+import sys
 from pathlib import Path
 
 from app.config import settings
@@ -9,15 +10,23 @@ from app.presentation import register_routes
 from loguru import logger
 from robyn import Robyn
 
-log_path = Path(settings.root_dir) / "logs"
-log_path.mkdir(exist_ok=True)
+logger.remove()
 logger.add(
-    log_path / f"{settings.logging.file}.log",
+    sys.stderr,
     format=settings.logging.format,
-    rotation=settings.logging.rotation,
-    compression=settings.logging.compression,
     level="INFO",
 )
+
+if settings.logging.file:
+    log_path = Path(settings.root_dir) / "logs"
+    log_path.mkdir(exist_ok=True)
+    logger.add(
+        log_path / f"{settings.logging.file}.log",
+        format=settings.logging.format,
+        rotation=settings.logging.rotation,
+        compression=settings.logging.compression,
+        level="INFO",
+    )
 
 if not settings.debug:
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)

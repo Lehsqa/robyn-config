@@ -2,7 +2,7 @@ from typing import Any, AsyncGenerator
 
 from ....domain.users import UsersRepository as UsersRepositoryInterface
 from ....domain.users.entities import UserFlat, UserUncommitted
-from ..table import UsersTable
+from ..tables import UsersTable
 from .base import BaseRepository
 
 

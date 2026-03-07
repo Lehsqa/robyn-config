@@ -10,7 +10,7 @@ from ....config import settings
 
 APP_LABEL = "models"
 MODEL_MODULES = (
-    "app.infrastructure.database.table",
+    "app.infrastructure.database.tables",
     "aerich.models",
 )
 DRIVER_ALIASES = {

@@ -17,12 +17,18 @@ JINJA_ENV = Environment(undefined=StrictUndefined)
 
 TEMPLATE_ROOT = ADMINPANEL_ROOT / "template"
 
-LEGACY_DDD_DB_TABLE_PATH = Path("src/app/infrastructure/database/tables.py")
 DEFAULT_DDD_DB_TABLE_PATH = Path(
-    "src/app/infrastructure/database/table/__init__.py"
+    "src/app/infrastructure/database/tables/__init__.py"
 )
-LEGACY_MVC_DB_TABLE_PATH = Path("src/app/models/models.py")
-DEFAULT_MVC_DB_TABLE_PATH = Path("src/app/models/table/__init__.py")
+LEGACY_DDD_DB_TABLE_PATHS: tuple[Path, ...] = (
+    Path("src/app/infrastructure/database/table/__init__.py"),
+    Path("src/app/infrastructure/database/tables.py"),
+)
+DEFAULT_MVC_DB_TABLE_PATH = Path("src/app/models/tables/__init__.py")
+LEGACY_MVC_DB_TABLE_PATHS: tuple[Path, ...] = (
+    Path("src/app/models/table/__init__.py"),
+    Path("src/app/models/models.py"),
+)
 
 ADMIN_DEPENDENCIES: tuple[tuple[str, str], ...] = (
     ("jinja2", ">=3.0.0"),
@@ -445,6 +451,64 @@ def _ensure_dependency(
         _ensure_project_dependency(pyproject_path, dependency, version)
 
 
+def _set_adminpanel_created(pyproject_path: Path) -> None:
+    if not pyproject_path.exists():
+        return
+
+    lines = pyproject_path.read_text().splitlines()
+    add_section_header = "[tool.robyn-config.add]"
+    section_header = "[tool.robyn-config.adminpanel]"
+    created_line = "created = true"
+
+    def _find_section_bounds(header: str) -> tuple[int, int] | None:
+        start = None
+        end = len(lines)
+        for idx, line in enumerate(lines):
+            if line.strip() == header:
+                start = idx
+                break
+        if start is None:
+            return None
+        for idx in range(start + 1, len(lines)):
+            stripped = lines[idx].strip()
+            if stripped.startswith("[") and stripped.endswith("]"):
+                end = idx
+                break
+        return (start, end)
+
+    section_bounds = _find_section_bounds(section_header)
+    if section_bounds is not None:
+        section_start, section_end = section_bounds
+
+        for idx in range(section_start + 1, section_end):
+            if lines[idx].strip().startswith("created"):
+                lines[idx] = created_line
+                pyproject_path.write_text("\n".join(lines) + "\n")
+                return
+
+        lines.insert(section_end, created_line)
+        pyproject_path.write_text("\n".join(lines) + "\n")
+        return
+
+    new_section_lines = [section_header, created_line]
+    add_bounds = _find_section_bounds(add_section_header)
+    if add_bounds is not None:
+        insert_at = add_bounds[1]
+        if insert_at > 0 and lines[insert_at - 1].strip():
+            new_section_lines.insert(0, "")
+        if insert_at < len(lines) and lines[insert_at].strip():
+            new_section_lines.append("")
+        lines[insert_at:insert_at] = new_section_lines
+        pyproject_path.write_text("\n".join(lines) + "\n")
+        return
+
+    content = "\n".join(lines).rstrip()
+    if content:
+        content += "\n\n"
+    content += f"{section_header}\n{created_line}\n"
+    pyproject_path.write_text(content)
+
+
 def _resolve_db_tables_path(
     project_path: Path, config: Mapping[str, object], design: str
 ) -> Path:
@@ -462,17 +526,19 @@ def _resolve_db_tables_path(
         preferred = project_path / DEFAULT_DDD_DB_TABLE_PATH
         if preferred.exists():
             return preferred
-        legacy = project_path / LEGACY_DDD_DB_TABLE_PATH
-        if legacy.exists():
-            return legacy
+        for legacy in LEGACY_DDD_DB_TABLE_PATHS:
+            legacy_path = project_path / legacy
+            if legacy_path.exists():
+                return legacy_path
         return preferred
 
     preferred = project_path / DEFAULT_MVC_DB_TABLE_PATH
     if preferred.exists():
         return preferred
-    legacy = project_path / LEGACY_MVC_DB_TABLE_PATH
-    if legacy.exists():
-        return legacy
+    for legacy in LEGACY_MVC_DB_TABLE_PATHS:
+        legacy_path = project_path / legacy
+        if legacy_path.exists():
+            return legacy_path
     return preferred
 
 
@@ -662,5 +728,6 @@ def add_adminpanel(
         _ensure_dependency(
             pyproject_path, package_manager, dependency, version
         )
+    _set_adminpanel_created(pyproject_path)
 
     return created_files

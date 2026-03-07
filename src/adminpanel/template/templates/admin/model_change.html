@@ -1,0 +1,910 @@
+{% extends "admin/base.html" %}
+
+{% macro render_model_field(field, form_data, can_edit, mode='general') -%}
+    {% set field_type = (field.field_type or 'text')|lower %}
+    {% set field_name = field.name|string %}
+    {% set field_name_lower = field_name|lower %}
+    {% set is_password_field = field_type == 'password' or 'password' in field_name_lower %}
+    {% set fallback_value = field.default if field.default is not none else '' %}
+    {% set raw_source = '' if is_password_field else form_data.get(field.name, fallback_value) %}
+    {% if raw_source is string %}
+        {% set raw_value = raw_source %}
+    {% else %}
+        {% set raw_value = raw_source|tojson %}
+    {% endif %}
+    {% set normalized_value = (raw_source|string|lower) %}
+    {% set is_checked = raw_source is sameas true or normalized_value in ['true', '1', 'yes', 'on'] %}
+    {% set field_disabled = (not can_edit) or field.readonly %}
+    {% set field_label = field.label or field_name.replace('_', ' ').title() %}
+
+    {% if mode == 'boolean' or field_type in ['boolean', 'switch'] %}
+    <div class="admin-boolean-switch admin-themed-input">
+        <div class="admin-boolean-meta">
+            <label for="field_{{ field_name }}" class="admin-field-label mb-0">{{ field_label }}</label>
+            <p class="admin-field-hint mb-0">{{ field.help_text or "Enable or disable this value." }}</p>
+        </div>
+        <label class="admin-switch-shell">
+            <input
+                id="field_{{ field_name }}"
+                name="{{ field_name }}"
+                type="checkbox"
+                class="admin-switch-input"
+                {% if is_checked %}checked{% endif %}
+                {% if field_disabled %}disabled{% endif %}
+            >
+            <span class="admin-switch-slider"></span>
+        </label>
+    </div>
+    {% elif mode == 'json' or field_type == 'json' %}
+    <div class="space-y-2">
+        <label for="field_{{ field_name }}" class="admin-field-label">{{ field_label }}</label>
+        <div class="admin-json-toolbar">
+            <span class="admin-json-pill">JSON</span>
+            <div class="admin-json-actions">
+                <button type="button" class="admin-json-btn" data-json-format="{{ field_name }}">Format</button>
+                <button type="button" class="admin-json-btn" data-json-minify="{{ field_name }}">Minify</button>
+            </div>
+        </div>
+        <textarea
+            id="field_{{ field_name }}"
+            name="{{ field_name }}"
+            rows="10"
+            class="admin-field-control admin-themed-input admin-json-editor"
+            data-json-field="{{ field_name }}"
+            {% if field.required %}required{% endif %}
+            {% if field_disabled %}disabled{% endif %}
+        >{{ raw_value }}</textarea>
+        <p class="admin-field-hint">{{ field.help_text or "Store valid JSON object or array." }}</p>
+    </div>
+    {% elif mode == 'longtext' %}
+    <div class="space-y-2">
+        <label for="field_{{ field_name }}" class="admin-field-label">{{ field_label }}</label>
+        <div class="admin-longtext-toolbar">
+            <span class="material-symbols-outlined text-[16px]">article</span>
+            <span class="text-xs font-semibold uppercase tracking-wide">Long Text</span>
+        </div>
+        <textarea
+            id="field_{{ field_name }}"
+            name="{{ field_name }}"
+            rows="7"
+            class="admin-field-control admin-themed-input admin-longtext-editor"
+            {% if field.required %}required{% endif %}
+            {% if field_disabled %}disabled{% endif %}
+        >{{ raw_value }}</textarea>
+        {% if is_password_field %}
+        <p class="admin-field-hint">Leave blank to keep the current password.</p>
+        {% elif field.help_text %}
+        <p class="admin-field-hint">{{ field.help_text }}</p>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="space-y-2">
+        <label for="field_{{ field_name }}" class="admin-field-label">{{ field_label }}</label>
+        {% if field_type == 'select' %}
+        <div class="admin-select-shell">
+            <select
+                id="field_{{ field_name }}"
+                name="{{ field_name }}"
+                class="admin-field-control admin-themed-input admin-field-select"
+                {% if field.required %}required{% endif %}
+                {% if field_disabled %}disabled{% endif %}
+            >
+                <option value="">Please select</option>
+                {% for choice_value, choice_label in (field.choices or {}).items() %}
+                <option value="{{ choice_value }}" {% if raw_value|string == choice_value|string %}selected{% endif %}>
+                    {{ choice_label }}
+                </option>
+                {% endfor %}
+            </select>
+            <span class="material-symbols-outlined admin-select-icon">expand_more</span>
+        </div>
+        {% elif is_password_field %}
+        <input
+            id="field_{{ field_name }}"
+            name="{{ field_name }}"
+            type="password"
+            value=""
+            autocomplete="new-password"
+            placeholder="Enter new password"
+            class="admin-field-control admin-themed-input"
+            {% if field.required %}required{% endif %}
+            {% if field_disabled %}disabled{% endif %}
+        >
+        <p class="admin-field-hint">Leave blank to keep the current password.</p>
+        {% elif field_type == 'email' or 'email' in field_name_lower %}
+        <input
+            id="field_{{ field_name }}"
+            name="{{ field_name }}"
+            type="email"
+            value="{{ raw_value }}"
+            class="admin-field-control admin-themed-input"
+            {% if field.required %}required{% endif %}
+            {% if field_disabled %}disabled{% endif %}
+        >
+        {% elif field_type == 'date' %}
+        <input
+            id="field_{{ field_name }}"
+            name="{{ field_name }}"
+            type="date"
+            value="{{ raw_value }}"
+            class="admin-field-control admin-themed-input"
+            {% if field.required %}required{% endif %}
+            {% if field_disabled %}disabled{% endif %}
+        >
+        {% else %}
+        <input
+            id="field_{{ field_name }}"
+            name="{{ field_name }}"
+            type="text"
+            value="{{ raw_value }}"
+            class="admin-field-control admin-themed-input {% if 'date' in field_name_lower or 'time' in field_name_lower %}font-mono{% endif %}"
+            {% if field.required %}required{% endif %}
+            {% if field_disabled %}disabled{% endif %}
+        >
+        {% endif %}
+    </div>
+    {% endif %}
+{%- endmacro %}
+
+{% block content %}
+{% set editable_names = form_fields | map(attribute='name') | list %}
+{% set section_fields = namespace(general=[], long_text=[], json=[], boolean=[]) %}
+{% for field in form_fields %}
+    {% set field_type = (field.field_type or 'text')|lower %}
+    {% set field_name = field.name|string %}
+    {% set field_name_lower = field_name|lower %}
+    {% set sample_value = form_data.get(field.name, '') %}
+    {% set sample_length = (sample_value|string)|length %}
+    {% set is_json_field = field_type == 'json' or field_name_lower.endswith('_json') or field_name_lower.endswith('_data') or field_name_lower.endswith('_payload') or field_name_lower.endswith('_meta') %}
+    {% set is_boolean_field = field_type in ['boolean', 'switch'] %}
+    {% set is_long_text_field = field_type in ['html', 'text'] and (field_name_lower in ['description', 'content', 'body', 'summary', 'bio', 'notes', 'message'] or sample_length > 120) %}
+    {% if is_boolean_field %}
+        {% set section_fields.boolean = section_fields.boolean + [field] %}
+    {% elif is_json_field %}
+        {% set section_fields.json = section_fields.json + [field] %}
+    {% elif is_long_text_field %}
+        {% set section_fields.long_text = section_fields.long_text + [field] %}
+    {% else %}
+        {% set section_fields.general = section_fields.general + [field] %}
+    {% endif %}
+{% endfor %}
+
+{% set metadata = namespace(items=[]) %}
+{% if not is_add_mode %}
+    {% for meta_name, meta_value in form_data.items() %}
+        {% set meta_key = meta_name|string %}
+        {% set meta_key_lower = meta_key|lower %}
+        {% if meta_key not in editable_names and meta_value is not none and (meta_value|string)|trim != '' %}
+            {% set looks_like_metadata = meta_key_lower == 'id' or 'created' in meta_key_lower or 'updated' in meta_key_lower or 'date' in meta_key_lower or 'time' in meta_key_lower or 'login' in meta_key_lower %}
+            {% if looks_like_metadata %}
+                {% set metadata.items = metadata.items + [{'name': meta_key, 'value': meta_value}] %}
+            {% endif %}
+        {% endif %}
+    {% endfor %}
+{% endif %}
+
+<div class="space-y-5">
+    <nav class="model-change-breadcrumb flex flex-wrap items-center gap-2 text-xs sm:text-sm text-slate-500 dark:text-slate-400">
+        <a href="/admin/models" class="hover:text-primary transition-colors">Models</a>
+        <span>/</span>
+        <a href="/admin/{{ route_id }}" class="hover:text-primary transition-colors">{{ verbose_name }}</a>
+        <span>/</span>
+        <span class="text-slate-700 dark:text-slate-200">
+            {% if is_add_mode %}Add Record{% else %}Edit Record #{{ object_id }}{% endif %}
+        </span>
+    </nav>
+
+    <div class="rounded-xl border border-slate-200 dark:border-slate-700 admin-border-soft bg-surface-light dark:bg-surface-dark px-5 py-6">
+        <div class="space-y-1">
+            <h1 class="text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white">
+                {% if is_add_mode %}Add {{ verbose_name }}{% else %}Edit {{ verbose_name }}{% endif %}
+            </h1>
+            <p class="text-sm text-slate-600 dark:text-slate-400">
+                {% if is_add_mode %}
+                Create a new record in "{{ verbose_name }}".
+                {% else %}
+                Editing object ID: <span class="font-semibold">{{ object_id }}</span>
+                {% endif %}
+            </p>
+        </div>
+    </div>
+
+    <div id="changeFormAlert" class="hidden rounded-lg border px-4 py-3 text-sm"></div>
+
+    <div
+        id="changePageMeta"
+        data-save-url="{% if is_add_mode %}/admin/{{ route_id }}/add{% else %}/admin/{{ route_id }}/{{ object_id }}/edit{% endif %}"
+        data-delete-url="{% if is_add_mode %}{% else %}/admin/{{ route_id }}/{{ object_id }}/delete{% endif %}"
+    ></div>
+
+    <form id="modelChangeForm" class="space-y-6 pb-24">
+        {% if section_fields.general %}
+        <section class="admin-form-section">
+            <div class="admin-form-section-header">
+                <h2>General Info</h2>
+                <p>Basic fields for this record.</p>
+            </div>
+            <div class="grid gap-4 md:grid-cols-2">
+                {% for field in section_fields.general %}
+                {{ render_model_field(field, form_data, can_edit) }}
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if section_fields.long_text %}
+        <section class="admin-form-section">
+            <div class="admin-form-section-header">
+                <h2>Long Text</h2>
+                <p>Large text fields use expanded editors.</p>
+            </div>
+            <div class="grid gap-4">
+                {% for field in section_fields.long_text %}
+                {{ render_model_field(field, form_data, can_edit, 'longtext') }}
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if section_fields.json %}
+        <section class="admin-form-section">
+            <div class="admin-form-section-header">
+                <h2>Structured Data</h2>
+                <p>JSON fields with formatting helpers.</p>
+            </div>
+            <div class="grid gap-4">
+                {% for field in section_fields.json %}
+                {{ render_model_field(field, form_data, can_edit, 'json') }}
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+
+        {% if section_fields.boolean or metadata.items %}
+        <div class="grid gap-6 xl:grid-cols-2">
+            {% if section_fields.boolean %}
+            <section class="admin-form-section">
+                <div class="admin-form-section-header">
+                    <h2>Flags</h2>
+                    <p>Boolean and switch controls.</p>
+                </div>
+                <div class="space-y-3">
+                    {% for field in section_fields.boolean %}
+                    {{ render_model_field(field, form_data, can_edit, 'boolean') }}
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+
+            {% if metadata.items %}
+            <section class="admin-form-section">
+                <div class="admin-form-section-header">
+                    <h2>Metadata</h2>
+                    <p>System generated information.</p>
+                </div>
+                <div class="admin-metadata-list">
+                    {% for item in metadata.items %}
+                    <div class="admin-metadata-row">
+                        <span class="admin-metadata-label">{{ item.name.replace('_', ' ').title() }}</span>
+                        <span class="admin-metadata-value">{{ item.value }}</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </section>
+            {% endif %}
+        </div>
+        {% endif %}
+    </form>
+
+    <div id="modelChangeActionBar" class="admin-change-actionbar fixed bottom-0 left-0 right-0 backdrop-blur">
+        <div class="flex w-full flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-6 lg:px-8">
+            <p id="changeDirtyState" class="text-xs sm:text-sm text-slate-500 dark:text-slate-400">No unsaved changes</p>
+            <div class="flex flex-wrap items-center gap-2">
+                <a href="/admin/{{ route_id }}" class="admin-action-btn admin-action-btn-neutral">
+                    <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                    Back to List
+                </a>
+                {% if can_delete %}
+                <button type="button" data-change-delete class="admin-action-btn admin-action-btn-danger">
+                    <span class="material-symbols-outlined text-[16px]">delete</span>
+                    Delete
+                </button>
+                {% endif %}
+                {% if can_edit %}
+                <button type="button" data-change-save class="admin-action-btn admin-action-btn-primary">
+                    <span class="material-symbols-outlined text-[16px]">check</span>
+                    {% if is_add_mode %}Create{% else %}Save{% endif %}
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+    .model-change-breadcrumb a {
+        text-decoration: none;
+    }
+
+    :root {
+        --admin-change-section-bg: rgb(255 255 255);
+        --admin-change-section-border: rgb(226 232 240);
+        --admin-change-header-bg: rgb(248 250 252);
+        --admin-change-header-border: rgb(226 232 240);
+        --admin-change-field-bg: rgb(255 255 255);
+        --admin-change-field-border: rgb(203 213 225);
+        --admin-change-field-text: rgb(15 23 42);
+        --admin-change-subtle-bg: rgb(248 250 252);
+        --admin-change-actionbar-bg: rgb(255 255 255 / 0.96);
+        --admin-change-actionbar-border: rgb(226 232 240);
+    }
+
+    .dark {
+        --admin-change-section-bg: rgb(21 32 43);
+        --admin-change-section-border: rgb(51 65 85);
+        --admin-change-header-bg: rgb(26 40 60);
+        --admin-change-header-border: rgb(51 65 85);
+        --admin-change-field-bg: rgb(15 23 42);
+        --admin-change-field-border: rgb(71 85 105);
+        --admin-change-field-text: rgb(226 232 240);
+        --admin-change-subtle-bg: rgb(15 23 42);
+        --admin-change-actionbar-bg: rgb(21 32 43 / 0.96);
+        --admin-change-actionbar-border: rgb(51 65 85);
+    }
+
+    .admin-form-section {
+        border: 1px solid var(--admin-change-section-border);
+        border-radius: 0.9rem;
+        background: var(--admin-change-section-bg);
+        overflow: hidden;
+    }
+
+    .admin-form-section-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--admin-change-header-border);
+        background: var(--admin-change-header-bg);
+    }
+
+    .admin-form-section-header h2 {
+        margin: 0;
+        font-size: 1.06rem;
+        font-weight: 800;
+        color: rgb(15 23 42);
+    }
+
+    .admin-form-section-header p {
+        margin: 0.3rem 0 0;
+        font-size: 0.8rem;
+        color: rgb(100 116 139);
+    }
+
+    .dark .admin-form-section-header h2 {
+        color: rgb(241 245 249);
+    }
+
+    .dark .admin-form-section-header p {
+        color: rgb(148 163 184);
+    }
+
+    .admin-form-section > .grid,
+    .admin-form-section > .space-y-3,
+    .admin-form-section > .admin-metadata-list {
+        padding: 1.1rem 1.25rem 1.2rem;
+    }
+
+    .admin-field-label {
+        display: block;
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: rgb(51 65 85);
+    }
+
+    .dark .admin-field-label {
+        color: rgb(226 232 240);
+    }
+
+    .admin-field-hint {
+        font-size: 0.75rem;
+        color: rgb(100 116 139);
+        margin-top: 0.35rem;
+    }
+
+    .dark .admin-field-hint {
+        color: rgb(148 163 184);
+    }
+
+    .admin-field-control {
+        width: 100%;
+        border: 1px solid var(--admin-change-field-border);
+        border-radius: 0.6rem;
+        background: var(--admin-change-field-bg);
+        color: var(--admin-change-field-text);
+        min-height: 2.55rem;
+        padding: 0.6rem 0.85rem;
+        font-size: 0.9rem;
+        box-shadow: none;
+    }
+
+    .admin-field-control:focus {
+        border-color: rgb(19 127 236);
+        box-shadow: 0 0 0 3px rgb(19 127 236 / 0.2);
+        outline: none;
+    }
+
+    .admin-field-control:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    .dark .admin-field-control::placeholder {
+        color: rgb(148 163 184);
+    }
+
+    .admin-select-shell {
+        position: relative;
+    }
+
+    .admin-field-select {
+        appearance: none;
+        padding-right: 2.2rem;
+    }
+
+    .admin-select-icon {
+        position: absolute;
+        right: 0.65rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: rgb(100 116 139);
+        pointer-events: none;
+        font-size: 18px;
+    }
+
+    .dark .admin-select-icon {
+        color: rgb(148 163 184);
+    }
+
+    .admin-json-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+    }
+
+    .admin-json-pill {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid var(--admin-change-field-border);
+        border-radius: 999px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 0.18rem 0.6rem;
+        color: var(--admin-change-field-text);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        background: var(--admin-change-subtle-bg);
+    }
+
+    .admin-json-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .admin-json-btn {
+        border: 1px solid var(--admin-change-field-border);
+        border-radius: 0.45rem;
+        background: var(--admin-change-field-bg);
+        color: var(--admin-change-field-text);
+        font-size: 0.75rem;
+        font-weight: 700;
+        line-height: 1;
+        height: 1.9rem;
+        padding: 0 0.62rem;
+    }
+
+    .admin-json-btn:hover {
+        background: rgb(241 245 249);
+    }
+
+    .admin-json-editor {
+        min-height: 12.5rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        line-height: 1.45;
+        resize: vertical;
+    }
+
+    .admin-longtext-toolbar {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        color: rgb(71 85 105);
+    }
+
+    .admin-longtext-editor {
+        min-height: 10.5rem;
+        line-height: 1.45;
+        resize: vertical;
+    }
+
+    .admin-boolean-switch {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        border: 1px solid var(--admin-change-header-border);
+        border-radius: 0.75rem;
+        background: var(--admin-change-subtle-bg);
+        padding: 0.75rem 0.9rem;
+    }
+
+    .admin-boolean-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+    }
+
+    .admin-switch-shell {
+        position: relative;
+        display: inline-flex;
+        width: 2.8rem;
+        height: 1.6rem;
+    }
+
+    .admin-switch-input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+        position: absolute;
+    }
+
+    .admin-switch-slider {
+        position: relative;
+        cursor: pointer;
+        width: 100%;
+        height: 100%;
+        border-radius: 999px;
+        background: rgb(148 163 184);
+        transition: background 0.15s ease-in-out;
+    }
+
+    .admin-switch-slider::before {
+        content: "";
+        position: absolute;
+        height: 1.2rem;
+        width: 1.2rem;
+        left: 0.2rem;
+        top: 0.2rem;
+        border-radius: 50%;
+        background: white;
+        transition: transform 0.15s ease-in-out;
+    }
+
+    .admin-switch-input:checked + .admin-switch-slider {
+        background: rgb(19 127 236);
+    }
+
+    .admin-switch-input:checked + .admin-switch-slider::before {
+        transform: translateX(1.2rem);
+    }
+
+    .admin-switch-input:disabled + .admin-switch-slider {
+        opacity: 0.7;
+        cursor: not-allowed;
+    }
+
+    .admin-metadata-list {
+        display: grid;
+        gap: 0.45rem;
+    }
+
+    .admin-metadata-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 0.6rem;
+        align-items: center;
+        padding: 0.5rem 0;
+        border-bottom: 1px dashed var(--admin-change-header-border);
+    }
+
+    .admin-metadata-row:last-child {
+        border-bottom: 0;
+    }
+
+    .admin-metadata-label {
+        font-size: 0.82rem;
+        color: rgb(100 116 139);
+    }
+
+    .admin-metadata-value {
+        text-align: right;
+        font-size: 0.82rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        color: var(--admin-change-field-text);
+        word-break: break-all;
+    }
+
+    .admin-change-actionbar {
+        border-top: 1px solid var(--admin-change-actionbar-border);
+        background: var(--admin-change-actionbar-bg);
+    }
+
+    .admin-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        height: 2.4rem;
+        padding: 0 0.85rem;
+        border-radius: 0.55rem;
+        border: 1px solid rgb(203 213 225);
+        font-size: 0.875rem;
+        font-weight: 600;
+        line-height: 1;
+        transition: all 0.15s ease-in-out;
+    }
+
+    .admin-action-btn:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+    }
+
+    .admin-action-btn-neutral {
+        background: rgb(255 255 255);
+        color: rgb(51 65 85);
+    }
+
+    .admin-action-btn-neutral:hover {
+        background: rgb(241 245 249);
+    }
+
+    .admin-action-btn-primary {
+        background: rgb(19 127 236);
+        border-color: rgb(19 127 236);
+        color: rgb(255 255 255);
+    }
+
+    .admin-action-btn-primary:hover {
+        background: rgb(16 106 197);
+        border-color: rgb(16 106 197);
+    }
+
+    .admin-action-btn-danger {
+        background: rgb(220 38 38);
+        border-color: rgb(220 38 38);
+        color: rgb(255 255 255);
+    }
+
+    .admin-action-btn-danger:hover {
+        background: rgb(185 28 28);
+        border-color: rgb(185 28 28);
+    }
+
+    .dark .admin-action-btn-neutral {
+        background: rgb(15 23 42);
+        border-color: rgb(71 85 105);
+        color: rgb(226 232 240);
+    }
+
+    .dark .admin-action-btn-neutral:hover {
+        background: rgb(30 41 59);
+    }
+
+    .dark .admin-json-btn:hover {
+        background: rgb(30 41 59);
+    }
+
+    .dark .admin-longtext-toolbar {
+        color: rgb(148 163 184);
+    }
+
+    .dark .admin-metadata-label {
+        color: rgb(148 163 184);
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+(function () {
+    const routeId = {{ route_id|tojson|safe }};
+    const objectId = {{ object_id|tojson|safe }};
+    const formFields = {{ form_fields|tojson|safe }};
+    const metaEl = document.getElementById('changePageMeta');
+    const dirtyStateEl = document.getElementById('changeDirtyState');
+    const saveUrl =
+        metaEl?.dataset?.saveUrl ||
+        `/admin/${routeId}/${encodeURIComponent(String(objectId))}/edit`;
+    const deleteUrl =
+        metaEl?.dataset?.deleteUrl ||
+        `/admin/${routeId}/${encodeURIComponent(String(objectId))}/delete`;
+
+    const alertEl = document.getElementById('changeFormAlert');
+    const formEl = document.getElementById('modelChangeForm');
+    const saveButtons = Array.from(document.querySelectorAll('[data-change-save]'));
+    const deleteButtons = Array.from(document.querySelectorAll('[data-change-delete]'));
+    let hasUnsavedChanges = false;
+
+    function showAlert(message, type) {
+        if (!alertEl) {
+            return;
+        }
+        const styles = {
+            success: 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300',
+            error: 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-700 dark:bg-rose-900/30 dark:text-rose-300',
+        };
+        alertEl.className = `rounded-lg border px-4 py-3 text-sm ${styles[type] || styles.error}`;
+        alertEl.textContent = message;
+        alertEl.classList.remove('hidden');
+    }
+
+    function setDirtyState(isDirty) {
+        hasUnsavedChanges = isDirty;
+        if (!dirtyStateEl) {
+            return;
+        }
+        if (isDirty) {
+            dirtyStateEl.textContent = 'Unsaved changes';
+            dirtyStateEl.classList.add('text-amber-600');
+            dirtyStateEl.classList.add('dark:text-amber-400');
+        } else {
+            dirtyStateEl.textContent = 'No unsaved changes';
+            dirtyStateEl.classList.remove('text-amber-600');
+            dirtyStateEl.classList.remove('dark:text-amber-400');
+        }
+    }
+
+    function setButtonsDisabled(buttons, disabled) {
+        for (const button of buttons) {
+            button.disabled = disabled;
+        }
+    }
+
+    function collectPayload() {
+        const payload = new URLSearchParams();
+        for (const field of formFields) {
+            const input = formEl?.elements?.namedItem(field.name);
+            if (!input || field.readonly) {
+                continue;
+            }
+
+            const fieldType = String(field.field_type || 'text');
+            const isPasswordField =
+                fieldType === 'password' ||
+                String(field.name || '').toLowerCase().includes('password');
+            if (fieldType === 'boolean' || fieldType === 'switch') {
+                payload.set(field.name, input.checked ? 'true' : 'false');
+                continue;
+            }
+
+            const inputValue = typeof input.value === 'string' ? input.value : '';
+            const normalizedInputValue = inputValue.trim();
+            if (isPasswordField && !normalizedInputValue) {
+                continue;
+            }
+
+            if (fieldType === 'json' && normalizedInputValue) {
+                try {
+                    JSON.parse(normalizedInputValue);
+                } catch (_error) {
+                    showAlert(`Invalid JSON in "${field.label || field.name}"`, 'error');
+                    return null;
+                }
+            }
+
+            payload.set(field.name, fieldType === 'json' ? normalizedInputValue : inputValue);
+        }
+        return payload;
+    }
+
+    function formatJsonField(fieldName, minify) {
+        const textarea = document.querySelector(`[data-json-field="${fieldName}"]`);
+        if (!textarea) {
+            return;
+        }
+        const raw = (textarea.value || '').trim();
+        if (!raw) {
+            return;
+        }
+        try {
+            const parsed = JSON.parse(raw);
+            textarea.value = minify
+                ? JSON.stringify(parsed)
+                : JSON.stringify(parsed, null, 2);
+            setDirtyState(true);
+        } catch (_error) {
+            showAlert(`Invalid JSON in "${fieldName}"`, 'error');
+        }
+    }
+
+    document.querySelectorAll('[data-json-format]').forEach((button) => {
+        button.addEventListener('click', function () {
+            formatJsonField(button.dataset.jsonFormat, false);
+        });
+    });
+
+    document.querySelectorAll('[data-json-minify]').forEach((button) => {
+        button.addEventListener('click', function () {
+            formatJsonField(button.dataset.jsonMinify, true);
+        });
+    });
+
+    if (formEl) {
+        formEl.addEventListener('input', function () {
+            if (!hasUnsavedChanges) {
+                setDirtyState(true);
+            }
+        });
+        formEl.addEventListener('change', function () {
+            if (!hasUnsavedChanges) {
+                setDirtyState(true);
+            }
+        });
+    }
+
+    for (const saveButton of saveButtons) {
+        saveButton.addEventListener('click', async function () {
+            const payload = collectPayload();
+            if (!payload) {
+                return;
+            }
+
+            setButtonsDisabled(saveButtons, true);
+            try {
+                const response = await fetch(saveUrl, {
+                    method: 'POST',
+                    body: payload,
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                });
+
+                const message = await response.text();
+                if (!response.ok) {
+                    showAlert(`Save failed: ${message}`, 'error');
+                    return;
+                }
+
+                showAlert(message || 'Saved successfully', 'success');
+                setDirtyState(false);
+                window.location.href = `/admin/${routeId}`;
+            } catch (error) {
+                showAlert(`Save failed: ${error.message}`, 'error');
+            } finally {
+                setButtonsDisabled(saveButtons, false);
+            }
+        });
+    }
+
+    for (const deleteButton of deleteButtons) {
+        deleteButton.addEventListener('click', async function () {
+            const confirmed = window.confirm('Are you sure you want to delete this record?');
+            if (!confirmed) {
+                return;
+            }
+
+            setButtonsDisabled(deleteButtons, true);
+            try {
+                const response = await fetch(deleteUrl, { method: 'POST' });
+                const message = await response.text();
+                if (!response.ok) {
+                    showAlert(`Delete failed: ${message}`, 'error');
+                    return;
+                }
+                window.location.href = `/admin/${routeId}`;
+            } catch (error) {
+                showAlert(`Delete failed: ${error.message}`, 'error');
+            } finally {
+                setButtonsDisabled(deleteButtons, false);
+            }
+        });
+    }
+
+    setDirtyState(false);
+})();
+</script>
+{% endblock %}

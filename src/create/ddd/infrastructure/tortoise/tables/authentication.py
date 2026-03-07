@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-import hashlib
-import os
-
 from tortoise import fields
 
-from ...authentication import AuthProvider
+from ...authentication import AuthProvider, pwd_context
 from .base import BaseTable
 
 __all__ = ("UsersTable",)
@@ -30,14 +27,7 @@ class UsersTable(BaseTable):
 
     @staticmethod
     def hash_password(password: str) -> str:
-        salt = os.urandom(32)
-        key = hashlib.pbkdf2_hmac(
-            "sha256",
-            password.encode("utf-8"),
-            salt,
-            100000,
-        )
-        return f"{salt.hex()}{key.hex()}"
+        return pwd_context.hash(password, scheme="bcrypt")
 
     @staticmethod
     def verify_password(
@@ -46,15 +36,9 @@ class UsersTable(BaseTable):
         if not stored_password:
             return False
         try:
-            salt = bytes.fromhex(stored_password[:64])
-            stored_key = bytes.fromhex(stored_password[64:])
-            key = hashlib.pbkdf2_hmac(
-                "sha256",
-                provided_password.encode("utf-8"),
-                salt,
-                100000,
+            return pwd_context.verify(
+                provided_password, stored_password, scheme="bcrypt"
             )
-            return stored_key == key
         except Exception:
             return False
 

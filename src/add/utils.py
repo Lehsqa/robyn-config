@@ -25,14 +25,20 @@ DEFAULT_DDD_DB_REPOSITORY_PATH = Path(
     "src/app/infrastructure/database/repository"
 )
 DEFAULT_DDD_DB_TABLE_PATH = Path(
-    "src/app/infrastructure/database/table/__init__.py"
+    "src/app/infrastructure/database/tables/__init__.py"
 )
-LEGACY_DDD_DB_TABLE_PATH = Path("src/app/infrastructure/database/tables.py")
+LEGACY_DDD_DB_TABLE_PATHS: tuple[Path, ...] = (
+    Path("src/app/infrastructure/database/table/__init__.py"),
+    Path("src/app/infrastructure/database/tables.py"),
+)
 
 DEFAULT_MVC_VIEWS_PATH = Path("src/app/views")
 DEFAULT_MVC_DB_REPOSITORY_PATH = Path("src/app/models/repository.py")
-DEFAULT_MVC_DB_TABLE_PATH = Path("src/app/models/table/__init__.py")
-LEGACY_MVC_DB_TABLE_PATH = Path("src/app/models/models.py")
+DEFAULT_MVC_DB_TABLE_PATH = Path("src/app/models/tables/__init__.py")
+LEGACY_MVC_DB_TABLE_PATHS: tuple[Path, ...] = (
+    Path("src/app/models/table/__init__.py"),
+    Path("src/app/models/models.py"),
+)
 DEFAULT_MVC_URLS_PATH = Path("src/app/urls.py")
 
 
@@ -126,7 +132,7 @@ def _resolve_db_table_path(
     project_root: Path,
     raw_value: str | None,
     default: Path,
-    legacy: Path,
+    legacy: tuple[Path, ...],
 ) -> Path:
     """Resolve table path and transparently support legacy single-file projects."""
     if raw_value:
@@ -136,9 +142,10 @@ def _resolve_db_table_path(
     if preferred.exists():
         return preferred
 
-    fallback = project_root / legacy
-    if fallback.exists():
-        return fallback
+    for fallback in legacy:
+        fallback_path = project_root / fallback
+        if fallback_path.exists():
+            return fallback_path
     return preferred
 
 
@@ -173,7 +180,7 @@ def _load_add_paths(
                 project_root=project_path,
                 raw_value=add_config.get("database_table_path"),
                 default=DEFAULT_DDD_DB_TABLE_PATH,
-                legacy=LEGACY_DDD_DB_TABLE_PATH,
+                legacy=LEGACY_DDD_DB_TABLE_PATHS,
             ),
         )
 
@@ -193,7 +200,7 @@ def _load_add_paths(
                 project_root=project_path,
                 raw_value=add_config.get("database_table_path"),
                 default=DEFAULT_MVC_DB_TABLE_PATH,
-                legacy=LEGACY_MVC_DB_TABLE_PATH,
+                legacy=LEGACY_MVC_DB_TABLE_PATHS,
             ),
             urls=_resolve_path(
                 project_path,
@@ -467,7 +474,7 @@ def _add_table_to_module_package(
     table_class_name: str,
     context: dict[str, str],
 ) -> Path | None:
-    """Create table/<module_name>.py and export class from table/__init__.py."""
+    """Create tables/<module_name>.py and export class from tables/__init__.py."""
     if not tables_init_path.exists() or tables_init_path.name != "__init__.py":
         return None
     if not template_file.exists():
@@ -704,7 +711,7 @@ def _add_mvc_templates(
     repo_class = f"{name_capitalized}Repository"
     if repo_file.exists() and repo_template.exists():
         table_import_module = (
-            ".table" if models_file.name == "__init__.py" else ".models"
+            ".tables" if models_file.name == "__init__.py" else ".models"
         )
         _ensure_import_from(repo_file, table_import_module, table_class)
 

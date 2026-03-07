@@ -21,7 +21,7 @@ class DatabaseError(BaseError):
 
 APP_LABEL = "models"
 MODEL_MODULES = (
-    "app.models.table",
+    "app.models.tables",
     "aerich.models",
 )
 DRIVER_ALIASES = {

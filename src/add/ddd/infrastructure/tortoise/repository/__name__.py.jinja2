@@ -5,7 +5,7 @@ from typing import Any, AsyncGenerator
 from ....domain.{{ name }} import {{ Name }}Repository as {{ Name }}RepositoryInterface
 from ....domain.{{ name }}.entities import {{ Name }}Flat, {{ Name }}Uncommitted
 from .base import BaseRepository
-from ..table import {{ Name }}Table
+from ..tables import {{ Name }}Table
 
 
 class {{ Name }}Repository(BaseRepository[{{ Name }}Table], {{ Name }}RepositoryInterface):

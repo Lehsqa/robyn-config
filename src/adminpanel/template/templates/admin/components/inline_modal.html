@@ -7,11 +7,6 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
-                <div class="mb-3">
-                    <button class="btn btn-primary add-inline-record">
-                        <i class="bi bi-plus-lg"></i> Add record
-                    </button>
-                </div>
                 <div class="table-responsive">
                     <table class="table" id="inlineTable"></table>
                 </div>
@@ -206,13 +201,6 @@
             console.error('Error refreshing inline table:', error);
         }
     }
-
-    // Add record
-    window.addInlineRecord = function(model, parentId) {
-        const fkField = currentOptions.config.fk_field;
-        const initialData = { [fkField]: parentId };
-        showFormModal('add', initialData);
-    };
 
     // Edit record
     window.editInlineRecord = function(model, id) {

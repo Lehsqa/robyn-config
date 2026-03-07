@@ -327,18 +327,44 @@ def test_generate_app_and_run_endpoints(
             assert (
                 admin_index_response.status_code == 200
             ), f"Admin index failed: {admin_index_response.text}"
+            assert "Quick Access" not in admin_index_response.text
+            assert "Application Logs" in admin_index_response.text
 
             # Test GET /admin/:route_id (model list)
             admin_model_list_response = client.get(f"/admin/{ADMIN_USER_ROUTE}")
             assert (
                 admin_model_list_response.status_code == 200
             ), f"Admin model list failed: {admin_model_list_response.text}"
+            assert (
+                'data-model-title="Users"' in admin_model_list_response.text
+            ), "Model page heading should use the same display name as Models list"
+            assert "Manage records for this model." in admin_model_list_response.text
+            assert 'id="addRecordBtn"' in admin_model_list_response.text
+            assert 'id="batchDelete"' in admin_model_list_response.text
+            assert 'id="exportBtn"' in admin_model_list_response.text
+            assert ">Filters<" not in admin_model_list_response.text
+            assert "title: translations.operation" not in admin_model_list_response.text
 
             # Test GET /admin/models (models tab)
             admin_models_tab_response = client.get("/admin/models")
             assert (
                 admin_models_tab_response.status_code == 200
             ), f"Admin models tab failed: {admin_models_tab_response.text}"
+            assert (
+                "/admin/users" not in admin_models_tab_response.text
+            ), "Users tab link must be removed from models page"
+            assert (
+                'data-category="Products"' in admin_models_tab_response.text
+            ), "Models page must group models by source filename category"
+
+            removed_users_tab_response = client.get("/admin/users")
+            assert (
+                removed_users_tab_response.status_code in {303, 307}
+            ), f"/admin/users should redirect to /admin/models: {removed_users_tab_response.status_code}"
+            assert (
+                removed_users_tab_response.headers.get("Location")
+                == "/admin/models"
+            )
 
             # Test POST /admin/set_language
             set_language_response = client.post(
@@ -356,6 +382,21 @@ def test_generate_app_and_run_endpoints(
             admin_rows = admin_users_payload["data"]
             assert admin_rows, "Expected admin users data to contain at least one record"
             admin_id = str(admin_rows[0]["data"]["id"])
+
+            admin_model_change_response = client.get(
+                f"/admin/{ADMIN_USER_ROUTE}/{admin_id}/change"
+            )
+            assert (
+                admin_model_change_response.status_code == 200
+            ), f"Admin model change page failed: {admin_model_change_response.text}"
+            assert (
+                f"/admin/{ADMIN_USER_ROUTE}/{admin_id}/edit"
+                in admin_model_change_response.text
+            )
+            assert (
+                f"/admin/{ADMIN_USER_ROUTE}/{admin_id}/delete"
+                in admin_model_change_response.text
+            )
 
             # Test GET /admin/:route_id/search
             admin_search_response = client.get(f"/admin/{ADMIN_USER_ROUTE}/search")
@@ -429,6 +470,66 @@ def test_generate_app_and_run_endpoints(
                 admin_edit_response.status_code == 200
             ), f"Admin edit failed: {admin_edit_response.text}"
 
+            # Test POST /admin/:route_id/:id/edit (legacy hashed password payload)
+            existing_admin_password_hash = str(
+                admin_rows[0]["data"].get("password", "")
+            )
+            assert (
+                existing_admin_password_hash
+            ), "Expected admin password hash in model data payload"
+            admin_password_hash_edit_response = client.post(
+                f"/admin/{ADMIN_USER_ROUTE}/{admin_id}/edit",
+                content=f"password={existing_admin_password_hash}",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            assert (
+                admin_password_hash_edit_response.status_code == 200
+            ), (
+                "Admin edit with legacy hash payload failed: "
+                f"{admin_password_hash_edit_response.text}"
+            )
+
+            admin_logout_after_hash_payload = client.get("/admin/logout")
+            assert (
+                admin_logout_after_hash_payload.status_code == 303
+            ), (
+                "Admin logout after hash-payload edit failed: "
+                f"{admin_logout_after_hash_payload.text}"
+            )
+
+            admin_login_after_hash_payload = _admin_login(
+                client, username="admin", password="admin"
+            )
+            assert (
+                admin_login_after_hash_payload.status_code == 303
+            ), (
+                "Admin login should still work after hash-payload edit: "
+                f"{admin_login_after_hash_payload.text}"
+            )
+
+            # Test POST /admin/:route_id/:id/edit (password update)
+            updated_admin_password = f"admin-new-{run_id}"
+            admin_password_edit_response = client.post(
+                f"/admin/{ADMIN_USER_ROUTE}/{admin_id}/edit",
+                content=f"password={updated_admin_password}",
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            assert (
+                admin_password_edit_response.status_code == 200
+            ), f"Admin password edit failed: {admin_password_edit_response.text}"
+
+            admin_logout_after_password_change = client.get("/admin/logout")
+            assert (
+                admin_logout_after_password_change.status_code == 303
+            ), f"Admin logout after password change failed: {admin_logout_after_password_change.text}"
+
+            admin_login_with_new_password = _admin_login(
+                client, username="admin", password=updated_admin_password
+            )
+            assert (
+                admin_login_with_new_password.status_code == 303
+            ), f"Admin login with updated password failed: {admin_login_with_new_password.text}"
+
             # Test POST /admin/:route_id/add (single create)
             single_username = f"admin-single-{run_id}"
             single_email = f"{single_username}@example.com"
@@ -497,6 +598,32 @@ def test_generate_app_and_run_endpoints(
 
             users_after_batch_add = _admin_data(client, ADMIN_USER_ROUTE)
             assert int(users_after_batch_add["total"]) == admin_users_total + 2
+
+            # Test pagination parsing/behavior in admin data endpoint
+            users_paginated_wide_response = client.get(
+                f"/admin/{ADMIN_USER_ROUTE}/data",
+                params={"limit": 12, "offset": 0},
+            )
+            assert users_paginated_wide_response.status_code == 200
+            users_paginated_wide = users_paginated_wide_response.json()
+            assert int(users_paginated_wide["total"]) == int(
+                users_after_batch_add["total"]
+            )
+            assert len(users_paginated_wide["data"]) == int(
+                users_after_batch_add["total"]
+            )
+
+            users_paginated_far_response = client.get(
+                f"/admin/{ADMIN_USER_ROUTE}/data",
+                params={"limit": 12, "offset": 10},
+            )
+            assert users_paginated_far_response.status_code == 200
+            users_paginated_far = users_paginated_far_response.json()
+            assert int(users_paginated_far["total"]) == int(
+                users_after_batch_add["total"]
+            )
+            assert users_paginated_far["data"] == []
+
             batch_user_ids: list[str] = []
             for username, _ in batch_users:
                 row = _find_row_by_field(

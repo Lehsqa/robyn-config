@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import secrets
@@ -12,7 +13,8 @@ from urllib.parse import parse_qs, unquote
 
 from robyn import Request, Response, Robyn, jsonify
 from robyn.templating import JinjaTemplate
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 
 from ..auth_models_sqlalchemy import Role, UserRole
@@ -24,8 +26,6 @@ from .sqlalchemy_admin import ModelAdmin
 
 class AdminSite:
     """SQLAlchemy-backed admin site."""
-    INTERNAL_AUTH_ROUTE_IDS = {"AdminUserAdmin", "RoleAdmin", "UserRoleAdmin"}
-    USERS_TAB_TABLE_NAMES = {"users", "robyn_admin_roles", "robyn_admin_user_roles"}
 
     def __init__(
         self,
@@ -61,6 +61,8 @@ class AdminSite:
         self.session_factory = session_factory
         self.generate_schemas = generate_schemas
         self.orm = orm
+        self._default_admin_initialized = False
+        self._default_admin_init_lock = asyncio.Lock()
 
         self._setup_templates()
         self._init_admin_db()
@@ -87,7 +89,7 @@ class AdminSite:
 
     def _get_model_table_name(self, model_admin: ModelAdmin) -> str:
         model = getattr(model_admin, "model", None)
-        table_name = getattr(model, "__tablename__", None).upper().replace("_", " ")
+        table_name = getattr(model, "__tablename__", None)
         if isinstance(table_name, str) and table_name:
             return table_name
 
@@ -97,44 +99,76 @@ class AdminSite:
             return db_table
         return ""
 
-    def _is_user_model(self, route_id: str, model_admin: ModelAdmin) -> bool:
-        table_name = self._get_model_table_name(model_admin).lower()
-        return bool(table_name) and (
-            table_name.endswith("users")
-            or table_name in self.USERS_TAB_TABLE_NAMES
+    def _get_model_source_filename(self, model_admin: ModelAdmin) -> str:
+        model = getattr(model_admin, "model", None)
+        module_name = getattr(model, "__module__", "")
+        if not isinstance(module_name, str) or not module_name:
+            return "Models"
+
+        module_parts = module_name.split(".")
+        file_name = module_parts[-1]
+        if file_name == "__init__" and len(module_parts) > 1:
+            file_name = module_parts[-2]
+        return self._format_label(file_name or "models", pluralize=True)
+
+    @staticmethod
+    def _pluralize_word(word: str) -> str:
+        lower_word = word.lower()
+        if lower_word.endswith("s"):
+            return word
+        if lower_word.endswith(("x", "z", "ch", "sh")):
+            return f"{word}es"
+        if (
+            lower_word.endswith("y")
+            and len(lower_word) > 1
+            and lower_word[-2] not in {"a", "e", "i", "o", "u"}
+        ):
+            return f"{word[:-1]}ies"
+        return f"{word}s"
+
+    def _format_label(self, raw_value: str, pluralize: bool) -> str:
+        normalized = raw_value.strip().replace("-", "_").replace(" ", "_")
+        parts = [part for part in normalized.split("_") if part]
+        if not parts:
+            return "Models" if pluralize else "Model"
+
+        if pluralize:
+            parts[-1] = self._pluralize_word(parts[-1])
+
+        return " ".join(part.capitalize() for part in parts)
+
+    def _get_model_display_name(self, model_admin: ModelAdmin) -> str:
+        table_name = self._get_model_table_name(model_admin)
+        if table_name:
+            return self._format_label(table_name, pluralize=False)
+        return self._format_label(
+            str(model_admin.verbose_name), pluralize=False
         )
 
-    def _prefer_route_for_same_table(
-        self, current_route_id: str, candidate_route_id: str
-    ) -> bool:
-        current_is_internal = current_route_id in self.INTERNAL_AUTH_ROUTE_IDS
-        candidate_is_internal = candidate_route_id in self.INTERNAL_AUTH_ROUTE_IDS
-        if current_is_internal and not candidate_is_internal:
-            return True
-        return False
-
-    def _split_models_by_tab(
+    def _build_model_categories(
         self, visible_models: dict[str, ModelAdmin]
-    ) -> tuple[dict[str, ModelAdmin], dict[str, ModelAdmin]]:
-        users_models: dict[str, ModelAdmin] = {}
-        other_models: dict[str, ModelAdmin] = {}
-        users_route_by_table: dict[str, str] = {}
+    ) -> list[dict[str, Any]]:
+        grouped: dict[str, list[dict[str, Any]]] = {}
         for route_id, model_admin in visible_models.items():
-            if self._is_user_model(route_id, model_admin):
-                table_key = self._get_model_table_name(model_admin).lower() or route_id
-                existing_route_id = users_route_by_table.get(table_key)
-                if existing_route_id is None:
-                    users_route_by_table[table_key] = route_id
-                    users_models[route_id] = model_admin
-                elif self._prefer_route_for_same_table(
-                    existing_route_id, route_id
-                ):
-                    users_models.pop(existing_route_id, None)
-                    users_route_by_table[table_key] = route_id
-                    users_models[route_id] = model_admin
-            else:
-                other_models[route_id] = model_admin
-        return users_models, other_models
+            category_name = self._get_model_source_filename(model_admin)
+            grouped.setdefault(category_name, []).append(
+                {
+                    "route_id": route_id,
+                    "model_admin": model_admin,
+                    "display_name": self._get_model_display_name(model_admin),
+                }
+            )
+
+        categories: list[dict[str, Any]] = []
+        for category_name in sorted(grouped.keys()):
+            models_in_category = sorted(
+                grouped[category_name],
+                key=lambda item: str(item["display_name"]).lower(),
+            )
+            categories.append(
+                {"name": category_name, "models": models_in_category}
+            )
+        return categories
 
     def _record_action(
         self,
@@ -145,7 +179,9 @@ class AdminSite:
     ) -> None:
         self.recent_actions.append(
             {
-                "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "timestamp": datetime.utcnow().strftime(
+                    "%Y-%m-%d %H:%M:%S UTC"
+                ),
                 "username": username or "system",
                 "action": action,
                 "target": target,
@@ -153,7 +189,9 @@ class AdminSite:
             }
         )
         if len(self.recent_actions) > self.max_recent_actions:
-            self.recent_actions = self.recent_actions[-self.max_recent_actions :]
+            self.recent_actions = self.recent_actions[
+                -self.max_recent_actions :
+            ]
 
     def _get_admin_settings(self, request: Request) -> dict[str, Any]:
         settings = dict(self.default_settings)
@@ -209,8 +247,13 @@ class AdminSite:
             return [f"Log file does not exist: {resolved_path}"], resolved_path
 
         try:
-            with candidate.open("r", encoding="utf-8", errors="replace") as handle:
-                lines = [line.rstrip("\n") for line in deque(handle, maxlen=max_lines)]
+            with candidate.open(
+                "r", encoding="utf-8", errors="replace"
+            ) as handle:
+                lines = [
+                    line.rstrip("\n")
+                    for line in deque(handle, maxlen=max_lines)
+                ]
             if not lines:
                 return ["Log file is empty."], resolved_path
             return lines, resolved_path
@@ -245,41 +288,104 @@ class AdminSite:
         # Kept for backward compatibility with older templates.
         return None
 
+    @staticmethod
+    def _get_session_dialect(session: Any) -> tuple[str, str]:
+        """Return (dialect_name, driver_name) for a sync or async SQLAlchemy bind."""
+        bind = session.get_bind()
+        if bind is None:
+            bind = session.bind
+        if bind is None:
+            return "", ""
+
+        sync_bind = getattr(bind, "sync_engine", bind)
+        dialect = getattr(sync_bind, "dialect", None)
+        url = getattr(sync_bind, "url", None)
+
+        dialect_name = str(getattr(dialect, "name", "") or "").lower()
+        driver_name = str(getattr(url, "drivername", "") or "").lower()
+        return dialect_name, driver_name
+
     async def _ensure_default_admin(self) -> None:
-        session = self.session_factory()
-        try:
-            result = await session.execute(
-                select(AdminUser).where(
-                    or_(
-                        AdminUser.username == self.default_admin_username,
-                        AdminUser.email == "admin@example.com",
+        if self._default_admin_initialized:
+            return
+
+        async with self._default_admin_init_lock:
+            if self._default_admin_initialized:
+                return
+
+            session = self.session_factory()
+            advisory_lock_acquired = False
+            advisory_lock_id = 193384911
+            try:
+                dialect_name, driver_name = self._get_session_dialect(session)
+                is_postgresql = dialect_name == "postgresql" or (
+                    "postgres" in driver_name
+                )
+
+                if is_postgresql:
+                    await session.execute(
+                        text("SELECT pg_advisory_lock(:lock_id)"),
+                        {"lock_id": advisory_lock_id},
+                    )
+                    advisory_lock_acquired = True
+
+                result = await session.execute(
+                    select(AdminUser).where(
+                        or_(
+                            AdminUser.username == self.default_admin_username,
+                            AdminUser.email == "admin@example.com",
+                        )
                     )
                 )
-            )
-            admin_user = result.scalar_one_or_none()
-            if admin_user is None:
-                session.add(
-                    AdminUser(
-                        username=self.default_admin_username,
-                        password=AdminUser.hash_password(
-                            self.default_admin_password
-                        ),
-                        email="admin@example.com",
-                        is_superuser=True,
-                        is_active=True,
-                    )
-                )
-                try:
-                    await session.commit()
-                except IntegrityError:
-                    # Another startup handler/process created the default admin
-                    # concurrently. Treat as success.
-                    await session.rollback()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
+                admin_user = result.scalar_one_or_none()
+                if admin_user is None:
+                    if is_postgresql:
+                        await session.execute(
+                            pg_insert(AdminUser)
+                            .values(
+                                username=self.default_admin_username,
+                                password=AdminUser.hash_password(
+                                    self.default_admin_password
+                                ),
+                                email="admin@example.com",
+                                is_superuser=True,
+                                is_active=True,
+                            )
+                            .on_conflict_do_nothing()
+                        )
+                        await session.commit()
+                    else:
+                        session.add(
+                            AdminUser(
+                                username=self.default_admin_username,
+                                password=AdminUser.hash_password(
+                                    self.default_admin_password
+                                ),
+                                email="admin@example.com",
+                                is_superuser=True,
+                                is_active=True,
+                            )
+                        )
+                        try:
+                            await session.commit()
+                        except IntegrityError:
+                            # Another startup handler/process created the default admin
+                            # concurrently. Treat as success.
+                            await session.rollback()
+                self._default_admin_initialized = True
+            except Exception:
+                await session.rollback()
+                raise
+            finally:
+                if advisory_lock_acquired:
+                    try:
+                        await session.execute(
+                            text("SELECT pg_advisory_unlock(:lock_id)"),
+                            {"lock_id": advisory_lock_id},
+                        )
+                    except Exception:
+                        pass
+                await session.close()
 
     def _setup_routes(self) -> None:
         @self.app.get(f"/{self.prefix}")
@@ -295,7 +401,7 @@ class AdminSite:
             language = await self._get_language(request)
             settings = self._get_admin_settings(request)
             filtered_models = await self._get_visible_models(request)
-            users_models, other_models = self._split_models_by_tab(filtered_models)
+            model_categories = self._build_model_categories(filtered_models)
             recent_actions = list(reversed(self.recent_actions[-20:]))
             log_lines, resolved_log_path = self._read_log_lines(
                 str(settings["log_file_path"]),
@@ -305,8 +411,7 @@ class AdminSite:
             context = {
                 "site_title": self.title,
                 "models": filtered_models,
-                "users_models": users_models,
-                "models_tab_models": other_models,
+                "model_categories": model_categories,
                 "user": user,
                 "language": language,
                 "copyright": self.copyright,
@@ -318,35 +423,6 @@ class AdminSite:
             }
             return self.jinja_template.render_template(
                 "admin/index.html", **context
-            )
-
-        @self.app.get(f"/{self.prefix}/users")
-        async def users_index(request: Request):
-            user = await self._get_current_user(request)
-            if not user:
-                return Response(
-                    status_code=307,
-                    description="Location login page",
-                    headers={"Location": f"/{self.prefix}/login"},
-                )
-
-            language = await self._get_language(request)
-            settings = self._get_admin_settings(request)
-            filtered_models = await self._get_visible_models(request)
-            users_models, other_models = self._split_models_by_tab(filtered_models)
-            context = {
-                "site_title": self.title,
-                "models": filtered_models,
-                "users_models": users_models,
-                "models_tab_models": other_models,
-                "user": user,
-                "language": language,
-                "copyright": self.copyright,
-                "active_tab": "users",
-                "admin_settings": settings,
-            }
-            return self.jinja_template.render_template(
-                "admin/users.html", **context
             )
 
         @self.app.get(f"/{self.prefix}/models")
@@ -362,12 +438,11 @@ class AdminSite:
             language = await self._get_language(request)
             settings = self._get_admin_settings(request)
             filtered_models = await self._get_visible_models(request)
-            users_models, other_models = self._split_models_by_tab(filtered_models)
+            model_categories = self._build_model_categories(filtered_models)
             context = {
                 "site_title": self.title,
                 "models": filtered_models,
-                "users_models": users_models,
-                "models_tab_models": other_models,
+                "model_categories": model_categories,
                 "user": user,
                 "language": language,
                 "copyright": self.copyright,
@@ -376,6 +451,21 @@ class AdminSite:
             }
             return self.jinja_template.render_template(
                 "admin/models.html", **context
+            )
+
+        @self.app.get(f"/{self.prefix}/users")
+        async def users_alias(request: Request):
+            user = await self._get_current_user(request)
+            if not user:
+                return Response(
+                    status_code=307,
+                    description="Location login page",
+                    headers={"Location": f"/{self.prefix}/login"},
+                )
+            return Response(
+                status_code=303,
+                description="Users tab moved to models",
+                headers={"Location": f"/{self.prefix}/models"},
             )
 
         @self.app.get(f"/{self.prefix}/settings")
@@ -391,12 +481,11 @@ class AdminSite:
             language = await self._get_language(request)
             settings = self._get_admin_settings(request)
             filtered_models = await self._get_visible_models(request)
-            users_models, other_models = self._split_models_by_tab(filtered_models)
+            model_categories = self._build_model_categories(filtered_models)
             context = {
                 "site_title": self.title,
                 "models": filtered_models,
-                "users_models": users_models,
-                "models_tab_models": other_models,
+                "model_categories": model_categories,
                 "user": user,
                 "language": language,
                 "copyright": self.copyright,
@@ -426,7 +515,8 @@ class AdminSite:
                 log_file_path = str(current_settings["log_file_path"])
 
             raw_log_tail = _first_value(
-                params.get("log_tail_lines"), current_settings["log_tail_lines"]
+                params.get("log_tail_lines"),
+                current_settings["log_tail_lines"],
             )
             try:
                 log_tail_lines = int(raw_log_tail)
@@ -434,7 +524,9 @@ class AdminSite:
                 log_tail_lines = int(current_settings["log_tail_lines"])
             log_tail_lines = max(20, min(log_tail_lines, 2000))
 
-            theme = _first_value(params.get("theme"), current_settings["theme"])
+            theme = _first_value(
+                params.get("theme"), current_settings["theme"]
+            )
             if theme not in {"dark", "light"}:
                 theme = current_settings["theme"]
 
@@ -454,7 +546,9 @@ class AdminSite:
                 description="Settings saved",
                 headers={
                     "Location": f"/{self.prefix}/settings",
-                    "Set-Cookie": self._build_settings_cookie(updated_settings),
+                    "Set-Cookie": self._build_settings_cookie(
+                        updated_settings
+                    ),
                 },
             )
 
@@ -611,6 +705,13 @@ class AdminSite:
                     description="Not logged in",
                 )
 
+            if route_id == "users":
+                return Response(
+                    status_code=303,
+                    headers={"Location": f"/{self.prefix}/models"},
+                    description="Users tab moved to models",
+                )
+
             language = await self._get_language(request)
             if not await self.check_permission(request, route_id, "view"):
                 return Response(
@@ -627,25 +728,151 @@ class AdminSite:
 
             settings = self._get_admin_settings(request)
             filtered_models = await self._get_visible_models(request)
-            users_models, other_models = self._split_models_by_tab(filtered_models)
-            active_tab = "users" if self._is_user_model(route_id, model_admin) else "models"
+            model_categories = self._build_model_categories(filtered_models)
+            display_name = self._get_model_display_name(model_admin)
 
             context = {
                 "site_title": self.title,
                 "models": filtered_models,
-                "users_models": users_models,
-                "models_tab_models": other_models,
+                "model_categories": model_categories,
                 "user": user,
                 "language": language,
                 "current_model": route_id,
-                "verbose_name": model_admin.verbose_name,
+                "verbose_name": display_name,
                 "frontend_config": frontend_config,
                 "copyright": self.copyright,
-                "active_tab": active_tab,
+                "active_tab": "models",
                 "admin_settings": settings,
             }
             return self.jinja_template.render_template(
                 "admin/model_list.html", **context
+            )
+
+        @self.app.get(f"/{self.prefix}/:route_id/add")
+        async def model_add(request: Request):
+            route_id: str = request.path_params.get("route_id")
+            user = await self._get_current_user(request)
+            if not user:
+                return Response(
+                    status_code=303,
+                    headers={"Location": f"/{self.prefix}/login"},
+                    description="Not logged in",
+                )
+
+            model_admin = self.get_model_admin(route_id)
+            if not model_admin:
+                return Response(status_code=404, description="model not found")
+
+            if not await self.check_permission(request, route_id, "add"):
+                return Response(
+                    status_code=403, description="No create permission"
+                )
+
+            language = await self._get_language(request)
+            form_fields = [
+                field.to_dict()
+                for field in await model_admin.get_form_fields()
+            ]
+            can_add = model_admin.allow_add and await self.check_permission(
+                request, route_id, "add"
+            )
+
+            settings = self._get_admin_settings(request)
+            filtered_models = await self._get_visible_models(request)
+            model_categories = self._build_model_categories(filtered_models)
+            display_name = self._get_model_display_name(model_admin)
+            context = {
+                "site_title": self.title,
+                "models": filtered_models,
+                "model_categories": model_categories,
+                "user": user,
+                "language": language,
+                "current_model": route_id,
+                "verbose_name": display_name,
+                "route_id": route_id,
+                "object_id": "",
+                "form_fields": form_fields,
+                "form_data": {},
+                "can_edit": can_add,
+                "can_delete": False,
+                "is_add_mode": True,
+                "copyright": self.copyright,
+                "active_tab": "models",
+                "admin_settings": settings,
+            }
+            return self.jinja_template.render_template(
+                "admin/model_change.html", **context
+            )
+
+        @self.app.get(f"/{self.prefix}/:route_id/:id/change")
+        async def model_change(request: Request):
+            route_id: str = request.path_params.get("route_id")
+            object_id: str = unquote(str(request.path_params.get("id", "")))
+
+            user = await self._get_current_user(request)
+            if not user:
+                return Response(
+                    status_code=303,
+                    headers={"Location": f"/{self.prefix}/login"},
+                    description="Not logged in",
+                )
+
+            if not await self.check_permission(request, route_id, "view"):
+                return Response(
+                    status_code=403, description="Permission denied"
+                )
+
+            model_admin = self.get_model_admin(route_id)
+            if not model_admin:
+                return Response(status_code=404, description="model not found")
+
+            obj = await model_admin.get_object(object_id)
+            if not obj:
+                return Response(
+                    status_code=404, description="Record not found"
+                )
+
+            language = await self._get_language(request)
+            form_fields = [
+                field.to_dict()
+                for field in await model_admin.get_form_fields()
+            ]
+            form_data = await model_admin.serialize_object(
+                obj, for_display=False
+            )
+            can_edit = model_admin.enable_edit and await self.check_permission(
+                request, route_id, "edit"
+            )
+            can_delete = (
+                model_admin.allow_delete
+                and await self.check_permission(request, route_id, "delete")
+            )
+
+            settings = self._get_admin_settings(request)
+            filtered_models = await self._get_visible_models(request)
+            model_categories = self._build_model_categories(filtered_models)
+            display_name = self._get_model_display_name(model_admin)
+            context = {
+                "site_title": self.title,
+                "models": filtered_models,
+                "model_categories": model_categories,
+                "user": user,
+                "language": language,
+                "current_model": route_id,
+                "verbose_name": display_name,
+                "route_id": route_id,
+                "object_id": object_id,
+                "form_fields": form_fields,
+                "form_data": form_data,
+                "can_edit": can_edit,
+                "can_delete": can_delete,
+                "is_add_mode": False,
+                "copyright": self.copyright,
+                "active_tab": "models",
+                "admin_settings": settings,
+            }
+            return self.jinja_template.render_template(
+                "admin/model_change.html", **context
             )
 
         @self.app.post(f"/{self.prefix}/:route_id/add")

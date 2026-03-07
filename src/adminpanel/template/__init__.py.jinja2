@@ -18,6 +18,7 @@ from .core.sqlalchemy_admin import ModelAdmin
 from .core.sqlalchemy_site import AdminSite
 from . import auth_models_sqlalchemy as auth_models, models_sqlalchemy as models
 {% endif %}
+from .project_tables import load_project_tables_module
 
 __version__ = "0.1.5"
 
@@ -33,18 +34,15 @@ __all__ = [
 ]
 
 {% if design == "ddd" and orm == "tortoise" %}
-from app.infrastructure.database import table as project_tables
 from app.infrastructure.database.services.engine import MODEL_MODULES, TORTOISE_ORM
 {% elif design == "ddd" and orm == "sqlalchemy" %}
-from app.infrastructure.database import table as project_tables
 from app.infrastructure.database.services.session import create_session
 {% elif design == "mvc" and orm == "tortoise" %}
-from app.models import table as project_tables
 from app.models.database import MODEL_MODULES, TORTOISE_ORM
 {% elif design == "mvc" and orm == "sqlalchemy" %}
-from app.models import table as project_tables
 from app.models.database import create_session
 {% endif %}
+project_tables = load_project_tables_module()
 
 
 {% if orm == "sqlalchemy" %}

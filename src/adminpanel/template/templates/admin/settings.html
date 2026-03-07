@@ -9,7 +9,7 @@
         <p class="text-sm text-slate-600 dark:text-slate-400">Configure dashboard log source and visual theme.</p>
     </div>
 
-    <form method="post" action="/admin/settings" class="rounded-xl border border-slate-200 dark:border-slate-700 bg-surface-light dark:bg-surface-dark p-6 space-y-5">
+    <form method="post" action="/admin/settings" class="rounded-xl border border-slate-200 dark:border-slate-700 admin-border-soft bg-surface-light dark:bg-surface-dark p-6 space-y-5">
         <div>
             <label for="log_file_path" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">App log file path</label>
             <input
@@ -18,7 +18,7 @@
                 type="text"
                 value="{{ admin_settings.log_file_path if admin_settings else 'logs/app.log' }}"
                 placeholder="logs/app.log"
-                class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-2 focus:ring-primary/30"
+                class="admin-themed-input w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-2 focus:ring-primary/30"
                 required
             >
             <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Relative paths are resolved from the app working directory.</p>
@@ -33,7 +33,7 @@
                 min="20"
                 max="2000"
                 value="{{ admin_settings.log_tail_lines if admin_settings else 200 }}"
-                class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-2 focus:ring-primary/30"
+                class="admin-themed-input w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-2 focus:ring-primary/30"
                 required
             >
         </div>
@@ -43,7 +43,7 @@
             <select
                 id="theme"
                 name="theme"
-                class="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-2 focus:ring-primary/30"
+                class="admin-themed-input w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 focus:border-primary focus:ring-2 focus:ring-primary/30"
             >
                 {% set selected_theme = admin_settings.theme if admin_settings else 'dark' %}
                 <option value="dark" {% if selected_theme == 'dark' %}selected{% endif %}>Dark</option>

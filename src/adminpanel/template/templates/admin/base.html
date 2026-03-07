@@ -45,6 +45,13 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
 
     <style>
+        :root {
+            --admin-border-soft-light: rgb(226 232 240 / 0.66);
+            --admin-border-soft-dark: rgb(71 85 105 / 0.45);
+            --admin-table-border-light: rgb(226 232 240 / 0.66);
+            --admin-table-border-dark: rgb(71 85 105 / 0.32);
+        }
+
         .material-symbols-outlined {
             font-variation-settings: "FILL" 1, "wght" 450, "GRAD" 0, "opsz" 24;
         }
@@ -76,16 +83,32 @@
         }
 
         .card {
-            border: 1px solid rgb(226 232 240);
+            border: 1px solid var(--admin-border-soft-light);
             border-radius: 0.75rem;
             box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
         }
 
         .dark .card {
-            border-color: rgb(51 65 85);
+            border-color: var(--admin-border-soft-dark);
             background-color: rgb(21 32 43);
             color: rgb(226 232 240);
             box-shadow: none;
+        }
+
+        .admin-border-soft {
+            border-color: var(--admin-border-soft-light) !important;
+        }
+
+        .dark .admin-border-soft {
+            border-color: var(--admin-border-soft-dark) !important;
+        }
+
+        .admin-border-soft-divider {
+            border-color: var(--admin-border-soft-light) !important;
+        }
+
+        .dark .admin-border-soft-divider {
+            border-color: var(--admin-border-soft-dark) !important;
         }
 
         .modal-content {
@@ -151,6 +174,121 @@
         .bootstrap-table .search input {
             border-radius: 0.5rem;
         }
+
+        .admin-themed-input,
+        .admin-themed-input:focus {
+            border-color: rgb(203 213 225) !important;
+            background-color: rgb(255 255 255) !important;
+            color: rgb(15 23 42) !important;
+            box-shadow: none !important;
+        }
+
+        .admin-themed-input::placeholder {
+            color: rgb(148 163 184) !important;
+        }
+
+        .dark .admin-themed-input,
+        .dark .admin-themed-input:focus {
+            border-color: rgb(71 85 105) !important;
+            background-color: rgb(11 18 32) !important;
+            color: rgb(226 232 240) !important;
+            box-shadow: none !important;
+        }
+
+        .dark .admin-themed-input::placeholder {
+            color: rgb(148 163 184) !important;
+        }
+
+        .dark .bootstrap-table .fixed-table-toolbar .search input,
+        .dark .bootstrap-table .fixed-table-toolbar .search input.form-control {
+            background-color: rgb(11 18 32) !important;
+            border-color: rgb(71 85 105) !important;
+            color: rgb(226 232 240) !important;
+        }
+
+        .dark .bootstrap-table .fixed-table-toolbar .search input::placeholder,
+        .dark .bootstrap-table .fixed-table-toolbar .search input.form-control::placeholder {
+            color: rgb(148 163 184) !important;
+        }
+
+        .dark .bootstrap-table .table > tbody > tr > td {
+            background-color: rgb(13 21 35) !important;
+            color: rgb(226 232 240) !important;
+            border-color: var(--admin-table-border-dark) !important;
+        }
+
+        .bootstrap-table .table > :not(caption) > * > * {
+            border-color: var(--admin-table-border-light) !important;
+            border-style: solid !important;
+            border-width: 1px 1px 1px 0 !important;
+        }
+
+        .bootstrap-table .table th,
+        .bootstrap-table .table td {
+            border-color: var(--admin-table-border-light) !important;
+        }
+
+        .bootstrap-table .table tr > *:first-child {
+            border-left-width: 1px !important;
+        }
+
+        .dark .bootstrap-table .table > :not(caption) > * > * {
+            border-color: var(--admin-table-border-dark) !important;
+        }
+
+        .dark .bootstrap-table .table th,
+        .dark .bootstrap-table .table td {
+            border-color: var(--admin-table-border-dark) !important;
+        }
+
+        .admin-model-search-shell {
+            display: flex;
+            align-items: center;
+            height: 2.4rem;
+            border: 0.8px solid var(--admin-table-border-light);
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: none;
+        }
+
+        .admin-model-search-shell:focus-within {
+            border-color: rgb(19 127 236 / 0.65);
+            box-shadow: none;
+        }
+
+        .dark .admin-model-search-shell {
+            border-color: var(--admin-table-border-dark);
+        }
+
+        .dark .admin-model-search-shell:focus-within {
+            border-color: rgb(56 189 248 / 0.6);
+            box-shadow: none;
+        }
+
+        .dark .bootstrap-table .table > tbody > tr:nth-child(even) > td {
+            background-color: rgb(17 27 43) !important;
+        }
+
+        .dark .bootstrap-table .table-hover > tbody > tr:hover > td {
+            background-color: rgb(30 41 59) !important;
+            color: rgb(248 250 252) !important;
+        }
+
+        .models-search-icon-shell {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            padding-left: 0.65rem;
+            padding-right: 0.65rem;
+            border-right: 0.8px solid var(--admin-table-border-light);
+            background-color: rgb(248 250 252);
+        }
+
+        .dark .models-search-icon-shell {
+            border-right-color: var(--admin-table-border-dark);
+            background-color: rgb(15 23 42);
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
@@ -168,7 +306,7 @@
             </div>
         </div>
         <div class="flex items-center gap-3">
-            <div class="hidden sm:flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-500 dark:text-slate-300">
+            <div class="hidden sm:flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 admin-border-soft px-3 py-1.5 text-xs text-slate-500 dark:text-slate-300">
                 <span class="material-symbols-outlined text-[16px]">person</span>
                 {{ user.username }}
             </div>
@@ -179,14 +317,10 @@
         </div>
     </header>
 
-    <nav class="md:hidden grid grid-cols-4 border-b border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark">
+    <nav class="md:hidden grid grid-cols-3 border-b border-slate-200 dark:border-slate-800 bg-surface-light dark:bg-surface-dark">
         <a href="/{{ prefix | default('admin') }}" class="flex flex-col items-center gap-1 px-2 py-2 text-[11px] font-semibold {% if current_tab == 'dashboard' %}text-primary{% else %}text-slate-500 dark:text-slate-300{% endif %}">
             <span class="material-symbols-outlined text-[18px]">dashboard</span>
             Dashboard
-        </a>
-        <a href="/{{ prefix | default('admin') }}/users" class="flex flex-col items-center gap-1 px-2 py-2 text-[11px] font-semibold {% if current_tab == 'users' %}text-primary{% else %}text-slate-500 dark:text-slate-300{% endif %}">
-            <span class="material-symbols-outlined text-[18px]">group</span>
-            Users
         </a>
         <a href="/{{ prefix | default('admin') }}/models" class="flex flex-col items-center gap-1 px-2 py-2 text-[11px] font-semibold {% if current_tab == 'models' %}text-primary{% else %}text-slate-500 dark:text-slate-300{% endif %}">
             <span class="material-symbols-outlined text-[18px]">database</span>
@@ -205,10 +339,6 @@
                     <span class="material-symbols-outlined text-[20px]">dashboard</span>
                     Dashboard
                 </a>
-                <a href="/{{ prefix | default('admin') }}/users" class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors {% if current_tab == 'users' %}bg-primary/15 text-primary{% else %}text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
-                    <span class="material-symbols-outlined text-[20px]">group</span>
-                    Users
-                </a>
                 <a href="/{{ prefix | default('admin') }}/models" class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors {% if current_tab == 'models' %}bg-primary/15 text-primary{% else %}text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800{% endif %}">
                     <span class="material-symbols-outlined text-[20px]">database</span>
                     Models
@@ -219,12 +349,11 @@
                 </a>
             </nav>
 
-            <div class="mt-6 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/80 dark:bg-slate-800/40 p-4">
+            <div class="mt-6 rounded-xl border border-slate-200 dark:border-slate-700 admin-border-soft bg-slate-50/80 dark:bg-slate-800/40 p-4">
                 <p class="text-xs uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">Models Summary</p>
                 <div class="mt-3 space-y-2 text-sm text-slate-600 dark:text-slate-300">
                     <div class="flex justify-between"><span>Total</span><span class="font-semibold">{{ models|length if models is defined else 0 }}</span></div>
-                    <div class="flex justify-between"><span>Users</span><span class="font-semibold">{{ users_models|length if users_models is defined else 0 }}</span></div>
-                    <div class="flex justify-between"><span>Other</span><span class="font-semibold">{{ models_tab_models|length if models_tab_models is defined else 0 }}</span></div>
+                    <div class="flex justify-between"><span>Categories</span><span class="font-semibold">{{ model_categories|length if model_categories is defined else 0 }}</span></div>
                 </div>
             </div>
 
