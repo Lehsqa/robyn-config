@@ -87,6 +87,15 @@ You can override the default superadmin credentials when scaffolding:
 robyn-config adminpanel -u superadmin -p super-secret-password ./my-service
 ```
 
+The `adminpanel` command will:
+- Generate the admin module in `src/app/infrastructure/adminpanel` for DDD projects, or in `src/app/adminpanel` for MVC projects.
+- Read ORM from `[tool.robyn-config].orm` and scaffold only required ORM internals while keeping generated module filenames ORM-agnostic.
+- Wire `adminpanel.register(...)` into `src/app/server.py`.
+- Respect `[tool.robyn-config.add].database_table_path` for injecting admin tables (`Role`, `UserRole`).
+- Write/update `[tool.robyn-config.adminpanel]` metadata in `pyproject.toml` with `created = true`.
+- Ensure required dependencies exist in the target project: `jinja2`, `aiosqlite`, `pandas`, `openpyxl`.
+- Prompt before overwriting if admin panel scaffolding was already created.
+
 ### 🏃 CLI Options
 
 ```
@@ -120,8 +129,8 @@ Commands:
 
 **`adminpanel` command options:**
 
-- `-u`, `--username`: Default superadmin username. Defaults to `admin`.
-- `-p`, `--password`: Default superadmin password. Defaults to `admin`.
+- `-u`, `--username`: Default superadmin username injected into generated bootstrap code. Defaults to `admin`.
+- `-p`, `--password`: Default superadmin password injected into generated bootstrap code. Defaults to `admin`.
 - `project_path`: Path to the project root. Defaults to current directory.
 
 ## 🐍 Python Version Support
@@ -139,7 +148,8 @@ Please make sure you have the correct version of Python installed before startin
 - **Architectural Flexibility**: Native support for **Domain-Driven Design (DDD)** and **Model-View-Controller (MVC)** patterns.
 - **ORM Choice**: Seamless integration with **SQLAlchemy** or **Tortoise ORM**.
 - **Package Manager choice**: Lock/install via **uv** (default) or **poetry**, with fresh lock files generated in quiet mode.
-- **Resilient operations**: `create` cleans up generated files if it fails; `add` rolls back using a temporary backup to keep your project intact.
+- **Admin Panel Scaffolding**: `adminpanel` builds an ORM-aware admin module, auto-wires routes, and supports custom superadmin credentials.
+- **Resilient operations**: `create` cleans up generated files if it fails; `add` and `adminpanel` roll back with a temporary project backup on errors.
 - **Production Ready**: Includes Docker, Docker Compose, and optimized configurations out of the box.
 - **DevEx**: Pre-configured with `ruff`, `pytest`, `black`, and `mypy` for a superior development experience.
 - **AI Agent Skills**: Installable skills support for AI agents to streamline specialized workflows.
