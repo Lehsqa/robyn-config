@@ -371,11 +371,11 @@
 {% block extra_js %}
 {{ super() }}
 <script>
-// 初始化前端配置
+// Initialize frontend config
 window.serverConfig = JSON.parse('{{ frontend_config|tojson|safe }}');
 console.log('Server config initialized:', window.serverConfig);
 
-// 处理表格操作
+// Handle table actions
 function handleAction(action, id, rowData) {
     console.log('Action:', action, 'ID:', id, 'Row data:', rowData);
     
@@ -419,7 +419,7 @@ function handleAction(action, id, rowData) {
     }
 }
 
-// 删除记录
+// Delete record
 async function deleteRecord(id) {
     if (!id || id === 'undefined') {
         console.error('Invalid id for delete');
@@ -448,11 +448,11 @@ function showImportModal() {
     var modal = new bootstrap.Modal(document.getElementById('importModal'));
     modal.show();
     
-    // 设置文件输入框的文本
+    // Set file input label text
     const fileInput = document.getElementById('importFile');
     const placeholder = fileInput.getAttribute('data-placeholder');
     
-    // 监听文件选择变化
+    // Listen for file selection changes
     fileInput.addEventListener('change', function(e) {
         const fileName = e.target.files[0]?.name || placeholder;
         const label = e.target.nextElementSibling;
@@ -482,9 +482,9 @@ async function handleImport() {
         alert(result.message);
         
         if (result.success) {
-            // 关闭模态框
+            // Close modal
             bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
-            // 刷新表格
+            // Refresh table
             $('#dataTable').bootstrapTable('refresh');
         }
         
@@ -498,7 +498,7 @@ async function handleImport() {
 }
 </script>
 
-{# 确保在配置初始化后加载表格脚本 #}
+{# Ensure table scripts load after config initialization #}
 {% if not frontend_config.is_inline %}
     {{ table_scripts() }}
 {% endif %}

@@ -1,4 +1,4 @@
-{# 表单弹窗组件 #}
+{# Form modal component #}
 <div class="modal fade" id="formModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -142,7 +142,7 @@ function showFormModal(action, data = null) {
                             const uploadedUrl = await handleFileUpload(file, field.upload_path, field.max_size);
                             if (uploadedUrl) {
                                 document.getElementById(`hidden_${field.name}`).value = uploadedUrl;
-                                // 更新预览图
+                                // Update preview image
                                 const previewContainer = this.parentElement.nextElementSibling;
                                 if (previewContainer) {
                                     previewContainer.innerHTML = `

@@ -151,7 +151,7 @@ $(document).ready(function() {
         })
         .map(item => item.field);
 
-    // 构建表格列配置
+    // Build table column config
     var columns = [{checkbox: true}];
     orderedFields.forEach(function(field) {
         if (!field.hidden) {
@@ -190,9 +190,9 @@ $(document).ready(function() {
                         }
                     }
 
-                    // 处理 switch 类型
+                    // Handle switch display type
                     if (field.display_type === 'switch') {
-                        // 确定当前值是否为"开启"状态
+                        // Determine whether current value is "on"
                         const isChecked = (
                             value === field.choices[true] || 
                             value === true || 
@@ -202,11 +202,11 @@ $(document).ready(function() {
                             value === 1
                         );
                         
-                        // 获取显示文本
+                        // Get display text
                         const onText = field.labels ? field.labels[true] : 'Yes';
                         const offText = field.labels ? field.labels[false] : 'No';
                         
-                        // 获取实际值
+                        // Get actual values
                         const onValue = field.choices ? field.choices[true] : true;
                         const offValue = field.choices ? field.choices[false] : false;
                         
@@ -236,7 +236,7 @@ $(document).ready(function() {
                     }
                     
                     if (field.actions && field.actions.length > 0) {
-                        // 生成自定义操作按钮
+                        // Generate custom action buttons
                         return field.actions.map(action => `
                             <button class="btn btn-sm ${action.btn_class}"
                                     onclick="handleCustomAction('${action.name}', '${row.id}', '${action.inline_model}')">
@@ -261,11 +261,11 @@ $(document).ready(function() {
         }
     });
 
-    // 初始化表格并保存到全局变量
+    // Initialize table and save to global variable
     window.$table = $('#dataTable').bootstrapTable({
         url: `/admin/${config.route_id}/data`,
         method: 'GET',
-        columns: columns,  // 使用构建好的列配置
+        columns: columns,  // Use the prepared column config
         toggle: 'table',
         pagination: true,
         sidePagination: 'server',
@@ -301,9 +301,9 @@ $(document).ready(function() {
                 return { total: 0, rows: [] };
             }
             
-            // 处理返回的数据
+            // Handle returned data
             var result = {
-                total: parseInt(res.total),  // 总记录数
+                total: parseInt(res.total),  // Total record count
                 rows: res.data.map(function(item) {
                     return {
                         ...item.data,
@@ -348,7 +348,7 @@ $(document).ready(function() {
         }
     });
 
-    // 确保表格已初始化
+    // Ensure table is initialized
     console.log('Table initialized:', window.$table);
     $table = window.$table;
 
@@ -358,7 +358,7 @@ $(document).ready(function() {
         updateSelectionInfo(selectedCount);
     }
 
-    // 监听表格选择事件
+    // Listen for table selection events
     $table.on('check.bs.table', function(_event, row) {
         addSelectedRows([row]);
         syncCurrentPageSelectionCache();
@@ -411,7 +411,7 @@ $(document).ready(function() {
     });
     bindSelectAllToggle();
 
-    // 添加选中信息提示区域
+    // Add selection info hint area
     var $toolbar = $('#toolbar');
     $('<div/>', {
         id: 'selectionInfo',
@@ -419,7 +419,7 @@ $(document).ready(function() {
         role: 'alert'
     }).appendTo($toolbar);
 
-    // 更新选中信息
+    // Update selection info
     function updateSelectionInfo(count) {
         var $info = $('#selectionInfo');
         if (count > 0) {
@@ -436,7 +436,7 @@ $(document).ready(function() {
         }
     }
 
-    // ��除选择
+    // Clear selection
     window.clearSelection = function() {
         selectedRows.clear();
         $table.bootstrapTable('uncheckAll');
@@ -451,7 +451,7 @@ $(document).ready(function() {
         syncSelectionState();
     };
 
-    // 批量删除功能
+    // Batch delete feature
     $('#batchDelete').click(function() {
         var ids = Array.from(selectedRows.keys());
         if (!ids.length) {
@@ -463,21 +463,21 @@ $(document).ready(function() {
             return;
         }
 
-        // 显示加载提示
+        // Show loading indicator
         var $btn = $(this);
         var originalText = $btn.html();
         $btn.prop('disabled', true)
             .html(`<i class="bi bi-hourglass-split"></i> ${translations.deleting}`);
 
-        // 发送批量删除请求
+        // Send batch delete request
         $.ajax({
             url: `/admin/${config.route_id}/batch_delete`,
             method: 'POST',
             data: { ids: ids },
-            dataType: 'json',  // 指定应类 JSON
+            dataType: 'json',  // Expect JSON response
             success: function(response) {
                 if (response.success) {
-                    // 显示成功提示
+                    // Show success alert
                     var $alert = $('<div/>', {
                         class: 'alert alert-success alert-dismissible fade show mt-2',
                         role: 'alert'
@@ -487,17 +487,17 @@ $(document).ready(function() {
                     `);
                     $('#toolbar').append($alert);
                     
-                    // 自动关闭提示
+                    // Auto-close alert
                     setTimeout(function() {
                         $alert.alert('close');
                     }, 3000);
 
-                    // 刷新表格
+                    // Refresh table
                     selectedRows.clear();
                     $table.bootstrapTable('refresh');
                     syncSelectionState();
                 } else {
-                    // 显示错误提示
+                    // Show error alert
                     var $alert = $('<div/>', {
                         class: 'alert alert-danger alert-dismissible fade show mt-2',
                         role: 'alert'
@@ -507,7 +507,7 @@ $(document).ready(function() {
                     `);
                     $('#toolbar').append($alert);
                     
-                    // 自动关闭提示
+                    // Auto-close alert
                     setTimeout(function() {
                         $alert.alert('close');
                     }, 3000);
@@ -522,7 +522,7 @@ $(document).ready(function() {
                     console.error('Error parsing response:', e);
                 }
                 
-                // 显示错误提示
+                // Show error alert
                 var $alert = $('<div/>', {
                     class: 'alert alert-danger alert-dismissible fade show mt-2',
                     role: 'alert'
@@ -532,31 +532,31 @@ $(document).ready(function() {
                 `);
                 $('#toolbar').append($alert);
                 
-                // 自动关闭提示
+                // Auto-close alert
                 setTimeout(function() {
                     $alert.alert('close');
                 }, 3000);
             },
             complete: function() {
-                // 恢复按钮状态
+                // Restore button state
                 $btn.prop('disabled', false).html(originalText);
             }
         });
     });
 
-    // 刷新表格数据的函数
+    // Function to refresh table data
     window.refreshTable = function() {
         $table.bootstrapTable('refresh', {
             silent: false,
-            reset: true  // 重置页码和其他状态
+            reset: true  // Reset page number and other state
         });
     };
 
-    // 导出数据功能
+    // Export data feature
     window.exportData = function(scope) {
         var exportScope = scope || 'all';
 
-        // 获取当前表格数据或选中数据
+        // Get current table data or selected data
         var data = exportScope === 'selected'
             ? Array.from(selectedRows.values())
             : $table.bootstrapTable('getData');
@@ -567,7 +567,7 @@ $(document).ready(function() {
             return;
         }
         
-        // 获取显示的列（排除操作列和复选框列）
+        // Get visible columns (exclude actions and checkbox columns)
         var visibleColumns = $table.bootstrapTable('getVisibleColumns')
             .filter(function(column) {
                 return column.field !== 'operate' && !column.checkbox;
@@ -576,16 +576,16 @@ $(document).ready(function() {
         // Build CSV content
         var csvContent = '\ufeff';
         
-        // 添加表头
+        // Add headers
         csvContent += visibleColumns.map(function(column) {
             return '"' + (column.title || column.field) + '"';
         }).join(',') + '\n';
         
-        // 添加数据
+        // Add rows
         data.forEach(function(row) {
             csvContent += visibleColumns.map(function(column) {
                 var value;
-                // 显示值
+                // Display value
                 var cell = $table.find('tr[data-index="' + $table.bootstrapTable('getData').indexOf(row) + '"] td[data-field="' + column.field + '"]');
                 if (cell.length) {
                     value = cell.text().trim();
@@ -593,11 +593,11 @@ $(document).ready(function() {
                     value = row[column.field] || '';
                 }
                 
-                // 处理特殊字符
+                // Handle special characters
                 if (typeof value === 'string') {
-                    // 移除HTML标签
+                    // Remove HTML tags
                     value = value.replace(/<[^>]+>/g, '');
-                    // 处理双引号
+                    // Escape double quotes
                     value = value.replace(/"/g, '""');
                 }
                 
@@ -605,12 +605,12 @@ $(document).ready(function() {
             }).join(',') + '\n';
         });
         
-        // 创建Blob对象
+        // Create Blob object
         var blob = new Blob([csvContent], {
             type: 'text/csv;charset=utf-8;'
         });
         
-        // 创建下载链接
+        // Create download link
         var link = document.createElement('a');
         var url = URL.createObjectURL(blob);
         var timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
@@ -621,14 +621,14 @@ $(document).ready(function() {
         link.style.visibility = 'hidden';
         document.body.appendChild(link);
         
-        // 触发下载
+        // Trigger download
         link.click();
         
-        // 清理
+        // Cleanup
         document.body.removeChild(link);
         URL.revokeObjectURL(url);
         
-        // 提示用户
+        // Notify user
         var message = exportScope === 'selected'
             ? translations.export_selected
             : translations.export_current;
@@ -639,7 +639,7 @@ $(document).ready(function() {
         exportData('all');
     });
 
-    // 添加自定义操作处理函数
+    // Add custom action handler
     window.handleCustomAction = async function(action, id, inlineModel) {
         if (action === 'view_documents') {
             try {
@@ -728,7 +728,7 @@ $(document).ready(function() {
                 ${options.config.fields.map(field => {
                     const value = item.display[field.name] || item.data[field.name] || '';
                     
-                    // 处理链接和其他显示类型
+                    // Handle links and other display types
                     if (field.is_link || field.display_type === 'link') {
                         const baseUrl = `/admin/${options.model}/${item.data.id}`;
                         return `<td><a href="${baseUrl}" class="text-decoration-none link-primary" 

@@ -33,7 +33,7 @@ __all__ = [
 
 def __getattr__(name: str) -> Any:
     if name == "AdminSite":
-        # Lazy import prevents circular import between core.site and auth_admin.
+        # Lazy import prevents circular import between core.site and package init.
         from .site import AdminSite
 
         return AdminSite

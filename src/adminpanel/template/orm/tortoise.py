@@ -4,7 +4,7 @@ from tortoise.models import Model
 
 
 class TortoiseAdapter(BaseORMAdapter):
-    """Tortoise-ORM适配器"""
+    """Tortoise adapter for generic admin CRUD helpers."""
 
     async def list(self, model: Type[Model], **filters) -> list[Model]:
         if filters:

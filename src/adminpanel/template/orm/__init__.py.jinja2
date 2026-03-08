@@ -1,33 +1,40 @@
 from __future__ import annotations
 
-from typing import Callable
-
-from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Any, Callable
 
 from .base import BaseORMAdapter
+{% if orm == "sqlalchemy" %}
 from .sqlalchemy import SQLAlchemyAdapter
+{% elif orm == "tortoise" %}
 from .tortoise import TortoiseAdapter
+{% endif %}
 
 
 def resolve_adapter(
     orm: str,
     *,
-    session_factory: Callable[[], AsyncSession] | None = None,
+    session_factory: Callable[[], Any] | None = None,
 ) -> BaseORMAdapter:
+{% if orm == "tortoise" %}
     if orm == "tortoise":
         return TortoiseAdapter()
+{% elif orm == "sqlalchemy" %}
     if orm == "sqlalchemy":
         if session_factory is None:
             raise ValueError(
                 "session_factory is required for sqlalchemy adapter"
             )
         return SQLAlchemyAdapter(session_factory=session_factory)
+{% endif %}
     raise ValueError(f"Unsupported ORM adapter: {orm}")
 
 
 __all__ = [
     "BaseORMAdapter",
+{% if orm == "tortoise" %}
     "TortoiseAdapter",
+{% elif orm == "sqlalchemy" %}
     "SQLAlchemyAdapter",
+{% endif %}
     "resolve_adapter",
 ]

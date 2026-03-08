@@ -1,14 +1,71 @@
-from enum import Enum
-from typing import Optional, Dict, Any, Type
+from __future__ import annotations
+
+import asyncio
 from dataclasses import dataclass
-from tortoise import Model
-from tortoise.expressions import Q
-import operator
-from functools import reduce
+from enum import Enum
+from typing import Any
+
+
+async def _await_if_needed(value: Any) -> Any:
+    if asyncio.iscoroutine(value):
+        return await value
+    if hasattr(value, "__await__"):
+        return await value
+    return value
+
+
+def _normalize_collection(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        return list(value)
+    except TypeError:
+        return [value]
+
+
+def _resolve_related_field_name(
+    field_name: str, related_model: type[Any]
+) -> str:
+    model_prefix = f"{related_model.__name__}_"
+    if field_name.startswith(model_prefix):
+        resolved = field_name[len(model_prefix) :]
+        if resolved:
+            return resolved
+    parts = field_name.split("_")
+    if len(parts) > 1:
+        return parts[-1]
+    return "id"
+
+
+async def _query_related_objects(
+    related_model: type[Any], lookup: str, value: str
+) -> list[Any]:
+    filter_method = getattr(related_model, "filter", None)
+    if not callable(filter_method):
+        return []
+
+    try:
+        result = filter_method(**{lookup: value})
+        resolved = await _await_if_needed(result)
+    except Exception:
+        return []
+
+    return _normalize_collection(resolved)
+
+
+def _extract_related_ids(objects: list[Any]) -> list[Any]:
+    related_ids: list[Any] = []
+    for obj in objects:
+        obj_id = getattr(obj, "id", None)
+        if obj_id is not None:
+            related_ids.append(obj_id)
+    return related_ids
 
 
 class FilterType(Enum):
-    """过滤器类型"""
+    """Filter types for admin table query controls."""
 
     INPUT = "input"
     SELECT = "select"
@@ -19,26 +76,24 @@ class FilterType(Enum):
 
 @dataclass
 class FilterField:
-    """过滤字段基类"""
+    """Base filter field configuration."""
 
-    name: str  # 字段名称，格式应该是 "模型类_字段名"
-    label: Optional[str] = None
+    name: str
+    label: str | None = None
     filter_type: FilterType = FilterType.INPUT
-    choices: Optional[Dict[Any, str]] = None
+    choices: dict[Any, str] | None = None
     multiple: bool = False
-    placeholder: Optional[str] = None
+    placeholder: str | None = None
     operator: str = "icontains"
-
-    # 添加关联字段支持，与 SearchField 保持一致
-    related_model: Optional[Type[Model]] = None  # 关联的模型
-    related_key: Optional[str] = None  # 外键字段名
+    related_model: type[Any] | None = None
+    related_key: str | None = None
 
     def __post_init__(self):
         if self.label is None:
             self.label = self.name.replace("_", " ").title()
 
     def to_dict(self) -> dict:
-        """转换为字典，用于JSON序列化"""
+        """Serialize filter config for frontend usage."""
         data = {
             "name": self.name,
             "label": self.label,
@@ -55,55 +110,38 @@ class FilterField:
         return data
 
     async def build_filter_query(self, filter_value: str) -> dict:
-        """构建过滤查询条件"""
+        """Build backend filter expressions from frontend values."""
         if not filter_value:
             return {}
 
         if self.related_model and self.related_key:
-            # 从字段名中解析要过滤的关联字段
-            model_name = self.related_model.__name__
-            if self.name.startswith(model_name + "_"):
-                # 获取实际要过滤的字段名
-                related_field = self.name[len(model_name + "_") :]
-                try:
-                    # 先查询关联模型
-                    related_objects = await self.related_model.filter(
-                        **{f"{related_field}__icontains": filter_value}
-                    )
-                    if not related_objects:
-                        return {"id": None}
+            related_field = _resolve_related_field_name(
+                self.name, self.related_model
+            )
+            related_objects = await _query_related_objects(
+                self.related_model,
+                f"{related_field}__icontains",
+                filter_value,
+            )
+            related_ids = _extract_related_ids(related_objects)
+            if not related_ids:
+                return {"id": None}
+            return {f"{self.related_key}__in": related_ids}
 
-                    # 构建 OR 条件列表
-                    conditions = [
-                        Q(**{f"{self.related_key}": str(obj.id)})
-                        for obj in related_objects
-                    ]
-
-                    if conditions:
-                        # 返回组合的Q对象
-                        combined_q = reduce(operator.or_, conditions)
-                        return {"_q_object": combined_q}
-                    return {"id": None}
-
-                except Exception as e:
-                    print(f"Error in related filter: {str(e)}")
-                    return {"id": None}
-        else:
-            # 直接过滤当前字段
-            return {f"{self.name}__{self.operator}": filter_value}
+        return {f"{self.name}__{self.operator}": filter_value}
 
 
 class InputFilter(FilterField):
-    """输入框过滤器"""
+    """Text input filter."""
 
     def __init__(
         self,
         name: str,
-        label: Optional[str] = None,
-        placeholder: Optional[str] = None,
+        label: str | None = None,
+        placeholder: str | None = None,
         operator: str = "icontains",
-        related_model: Optional[Type[Model]] = None,
-        related_key: Optional[str] = None,
+        related_model: type[Any] | None = None,
+        related_key: str | None = None,
     ):
         super().__init__(
             name=name,
@@ -117,16 +155,16 @@ class InputFilter(FilterField):
 
 
 class SelectFilter(FilterField):
-    """下拉框过滤器"""
+    """Select filter."""
 
     def __init__(
         self,
         name: str,
-        choices: Dict[Any, str],
-        label: Optional[str] = None,
+        choices: dict[Any, str],
+        label: str | None = None,
         multiple: bool = False,
-        related_model: Optional[Type[Model]] = None,
-        related_key: Optional[str] = None,
+        related_model: type[Any] | None = None,
+        related_key: str | None = None,
     ):
         super().__init__(
             name=name,
@@ -140,27 +178,27 @@ class SelectFilter(FilterField):
 
 
 class DateRangeFilter(FilterField):
-    """日期范围过滤器"""
+    """Date range filter."""
 
-    def __init__(self, name: str, label: Optional[str] = None):
+    def __init__(self, name: str, label: str | None = None):
         super().__init__(
             name=name, label=label, filter_type=FilterType.DATE_RANGE
         )
 
 
 class NumberRangeFilter(FilterField):
-    """数字范围过滤器"""
+    """Number range filter."""
 
-    def __init__(self, name: str, label: Optional[str] = None):
+    def __init__(self, name: str, label: str | None = None):
         super().__init__(
             name=name, label=label, filter_type=FilterType.NUMBER_RANGE
         )
 
 
 class BooleanFilter(FilterField):
-    """布尔过滤器"""
+    """Boolean filter."""
 
-    def __init__(self, name: str, label: Optional[str] = None):
+    def __init__(self, name: str, label: str | None = None):
         super().__init__(
             name=name,
             label=label,

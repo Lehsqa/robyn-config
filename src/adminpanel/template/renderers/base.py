@@ -4,16 +4,16 @@ from ..core.fields import DisplayType, Field
 
 
 class BaseRenderer(ABC):
-    """渲染器基类"""
+    """Base renderer class."""
 
     @abstractmethod
     def render(self, value: Any, context: Dict[str, Any] = None) -> str:
-        """渲染值"""
+        """Render value."""
         pass
 
 
 class TableRenderer(BaseRenderer):
-    """表格渲染器"""
+    """Table renderer."""
 
     def render(self, value: Any, context: Dict[str, Any] = None) -> str:
         field = context.get("field")
@@ -23,7 +23,7 @@ class TableRenderer(BaseRenderer):
 
 
 class FormRenderer(BaseRenderer):
-    """表单渲染器"""
+    """Form renderer."""
 
     def render(self, value: Any, context: Dict[str, Any] = None) -> str:
         field = context.get("field")
@@ -36,10 +36,10 @@ class FormRenderer(BaseRenderer):
             return self._render_select(value, field)
         elif field.display_type == DisplayType.RADIO:
             return self._render_radio(value, field)
-        # ... 其他类型的渲染
+        # ... Render other widget types.
 
     def _render_select(self, value: Any, field: Field) -> str:
-        """渲染下拉选择框"""
+        """Render a select dropdown."""
         options = []
         for choice_value, choice_label in field.choices.items():
             selected = "selected" if str(value) == str(choice_value) else ""
@@ -50,7 +50,7 @@ class FormRenderer(BaseRenderer):
         return f'<select name="{field.name}">\n{"".join(options)}\n</select>'
 
     def _render_radio(self, value: Any, field: Field) -> str:
-        """渲染单选框组"""
+        """Render a radio group."""
         radios = []
         for choice_value, choice_label in field.choices.items():
             checked = "checked" if str(value) == str(choice_value) else ""

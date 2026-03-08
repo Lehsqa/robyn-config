@@ -241,8 +241,13 @@ def test_adminpanel_command_scaffolds_for_all_design_and_orm_combinations(
     assert admin_root.exists()
     admin_init = admin_root / "__init__.py"
     assert admin_init.exists()
-    assert (admin_root / "core" / "site.py").exists()
-    assert (admin_root / "core" / "admin.py").exists()
+    assert not (admin_root / "core" / "site.py").exists()
+    assert (admin_root / "core" / "site" / "__init__.py").exists()
+    assert not (admin_root / "core" / "site" / "site.py").exists()
+    assert not (admin_root / "core" / "admin.py").exists()
+    assert (admin_root / "core" / "admin" / "__init__.py").exists()
+    assert (admin_root / "core" / "admin" / "base.py").exists()
+    assert (admin_root / "core" / "admin" / "model_admin.py").exists()
     assert (admin_root / "templates" / "admin" / "login.html").exists()
     assert not (admin_root / "templates" / "admin" / "users.html").exists()
     models_template_content = (
@@ -315,6 +320,10 @@ def test_adminpanel_command_scaffolds_for_all_design_and_orm_combinations(
     assert "syncCurrentPageSelectionCache" in data_table_content
 
     assert _admin_model_change_file(project_dir, design).exists()
+    assert not (admin_root / "migrations").exists()
+    assert (admin_root / "orm" / "__init__.py").exists()
+    assert (admin_root / "orm" / "base.py").exists()
+
     model_list_template_content = (
         admin_root / "templates" / "admin" / "model_list.html"
     ).read_text()
@@ -369,48 +378,68 @@ def test_adminpanel_command_scaffolds_for_all_design_and_orm_combinations(
     assert "scheme=\"bcrypt\"" in authentication_table_content
 
     if orm == "sqlalchemy":
+        assert (admin_root / "core" / "admin" / "queryset.py").exists()
+        assert (admin_root / "core" / "admin" / "helpers.py").exists()
+
+        orm_init_content = (admin_root / "orm" / "__init__.py").read_text()
+        assert (admin_root / "orm" / "sqlalchemy.py").exists()
+        assert not (admin_root / "orm" / "tortoise.py").exists()
+        assert "from .sqlalchemy import SQLAlchemyAdapter" in orm_init_content
+        assert "from .tortoise import TortoiseAdapter" not in orm_init_content
+
         assert "TORTOISE_ORM" not in init_content
         assert "MODEL_MODULES" not in init_content
         assert "create_session" in init_content
-        assert "from .models_sqlalchemy import AdminUser" in init_content
-        assert "from .auth_models_sqlalchemy import Role, UserRole" in init_content
-        assert "from .auth_models_sqlalchemy import AdminUser" not in init_content
+        assert "from .auth_models import AdminUser, Role, UserRole" in init_content
+        assert "from .core import AdminSite, MenuItem, ModelAdmin" in init_content
         assert "from sqlalchemy.inspection import inspect as sa_inspect" in init_content
-        assert (admin_root / "core" / "sqlalchemy_admin.py").exists()
-        assert (admin_root / "core" / "sqlalchemy_site.py").exists()
-        assert (admin_root / "auth_models_sqlalchemy.py").exists()
-        assert (admin_root / "auth_admin_sqlalchemy.py").exists()
-        assert (admin_root / "models_sqlalchemy.py").exists()
-        sqlalchemy_site_content = (
-            admin_root / "core" / "sqlalchemy_site.py"
+        assert not (admin_root / "core" / "sqlalchemy_admin.py").exists()
+        assert not (admin_root / "core" / "sqlalchemy_site.py").exists()
+        assert not (admin_root / "auth_models_sqlalchemy.py").exists()
+        assert not (admin_root / "auth_admin_sqlalchemy.py").exists()
+        assert not (admin_root / "models_sqlalchemy.py").exists()
+        site_content = (admin_root / "core" / "site" / "__init__.py").read_text()
+        assert "from .provider import AdminSite" in site_content
+
+        site_module = admin_root / "core" / "site"
+        assert (site_module / "auth.py").exists()
+        assert (site_module / "db.py").exists()
+        assert (site_module / "routes" / "__init__.py").exists()
+        assert (site_module / "provider" / "__init__.py").exists()
+        assert (site_module / "provider" / "sqlalchemy.py").exists()
+        assert not (site_module / "provider" / "tortoise.py").exists()
+        assert (site_module / "helpers.py").exists()
+        assert (site_module / "context.py").exists()
+        sqlalchemy_site_sources = "\n".join(
+            file.read_text() for file in sorted(site_module.rglob("*.py"))
+        )
+        sqlalchemy_provider_content = (
+            site_module / "provider" / "sqlalchemy.py"
         ).read_text()
-        assert "or_(" in sqlalchemy_site_content
-        assert "except IntegrityError" in sqlalchemy_site_content
-        assert "def _get_session_dialect" in sqlalchemy_site_content
-        assert "\"postgres\" in driver_name" in sqlalchemy_site_content
-        assert "pg_advisory_lock" in sqlalchemy_site_content
-        assert "pg_advisory_unlock" in sqlalchemy_site_content
-        assert ".on_conflict_do_nothing()" in sqlalchemy_site_content
+        assert "or_(" in sqlalchemy_site_sources
+        assert "except IntegrityError" in sqlalchemy_site_sources
+        assert "def _get_session_dialect" in sqlalchemy_site_sources
+        assert "\"postgres\" in driver_name" in sqlalchemy_site_sources
+        assert "pg_advisory_lock" in sqlalchemy_site_sources
+        assert "pg_advisory_unlock" in sqlalchemy_site_sources
+        assert ".on_conflict_do_nothing()" in sqlalchemy_site_sources
         assert (
             "if is_postgresql:\n"
             "                    await session.execute(\n"
             "                        pg_insert(AdminUser)"
-            not in sqlalchemy_site_content
+            not in sqlalchemy_provider_content
         )
-        assert "self._default_admin_initialized = False" in sqlalchemy_site_content
+        assert "self._default_admin_initialized = False" in sqlalchemy_site_sources
         assert (
             "self._default_admin_init_lock = asyncio.Lock()"
-            in sqlalchemy_site_content
+            in sqlalchemy_site_sources
         )
-        assert (
-            "if self._default_admin_initialized:\n            return"
-            in sqlalchemy_site_content
-        )
-        assert "_build_model_categories" in sqlalchemy_site_content
-        assert "MODEL_NAME_OVERRIDES" not in sqlalchemy_site_content
-        assert "users_alias" in sqlalchemy_site_content
-        assert "Users tab moved to models" in sqlalchemy_site_content
-        assert '@self.app.get(f"/{self.prefix}/:route_id/add")' in sqlalchemy_site_content
+        assert "_default_admin_initialized" in sqlalchemy_site_sources
+        assert "_build_model_categories" in sqlalchemy_site_sources
+        assert "MODEL_NAME_OVERRIDES" not in sqlalchemy_site_sources
+        assert "users_alias" in sqlalchemy_site_sources
+        assert "Users tab moved to models" in sqlalchemy_site_sources
+        assert "/:route_id/add" in sqlalchemy_site_sources
 
         versions_dir = _sqlalchemy_versions_dir(project_dir, design)
         migration_files = sorted(versions_dir.glob("*adminpanel*.py"))
@@ -418,25 +447,52 @@ def test_adminpanel_command_scaffolds_for_all_design_and_orm_combinations(
             not migration_files
         ), "Adminpanel command should not auto-generate SQLAlchemy migration files"
     else:
+        assert not (admin_root / "core" / "admin" / "queryset.py").exists()
+        assert not (admin_root / "core" / "admin" / "helpers.py").exists()
+
+        orm_init_content = (admin_root / "orm" / "__init__.py").read_text()
+        assert not (admin_root / "orm" / "sqlalchemy.py").exists()
+        assert (admin_root / "orm" / "tortoise.py").exists()
+        assert "from .tortoise import TortoiseAdapter" in orm_init_content
+        assert "from .sqlalchemy import SQLAlchemyAdapter" not in orm_init_content
+
         assert "TORTOISE_ORM" in init_content
         assert "MODEL_MODULES" in init_content
         assert "from tortoise import Model as TortoiseModel" in init_content
         assert 'orm="tortoise"' not in init_content
-        site_content = (admin_root / "core" / "site.py").read_text()
-        assert "self._default_admin_initialized = False" in site_content
-        assert "self._default_admin_init_lock = asyncio.Lock()" in site_content
-        assert "db_url.startswith(\"postgres\")" in site_content
-        assert "pg_advisory_lock" in site_content
-        assert "pg_advisory_unlock" in site_content
-        assert (
-            "if self._default_admin_initialized:\n                return"
-            in site_content
+        site_content = (admin_root / "core" / "site" / "__init__.py").read_text()
+        assert "from .provider import AdminSite" in site_content
+
+        site_module = admin_root / "core" / "site"
+        assert (site_module / "auth.py").exists()
+        assert (site_module / "db.py").exists()
+        assert (site_module / "routes" / "__init__.py").exists()
+        assert (site_module / "provider" / "__init__.py").exists()
+        assert not (site_module / "provider" / "sqlalchemy.py").exists()
+        assert (site_module / "provider" / "tortoise.py").exists()
+        assert (site_module / "helpers.py").exists()
+        assert (site_module / "context.py").exists()
+        site_sources = "\n".join(
+            file.read_text() for file in sorted(site_module.rglob("*.py"))
         )
-        assert "_build_model_categories" in site_content
-        assert "MODEL_NAME_OVERRIDES" not in site_content
-        assert "users_alias" in site_content
-        assert "Users tab moved to models" in site_content
-        assert '@self.app.get(f"/{self.prefix}/:route_id/add")' in site_content
+        assert "self._default_admin_initialized = False" in site_sources
+        assert (
+            "self._default_admin_init_lock = asyncio.Lock()"
+            in site_sources
+        )
+        assert "db_url.startswith(\"postgres\")" in site_sources
+        assert "pg_advisory_lock" in site_sources
+        assert "pg_advisory_unlock" in site_sources
+        assert "_default_admin_initialized" in site_sources
+        assert "_build_model_categories" in site_sources
+        assert "MODEL_NAME_OVERRIDES" not in site_sources
+        assert "users_alias" in site_sources
+        assert "Users tab moved to models" in site_sources
+        assert "/:route_id/add" in site_sources
+
+    assert not any(admin_root.rglob("*_sqlalchemy.py"))
+    assert not any(admin_root.rglob("*_tortoise.py"))
+    assert not (admin_root / "auth_admin.py").exists()
 
     server_path = project_dir / "src" / "app" / "server.py"
     server_content = server_path.read_text()

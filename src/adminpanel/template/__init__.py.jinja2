@@ -4,20 +4,12 @@ from robyn import Robyn
 
 {% if orm == "tortoise" %}
 from tortoise import Model as TortoiseModel
-
+{% elif orm == "sqlalchemy" %}
+from sqlalchemy.inspection import inspect as sa_inspect
+{% endif %}
 from .auth_models import AdminUser, Role, UserRole
 from .core import AdminSite, MenuItem, ModelAdmin
 from . import auth_models, models
-{% elif orm == "sqlalchemy" %}
-from sqlalchemy.inspection import inspect as sa_inspect
-
-from .models_sqlalchemy import AdminUser
-from .auth_models_sqlalchemy import Role, UserRole
-from .core.menu import MenuItem
-from .core.sqlalchemy_admin import ModelAdmin
-from .core.sqlalchemy_site import AdminSite
-from . import auth_models_sqlalchemy as auth_models, models_sqlalchemy as models
-{% endif %}
 from .project_tables import load_project_tables_module
 
 __version__ = "0.1.5"
@@ -132,7 +124,6 @@ def register(app: Robyn) -> AdminSite:
         generate_schemas=False,
         default_admin_username={{ admin_username | tojson }},
         default_admin_password={{ admin_password | tojson }},
-        orm="sqlalchemy",
     )
 {% endif %}
     for model in _discover_project_models():

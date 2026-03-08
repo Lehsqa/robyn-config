@@ -1,7 +1,7 @@
 <nav id="sidebar" class="sidebar bg-dark">
     <div class="sidebar-sticky">
         {% if models is defined %}
-        {# 添加系统管理菜单组 #}
+        {# Add system management menu group #}
         {% if 'AdminUserAdmin' in models or 'RoleAdmin' in models or 'UserRoleAdmin' in models %}
         <div class="nav-group">
             <a class="nav-link nav-group-toggle" data-bs-toggle="collapse" 
@@ -46,7 +46,7 @@
         </div>
         {% endif %}
 
-        {# 其他业务菜单组 #}
+        {# Other business menu groups #}
         {% set menu_groups = {} %}
         {% for model_name, model_admin in models.items() %}
             {% if model_admin.menu_group not in menu_groups and model_admin.menu_group != 'System Management' %}
@@ -57,9 +57,9 @@
             {% endif %}
         {% endfor %}
         
-        {# 渲染业务菜单组 #}
+        {# Render business menu groups #}
         {% for group_name, items in menu_groups.items()|sort(attribute='0') %}
-            {% if items|length > 0 %}  {# 只显示有权限访问的模型所在的菜单组 #}
+            {% if items|length > 0 %}  {# Only show groups with accessible models #}
                 {% set menu_item = menus.get(group_name, {'icon': 'bi bi-folder'}) %}
                 <div class="nav-group">
                     <a class="nav-link nav-group-toggle" data-bs-toggle="collapse" 

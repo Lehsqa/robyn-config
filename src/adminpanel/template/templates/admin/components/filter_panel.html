@@ -1,4 +1,4 @@
-{# 筛选面板组件 #}
+{# Filter panel component #}
 <div class="card mb-3">
     <div class="card-body">
         <form id="filterForm" class="row g-3" onsubmit="return handleFilterSubmit(event)">
@@ -64,7 +64,7 @@
 
 <script>
 function handleFilterSubmit(event) {
-    event.preventDefault();  // 阻止表单默认提交
+    event.preventDefault();  // Prevent default form submission
     applyFilters();
     return false;
 }
@@ -72,7 +72,7 @@ function handleFilterSubmit(event) {
 function applyFilters() {
     console.log('Applying filters...');
     
-    // 获取所有过滤字段的值
+    // Get values from all filter fields
     const filterForm = document.getElementById('filterForm');
     const filterFields = filterForm.getElementsByClassName('filter-field');
     const filterParams = {};
@@ -85,7 +85,7 @@ function applyFilters() {
     
     console.log('Filter params:', filterParams);
     
-    // 刷新表格数据
+    // Refresh table data
     if (window.$table) {
         window.$table.bootstrapTable('refresh', {
             query: filterParams
@@ -96,9 +96,9 @@ function applyFilters() {
 }
 
 function resetFilters() {
-    // 重置表单
+    // Reset form
     document.getElementById('filterForm').reset();
-    // 刷新表格数据（不带过滤参数）
+    // Refresh table data (without filter params)
     if (window.$table) {
         window.$table.bootstrapTable('refresh', {
             query: {}
@@ -106,7 +106,7 @@ function resetFilters() {
     }
 }
 
-// 为过滤字段添加回车键触发搜索
+// Trigger search on Enter for filter fields
 document.querySelectorAll('.filter-field').forEach(field => {
     field.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {

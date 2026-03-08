@@ -1,15 +1,13 @@
-from enum import Enum
-from typing import Any, Optional, Union, Callable, List, Dict, Type
-from dataclasses import dataclass
-from tortoise import Model
+from __future__ import annotations
+
 import asyncio
-from tortoise.expressions import Q
-from functools import reduce
-import operator
+from dataclasses import dataclass, field as dataclass_field
+from enum import Enum
+from typing import Any, Callable
 
 
 class DisplayType(Enum):
-    """显示类型枚举"""
+    """Display types used by admin table and form fields."""
 
     TEXT = "text"
     DATE = "date"
@@ -48,24 +46,82 @@ def _coerce_boolean(value: Any) -> bool:
     return bool(value)
 
 
+async def _await_if_needed(value: Any) -> Any:
+    if asyncio.iscoroutine(value):
+        return await value
+    if hasattr(value, "__await__"):
+        return await value
+    return value
+
+
+def _normalize_collection(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        return list(value)
+    except TypeError:
+        return [value]
+
+
+def _resolve_related_field_name(
+    field_name: str, related_model: type[Any]
+) -> str:
+    model_prefix = f"{related_model.__name__}_"
+    if field_name.startswith(model_prefix):
+        resolved = field_name[len(model_prefix) :]
+        if resolved:
+            return resolved
+    parts = field_name.split("_")
+    if len(parts) > 1:
+        return parts[-1]
+    return "id"
+
+
+async def _query_related_objects(
+    related_model: type[Any], lookup: str, value: str
+) -> list[Any]:
+    filter_method = getattr(related_model, "filter", None)
+    if not callable(filter_method):
+        return []
+
+    try:
+        result = filter_method(**{lookup: value})
+        resolved = await _await_if_needed(result)
+    except Exception:
+        return []
+
+    return _normalize_collection(resolved)
+
+
+def _extract_related_ids(objects: list[Any]) -> list[Any]:
+    related_ids: list[Any] = []
+    for obj in objects:
+        obj_id = getattr(obj, "id", None)
+        if obj_id is not None:
+            related_ids.append(obj_id)
+    return related_ids
+
+
 @dataclass
 class TableAction:
-    """表格操作按钮配置"""
+    """Table action button configuration."""
 
-    name: str  # 按钮名称
-    label: str  # 显示文本
-    icon: str = ""  # 图标类名
-    btn_class: str = "btn-primary"  # 按钮样式
-    inline_model: Optional[str] = None  # 关联的内联模型名称
+    name: str
+    label: str
+    icon: str = ""
+    btn_class: str = "btn-primary"
+    inline_model: str | None = None
 
 
 @dataclass
 class TableField:
-    """表格字段配置"""
+    """Table field configuration."""
 
     name: str
-    label: Optional[str] = None
-    display_type: Optional[DisplayType] = None
+    label: str | None = None
+    display_type: DisplayType | None = None
     sortable: bool = False
     searchable: bool = False
     filterable: bool = False
@@ -73,84 +129,71 @@ class TableField:
     readonly: bool = False
     visible: bool = True
     is_link: bool = False
-    width: Optional[Union[int, str]] = None
-    formatter: Optional[Callable] = None
+    width: int | str | None = None
+    formatter: Callable[..., Any] | None = None
     hidden: bool = False
-    choices: Optional[Dict[Any, Any]] = None  # 实际值映射
-    labels: Optional[Dict[Any, str]] = None  # 显示文本映射
-
-    # 关联字段配置
-    related_model: Optional[Type[Model]] = None  # 关联的模型
-    related_key: Optional[str] = None  # 关联的外键字段
-
-    actions: List[TableAction] = None  # 添加自定义操作按钮配置
+    choices: dict[Any, Any] | None = None
+    labels: dict[Any, str] | None = None
+    related_model: type[Any] | None = None
+    related_key: str | None = None
+    actions: list[TableAction] = dataclass_field(default_factory=list)
 
     def __post_init__(self):
         if self.label is None:
             self.label = self.name.replace("_", " ").title()
 
-        # 如果display_type是LINK，自动设置is_link为True
         if self.display_type == DisplayType.LINK:
             self.is_link = True
 
-        # 处理关联字段名称
         if self.related_model and self.related_key:
-            # 从字段名中解析要显示的关联字段
-            parts = self.name.split("_")
-            if len(parts) > 1:
-                self.related_field = parts[-1]  # 使用最后一部分作为关联字段名
-                self.display_name = self.name  # 保持原始名称作为显示名
-            else:
-                self.related_field = "id"  # 默认使用 id
-                self.display_name = self.name
+            self.related_field = _resolve_related_field_name(
+                self.name, self.related_model
+            )
+            self.display_name = self.name
         else:
             self.display_name = self.name
 
-        if self.actions is None:
-            self.actions = []
-
     async def format_value(
-        self, value: Any, instance: Optional[Model] = None
+        self, value: Any, instance: Any | None = None
     ) -> str:
-        """格式化值用于显示"""
+        """Format field values for rendering."""
         if value is None:
             return ""
 
-        # 如果是关联字段
         if self.related_model and self.related_key and instance:
             try:
-                # 获取外键值
-                fk_value = getattr(instance, self.related_key)
+                fk_value = getattr(instance, self.related_key, None)
                 if not fk_value:
                     return ""
 
-                # 查询关联对象
-                related_obj = await self.related_model.get(id=fk_value)
+                getter = getattr(self.related_model, "get", None)
+                if not callable(getter):
+                    return ""
+
+                related_obj = await _await_if_needed(getter(id=fk_value))
                 if related_obj:
-                    # 获取关联字段的值
-                    related_value = getattr(related_obj, self.related_field)
+                    related_value = getattr(
+                        related_obj, self.related_field, None
+                    )
                     return (
                         str(related_value) if related_value is not None else ""
                     )
                 return ""
-            except Exception as e:
-                print(f"Error getting related value: {str(e)}")
+            except Exception:
                 return ""
 
-        # 使用自定义格式化函数
         if self.formatter:
             try:
-                if asyncio.iscoroutinefunction(self.formatter):
-                    return await self.formatter(value)
-                return self.formatter(value)
-            except Exception as e:
-                print(f"Error formatting value: {str(e)}")
+                formatted = self.formatter(value)
+                formatted = await _await_if_needed(formatted)
+                return str(formatted) if formatted is not None else ""
+            except Exception:
                 return str(value)
 
         return str(value)
 
     def to_dict(self) -> dict:
-        """转换为字典，用于JSON序列化"""
+        """Serialize field config for frontend usage."""
         data = {
             "name": self.display_name,
             "label": self.label,
@@ -168,7 +211,7 @@ class TableField:
             "hidden": self.hidden,
             "has_formatter": bool(self.formatter),
             "choices": self.choices,
-            "labels": self.labels,  # 添加显示文本映射
+            "labels": self.labels,
         }
 
         if self.related_model and self.related_key:
@@ -185,33 +228,32 @@ class TableField:
 
 @dataclass
 class FormField:
-    """表单字段配置"""
+    """Form field configuration."""
 
     name: str
-    label: Optional[str] = None
-    field_type: Optional[DisplayType] = None
+    label: str | None = None
+    field_type: DisplayType | None = None
     required: bool = False
     readonly: bool = False
-    help_text: Optional[str] = None
-    placeholder: Optional[str] = None
-    validators: List[Callable] = None
-    choices: Optional[Dict[Any, str]] = None
+    help_text: str | None = None
+    placeholder: str | None = None
+    validators: list[Callable[..., Any]] = dataclass_field(default_factory=list)
+    choices: dict[Any, str] | None = None
     default: Any = None
-    processor: Optional[Callable] = None  # 添加数据处理函数
-    upload_path: Optional[str] = None  # 静态资源存储路径
-    accept: Optional[str] = None  # 接受的文件类型
-    max_size: Optional[int] = None  # 最大文件大小（字节）
-    multiple: bool = False  # 是否支持多文件上传
-    preview: bool = True  # 是否显示预览
-    drag_text: Optional[str] = None  # 拖拽区域提示文本
+    processor: Callable[..., Any] | None = None
+    upload_path: str | None = None
+    accept: str | None = None
+    max_size: int | None = None
+    multiple: bool = False
+    preview: bool = True
+    drag_text: str | None = None
 
     def __post_init__(self):
         if self.label is None:
             self.label = self.name.replace("_", " ").title()
-        self.validators = self.validators or []
 
     def process_value(self, value: Any) -> Any:
-        """处理字值"""
+        """Apply built-in coercions and optional custom processing."""
         if self.field_type in {DisplayType.BOOLEAN, DisplayType.SWITCH}:
             value = _coerce_boolean(value)
         if self.processor:
@@ -240,23 +282,14 @@ class FormField:
 
 @dataclass
 class SearchField:
-    """search field config
+    """Search field configuration."""
 
-    name: str  if not related_model, name format is "field" else "RelatedModel_field"
-
-    label: str
-
-
-    """
-
-    name: str  #
-    label: Optional[str] = None
+    name: str
+    label: str | None = None
     placeholder: str = ""
     operator: str = "icontains"
-
-    # relate modal
-    related_model: Optional[Type[Model]] = None  # relate modal
-    related_key: Optional[str] = None  # relate key
+    related_model: type[Any] | None = None
+    related_key: str | None = None
 
     def __post_init__(self):
         if self.label is None:
@@ -282,32 +315,19 @@ class SearchField:
     async def build_search_query(self, search_value: str) -> dict:
         if not search_value:
             return {}
+
         if self.related_model and self.related_key:
-            # 从字段名中解析要搜索的关联字段
-            model_name = self.related_model.__name__
-            if self.name.startswith(model_name + "_"):
-                # 获取实际要搜索的字段名
-                related_field = self.name[len(model_name + "_") :]
-                try:
-                    # 先查询关联模型
-                    related_objects = await self.related_model.filter(
-                        **{f"{related_field}__icontains": search_value}
-                    )
-                    if not related_objects:
-                        return {"id": None}
-                    # 构建 OR 条件列表
-                    conditions = [
-                        Q(**{f"{self.related_key}": str(obj.id)})
-                        for obj in related_objects
-                    ]
-                    if conditions:
-                        # 返回组合的Q对象
-                        combined_q = reduce(operator.or_, conditions)
-                        return {"_q_object": combined_q}
-                    return {"id": None}
-                except Exception as e:
-                    print(f"Error in related search: {str(e)}")
-                    return {"id": None}
-        else:
-            # 直接搜索当前字段，使用精确匹配而不是模糊匹配
-            return {f"{self.name}": search_value}
+            related_field = _resolve_related_field_name(
+                self.name, self.related_model
+            )
+            related_objects = await _query_related_objects(
+                self.related_model,
+                f"{related_field}__icontains",
+                search_value,
+            )
+            related_ids = _extract_related_ids(related_objects)
+            if not related_ids:
+                return {"id": None}
+            return {f"{self.related_key}__in": related_ids}
+
+        return {f"{self.name}": search_value}
