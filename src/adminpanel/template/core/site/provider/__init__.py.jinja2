@@ -1,0 +1,11 @@
+from __future__ import annotations
+
+{% if orm == "sqlalchemy" %}
+from .sqlalchemy import AdminSite
+{% elif orm == "tortoise" %}
+from .tortoise import AdminSite
+{% else %}
+raise RuntimeError("Unsupported ORM for AdminSite provider")
+{% endif %}
+
+__all__ = ["AdminSite"]

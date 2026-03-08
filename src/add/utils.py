@@ -24,11 +24,21 @@ DEFAULT_DDD_PRESENTATION_PATH = Path("src/app/presentation")
 DEFAULT_DDD_DB_REPOSITORY_PATH = Path(
     "src/app/infrastructure/database/repository"
 )
-DEFAULT_DDD_DB_TABLE_PATH = Path("src/app/infrastructure/database/tables.py")
+DEFAULT_DDD_DB_TABLE_PATH = Path(
+    "src/app/infrastructure/database/tables/__init__.py"
+)
+LEGACY_DDD_DB_TABLE_PATHS: tuple[Path, ...] = (
+    Path("src/app/infrastructure/database/table/__init__.py"),
+    Path("src/app/infrastructure/database/tables.py"),
+)
 
 DEFAULT_MVC_VIEWS_PATH = Path("src/app/views")
 DEFAULT_MVC_DB_REPOSITORY_PATH = Path("src/app/models/repository.py")
-DEFAULT_MVC_DB_TABLE_PATH = Path("src/app/models/models.py")
+DEFAULT_MVC_DB_TABLE_PATH = Path("src/app/models/tables/__init__.py")
+LEGACY_MVC_DB_TABLE_PATHS: tuple[Path, ...] = (
+    Path("src/app/models/table/__init__.py"),
+    Path("src/app/models/models.py"),
+)
 DEFAULT_MVC_URLS_PATH = Path("src/app/urls.py")
 
 
@@ -118,6 +128,27 @@ def _resolve_path(
     )
 
 
+def _resolve_db_table_path(
+    project_root: Path,
+    raw_value: str | None,
+    default: Path,
+    legacy: tuple[Path, ...],
+) -> Path:
+    """Resolve table path and transparently support legacy single-file projects."""
+    if raw_value:
+        return project_root / raw_value
+
+    preferred = project_root / default
+    if preferred.exists():
+        return preferred
+
+    for fallback in legacy:
+        fallback_path = project_root / fallback
+        if fallback_path.exists():
+            return fallback_path
+    return preferred
+
+
 def _load_add_paths(
     project_path: Path, design: str, config: dict[str, Any]
 ) -> DDDAddPaths | MVCAddPaths:
@@ -145,10 +176,11 @@ def _load_add_paths(
                 add_config.get("database_repository_path"),
                 DEFAULT_DDD_DB_REPOSITORY_PATH,
             ),
-            db_tables=_resolve_path(
-                project_path,
-                add_config.get("database_table_path"),
-                DEFAULT_DDD_DB_TABLE_PATH,
+            db_tables=_resolve_db_table_path(
+                project_root=project_path,
+                raw_value=add_config.get("database_table_path"),
+                default=DEFAULT_DDD_DB_TABLE_PATH,
+                legacy=LEGACY_DDD_DB_TABLE_PATHS,
             ),
         )
 
@@ -164,10 +196,11 @@ def _load_add_paths(
                 add_config.get("database_repository_path"),
                 DEFAULT_MVC_DB_REPOSITORY_PATH,
             ),
-            db_tables=_resolve_path(
-                project_path,
-                add_config.get("database_table_path"),
-                DEFAULT_MVC_DB_TABLE_PATH,
+            db_tables=_resolve_db_table_path(
+                project_root=project_path,
+                raw_value=add_config.get("database_table_path"),
+                default=DEFAULT_MVC_DB_TABLE_PATH,
+                legacy=LEGACY_MVC_DB_TABLE_PATHS,
             ),
             urls=_resolve_path(
                 project_path,
@@ -434,6 +467,37 @@ def _add_table_to_tables_py(
                 tables_path.write_text(content)
 
 
+def _add_table_to_module_package(
+    tables_init_path: Path,
+    template_file: Path,
+    module_name: str,
+    table_class_name: str,
+    context: dict[str, str],
+) -> Path | None:
+    """Create tables/<module_name>.py and export class from tables/__init__.py."""
+    if not tables_init_path.exists() or tables_init_path.name != "__init__.py":
+        return None
+    if not template_file.exists():
+        return None
+
+    table_module_file = tables_init_path.parent / f"{module_name}.py"
+    if table_module_file.exists():
+        _update_init_file(
+            tables_init_path,
+            f"from .{module_name} import {table_class_name}",
+            table_class_name,
+        )
+        return None
+
+    _render_template_file(template_file, table_module_file, context)
+    _update_init_file(
+        tables_init_path,
+        f"from .{module_name} import {table_class_name}",
+        table_class_name,
+    )
+    return table_module_file
+
+
 def _register_routes_ddd(presentation_path: Path, name: str) -> None:
     """Register routes in DDD presentation/__init__.py."""
     pres_init = presentation_path / "__init__.py"
@@ -483,10 +547,29 @@ def _add_ddd_templates(
         domain_init, ".", name, trailing_comment="# noqa: F401"
     )
 
-    # Add table to tables.py
-    _add_table_to_tables_py(
-        paths.db_tables, name, name_capitalized, orm, context
+    # Add table model
+    table_class_name = f"{name_capitalized}Table"
+    table_template = (
+        templates_path / "infrastructure" / orm / "__name___table.py.jinja2"
     )
+    table_module_file = _add_table_to_module_package(
+        paths.db_tables,
+        table_template,
+        module_name=name,
+        table_class_name=table_class_name,
+        context=context,
+    )
+    if table_module_file:
+        created_files.append(str(table_module_file.relative_to(project_path)))
+    else:
+        # Legacy projects still using tables.py
+        _add_table_to_tables_py(
+            paths.db_tables,
+            name,
+            name_capitalized,
+            orm,
+            context,
+        )
 
     # Infrastructure repository
     repo_template = (
@@ -593,31 +676,53 @@ def _add_mvc_templates(
         "orm": orm,
     }
 
-    # Models layer - Append to existing files
+    # Models layer
     models_file = paths.db_tables
     repo_file = paths.db_repository
 
-    # 1. Append Table to models.py
-    table_template = templates_path / "models" / orm / "table.py.jinja2"
+    # 1. Add table model
     table_class = f"{name_capitalized}Table"
-    if models_file.exists() and table_template.exists():
-        _append_class_to_file(
-            models_file, table_template, context, table_class
+    if models_file.name == "__init__.py":
+        table_template = (
+            templates_path / "models" / orm / "table_module.py.jinja2"
         )
-        _add_to_all_list(models_file, table_class)
-        created_files.append(str(models_file.relative_to(project_path)))
+        table_module_file = _add_table_to_module_package(
+            models_file,
+            table_template,
+            module_name=name,
+            table_class_name=table_class,
+            context=context,
+        )
+        if table_module_file:
+            created_files.append(
+                str(table_module_file.relative_to(project_path))
+            )
+    else:
+        table_template = templates_path / "models" / orm / "table.py.jinja2"
+        if models_file.exists() and table_template.exists():
+            _append_class_to_file(
+                models_file, table_template, context, table_class
+            )
+            _add_to_all_list(models_file, table_class)
+            created_files.append(str(models_file.relative_to(project_path)))
 
     # 2. Append Repository to repository.py
     repo_template = templates_path / "models" / orm / "repository.py.jinja2"
     repo_class = f"{name_capitalized}Repository"
     if repo_file.exists() and repo_template.exists():
-        _ensure_import_from(repo_file, ".models", table_class)
+        table_import_module = (
+            ".tables" if models_file.name == "__init__.py" else ".models"
+        )
+        _ensure_import_from(repo_file, table_import_module, table_class)
 
         _append_class_to_file(repo_file, repo_template, context, repo_class)
         created_files.append(str(repo_file.relative_to(project_path)))
 
-        # Update models __init__.py to export Repository
-        models_init = paths.db_tables.parent / "__init__.py"
+        # Update app models __init__.py to export repository
+        if models_file.name == "__init__.py":
+            models_init = models_file.parent.parent / "__init__.py"
+        else:
+            models_init = models_file.parent / "__init__.py"
         _update_init_file(
             models_init,
             f"from .repository import {repo_class}  # noqa: F401",

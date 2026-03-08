@@ -1,0 +1,527 @@
+{% extends "admin/base.html" %}
+
+{% from "admin/components/data_table.html" import table_scripts %}
+{% from "admin/components/form_modal.html" import form_scripts %}
+{% from "admin/components/inline_modal.html" import inline_modal_scripts %}
+
+{% block content %}
+<div class="space-y-6">
+    <div class="rounded-xl border border-slate-200 dark:border-slate-700 admin-border-soft bg-surface-light dark:bg-surface-dark p-5">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-black tracking-tight text-slate-900 dark:text-white" data-model-title="{{ verbose_name }}">
+                    {{ verbose_name }}
+                </h1>
+                <p class="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                    Manage records for this model.
+                </p>
+            </div>
+            <div class="admin-record-actions flex flex-wrap items-center gap-2">
+                <a href="/admin/models" class="admin-action-btn admin-action-btn-neutral">
+                    <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+                    Back to Models
+                </a>
+                {% if not frontend_config.is_inline and frontend_config.allowAdd %}
+                <a id="addRecordBtn" href="/admin/{{ current_model }}/add" class="admin-action-btn admin-action-btn-primary">
+                    <i class="bi bi-plus-lg"></i> Add {{ verbose_name }}
+                </a>
+                {% endif %}
+                {% if not frontend_config.is_inline and frontend_config.allowDelete %}
+                <button id="batchDelete" type="button" class="admin-action-btn admin-action-btn-danger" disabled>
+                    <i class="bi bi-trash"></i> Batch Delete
+                </button>
+                {% endif %}
+                {% if not frontend_config.is_inline and frontend_config.allowExport %}
+                <div class="btn-group admin-action-group">
+                    <button id="exportBtn" type="button" class="admin-action-btn admin-action-btn-neutral">
+                        <i class="bi bi-download"></i> Export
+                    </button>
+                    <button type="button" class="admin-action-btn admin-action-btn-neutral admin-action-btn-split dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown">
+                        <span class="visually-hidden">Toggle Dropdown</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" onclick="exportData('all'); return false;">Export current page</a></li>
+                        <li><a class="dropdown-item" href="#" onclick="exportData('selected'); return false;">Export selected</a></li>
+                    </ul>
+                </div>
+                {% endif %}
+                {% if not frontend_config.is_inline and frontend_config.allowImport %}
+                <button id="importBtn" type="button" onclick="showImportModal()" class="admin-action-btn admin-action-btn-neutral">
+                    <i class="bi bi-upload"></i> Import
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {# Import modal #}
+    {% if frontend_config.allowImport %}
+    <div class="modal fade" id="importModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">{{ get_text('import_data', language) }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="importForm">
+                        <div class="mb-3">
+                            <label class="form-label">{{ get_text('select_file', language) }}</label>
+                            <div class="custom-file">
+                                <input type="file" class="form-control" id="importFile"
+                                       accept=".xlsx,.xls,.csv" required
+                                       data-browse="{{ get_text('choose_file', language) }}"
+                                       data-placeholder="{{ get_text('no_file_chosen', language) }}">
+                            </div>
+                            <small class="form-text text-muted">
+                                {{ get_text('supported_formats', language) }}<br>
+                                {{ get_text('required_fields', language) }}: {{ frontend_config.import_fields|join(', ') }}
+                            </small>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ get_text('cancel', language) }}</button>
+                    <button type="button" class="btn btn-primary" onclick="handleImport()">{{ get_text('import_button', language) }}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    {# Form modal #}
+    {% include "admin/components/form_modal.html" %}
+
+    {# Inline data modal #}
+    {% include "admin/components/inline_modal.html" %}
+
+    {# Data table for non-inline models #}
+    {% if not frontend_config.is_inline %}
+    <div class="space-y-4">
+        {% include "admin/components/data_table.html" %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_head %}
+{{ super() }}
+<style>
+    .admin-record-actions .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+    }
+
+    .admin-action-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.375rem;
+        height: 2.4rem;
+        padding: 0 0.85rem;
+        border-radius: 0.55rem;
+        border: 1px solid rgb(203 213 225);
+        font-size: 0.875rem;
+        font-weight: 600;
+        line-height: 1;
+        transition: all 0.15s ease-in-out;
+    }
+
+    .admin-action-btn:disabled {
+        opacity: 0.65;
+        cursor: not-allowed;
+    }
+
+    .admin-action-btn-neutral {
+        background: rgb(255 255 255);
+        color: rgb(51 65 85);
+    }
+
+    .admin-action-btn-neutral:hover {
+        background: rgb(241 245 249);
+    }
+
+    .admin-action-btn-primary {
+        background: rgb(19 127 236);
+        border-color: rgb(19 127 236);
+        color: rgb(255 255 255);
+    }
+
+    .admin-action-btn-primary:hover {
+        background: rgb(16 106 197);
+        border-color: rgb(16 106 197);
+    }
+
+    .admin-action-btn-danger {
+        background: rgb(220 38 38);
+        border-color: rgb(220 38 38);
+        color: rgb(255 255 255);
+    }
+
+    .admin-action-btn-danger:hover {
+        background: rgb(185 28 28);
+        border-color: rgb(185 28 28);
+    }
+
+    .admin-action-btn-split {
+        min-width: 2.1rem;
+        padding-inline: 0.55rem;
+    }
+
+    .dark .admin-action-btn-neutral {
+        background: rgb(15 23 42);
+        border-color: rgb(71 85 105);
+        color: rgb(226 232 240);
+    }
+
+    .dark .admin-action-btn-neutral:hover {
+        background: rgb(30 41 59);
+    }
+
+    #toolbar .btn {
+        border-radius: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+    }
+
+    .bootstrap-table .fixed-table-container {
+        border: 0;
+    }
+
+    .bootstrap-table .table {
+        margin-bottom: 0;
+        border-collapse: collapse !important;
+        border-spacing: 0 !important;
+    }
+
+    .bootstrap-table .table thead th {
+        font-size: 0.75rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgb(100 116 139);
+        background: rgb(248 250 252);
+        border-bottom-color: var(--admin-table-border-light);
+    }
+
+    .dark .bootstrap-table .table thead th {
+        color: rgb(148 163 184);
+        background: rgba(15, 23, 42, 0.7);
+        border-bottom-color: var(--admin-table-border-dark);
+    }
+
+    .admin-row-link {
+        color: rgb(19 127 236);
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    .admin-row-link:hover {
+        text-decoration: underline;
+    }
+
+    .dark .admin-row-link {
+        color: rgb(56 189 248);
+    }
+
+    .bootstrap-table .fixed-table-container .fixed-table-body {
+        overflow-x: auto !important;
+    }
+
+    .bootstrap-table .fixed-table-container .table {
+        min-width: 100%;
+        white-space: nowrap;
+    }
+
+    .bootstrap-table .fixed-table-toolbar .search {
+        margin-right: 0.5rem;
+    }
+
+    .bootstrap-table .fixed-table-toolbar .columns-right.btn-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .bootstrap-table .fixed-table-toolbar .columns.columns-right.btn-group.float-right,
+    .bootstrap-table .fixed-table-toolbar .columns-right.btn-group.float-right {
+        margin-right: 10px !important;
+    }
+
+    .bootstrap-table .fixed-table-toolbar .columns-right .btn-group,
+    .bootstrap-table .fixed-table-toolbar .columns-right .keep-open {
+        margin: 0 !important;
+    }
+
+    .bootstrap-table .fixed-table-toolbar .search input {
+        border-radius: 0.5rem;
+        border: 1px solid rgb(203 213 225);
+        min-width: 14rem;
+        height: 2.4rem;
+        box-shadow: none;
+    }
+
+    .dark .bootstrap-table .fixed-table-toolbar .search input {
+        background-color: rgb(15 23 42);
+        border-color: rgb(71 85 105);
+        color: rgb(226 232 240);
+    }
+
+    .bootstrap-table .fixed-table-toolbar .columns-right .btn,
+    .bootstrap-table .fixed-table-toolbar .columns .btn {
+        border-radius: 0.5rem;
+        border: 1px solid rgb(203 213 225);
+        background: white;
+        color: rgb(51 65 85);
+        font-size: 0.875rem;
+        font-weight: 600;
+        height: 2.4rem;
+        padding: 0.45rem 0.7rem;
+    }
+
+    .bootstrap-table .fixed-table-toolbar .columns-right .btn:hover,
+    .bootstrap-table .fixed-table-toolbar .columns .btn:hover {
+        background: rgb(241 245 249);
+    }
+
+    .dark .bootstrap-table .fixed-table-toolbar .columns-right .btn,
+    .dark .bootstrap-table .fixed-table-toolbar .columns .btn {
+        background: rgb(15 23 42);
+        border-color: rgb(71 85 105);
+        color: rgb(226 232 240);
+    }
+
+    .dark .bootstrap-table .fixed-table-toolbar .columns-right .btn:hover,
+    .dark .bootstrap-table .fixed-table-toolbar .columns .btn:hover {
+        background: rgb(30 41 59);
+    }
+
+    #selectionInfo.admin-selection-box {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        height: 2.4rem;
+        min-height: 2.4rem;
+        padding: 0 0.7rem;
+        margin-left: 0.5rem;
+        border-radius: 0.5rem;
+        border: 1px solid rgb(203 213 225);
+        background: rgb(241 245 249);
+        color: rgb(51 65 85);
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+
+    #selectionInfo.admin-selection-box.d-none {
+        display: none !important;
+    }
+
+    #selectionInfo.admin-selection-box .admin-selection-clear {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 1.8rem;
+        padding: 0 0.55rem;
+        border: 1px solid rgb(148 163 184);
+        border-radius: 0.45rem;
+        background: white;
+        color: rgb(71 85 105);
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    #selectionInfo.admin-selection-box .admin-selection-clear:hover {
+        background: rgb(248 250 252);
+    }
+
+    .dark #selectionInfo.admin-selection-box {
+        border-color: rgb(71 85 105);
+        background: rgb(15 23 42);
+        color: rgb(226 232 240);
+    }
+
+    .dark #selectionInfo.admin-selection-box .admin-selection-clear {
+        border-color: rgb(71 85 105);
+        background: rgb(30 41 59);
+        color: rgb(226 232 240);
+    }
+
+    .dark #selectionInfo.admin-selection-box .admin-selection-clear:hover {
+        background: rgb(51 65 85);
+    }
+
+    .bootstrap-table .fixed-table-pagination {
+        padding: 0.75rem 0.75rem 0.5rem;
+    }
+
+    .bootstrap-table .fixed-table-pagination .pagination-info {
+        color: rgb(100 116 139);
+        font-size: 0.85rem;
+    }
+
+    .dark .bootstrap-table .fixed-table-pagination .pagination-info {
+        color: rgb(148 163 184);
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+{{ super() }}
+<script>
+// Initialize frontend config
+window.serverConfig = JSON.parse('{{ frontend_config|tojson|safe }}');
+console.log('Server config initialized:', window.serverConfig);
+
+// Handle table actions
+function handleAction(action, id, rowData) {
+    console.log('Action:', action, 'ID:', id, 'Row data:', rowData);
+    
+    let row = null;
+    if (rowData) {
+        try {
+            row = JSON.parse(decodeURIComponent(rowData));
+            row.id = id;
+            console.log('Parsed row data:', row);
+        } catch (e) {
+            console.error('Error parsing row data:', e);
+            return;
+        }
+    }
+    switch(action) {
+        case 'edit':
+            if (!id || id === 'undefined') {
+                console.error('Invalid id for edit action');
+                alert('Invalid record ID');
+                return;
+            }
+            $('#formModal').data({
+                currentData: row,
+                action: 'edit',
+                routeId: window.serverConfig.route_id
+            });
+            showFormModal('edit', row);
+            break;
+        case 'delete':
+            if (!id || id === 'undefined') {
+                console.error('Invalid id for delete action');
+                alert('Invalid record ID');
+                return;
+            }
+            if(confirm('Are you sure you want to delete this record?')) {
+                deleteRecord(id);
+            }
+            break;
+        default:
+            console.log('Unknown action:', action);
+    }
+}
+
+// Delete record
+async function deleteRecord(id) {
+    if (!id || id === 'undefined') {
+        console.error('Invalid id for delete');
+        alert('Invalid record ID');
+        return;
+    }
+    try {
+        const response = await fetch(`/admin/${window.serverConfig.route_id}/${id}/delete`, {
+            method: 'POST'
+        });
+        if(response.ok) {
+            if (typeof window.removeSelectionById === 'function') {
+                window.removeSelectionById(id);
+            }
+            $('#dataTable').bootstrapTable('refresh');
+        } else {
+            alert('Delete failed');
+        }
+    } catch(error) {
+        console.error('Delete error:', error);
+        alert('Delete failed');
+    }
+}
+
+function showImportModal() {
+    var modal = new bootstrap.Modal(document.getElementById('importModal'));
+    modal.show();
+    
+    // Set file input label text
+    const fileInput = document.getElementById('importFile');
+    const placeholder = fileInput.getAttribute('data-placeholder');
+    
+    // Listen for file selection changes
+    fileInput.addEventListener('change', function(e) {
+        const fileName = e.target.files[0]?.name || placeholder;
+        const label = e.target.nextElementSibling;
+        if (label) {
+            label.textContent = fileName;
+        }
+    });
+}
+
+async function handleImport() {
+    const fileInput = document.getElementById('importFile');
+    if (!fileInput.files.length) {
+        alert(fileInput.getAttribute('data-placeholder'));
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    
+    try {
+        const response = await fetch(`/admin/${window.serverConfig.route_id}/import`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        alert(result.message);
+        
+        if (result.success) {
+            // Close modal
+            bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
+            // Refresh table
+            $('#dataTable').bootstrapTable('refresh');
+        }
+        
+        if (result.errors && result.errors.length) {
+            console.error('Import errors:', result.errors);
+        }
+    } catch (error) {
+        console.error('Import error:', error);
+        alert('Import failed');
+    }
+}
+</script>
+
+{# Ensure table scripts load after config initialization #}
+{% if not frontend_config.is_inline %}
+    {{ table_scripts() }}
+{% endif %}
+
+{{ form_scripts() }}
+{{ inline_modal_scripts() }}
+{% endblock %}
+
+<style>
+.custom-file {
+    position: relative;
+}
+
+.custom-file input[type="file"] {
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    height: calc(1.5em + 0.75rem + 2px);
+    margin: 0;
+    opacity: 1;
+}
+
+.custom-file input[type="file"] ~ .custom-file-label::after {
+    content: attr(data-browse);
+}
+</style>

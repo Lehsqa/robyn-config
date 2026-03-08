@@ -1,0 +1,131 @@
+from __future__ import annotations
+
+from robyn import Robyn
+
+{% if orm == "tortoise" %}
+from tortoise import Model as TortoiseModel
+{% elif orm == "sqlalchemy" %}
+from sqlalchemy.inspection import inspect as sa_inspect
+{% endif %}
+from .auth_models import AdminUser, Role, UserRole
+from .core import AdminSite, MenuItem, ModelAdmin
+from . import auth_models, models
+from .project_tables import load_project_tables_module
+
+__version__ = "0.1.5"
+
+__all__ = [
+    "AdminSite",
+    "MenuItem",
+    "AdminUser",
+    "Role",
+    "UserRole",
+    "models",
+    "auth_models",
+    "register",
+]
+
+{% if design == "ddd" and orm == "tortoise" %}
+from app.infrastructure.database.services.engine import MODEL_MODULES, TORTOISE_ORM
+{% elif design == "ddd" and orm == "sqlalchemy" %}
+from app.infrastructure.database.services.session import create_session
+{% elif design == "mvc" and orm == "tortoise" %}
+from app.models.database import MODEL_MODULES, TORTOISE_ORM
+{% elif design == "mvc" and orm == "sqlalchemy" %}
+from app.models.database import create_session
+{% endif %}
+project_tables = load_project_tables_module()
+
+
+{% if orm == "sqlalchemy" %}
+def _is_project_model(candidate: object) -> bool:
+    if not isinstance(candidate, type):
+        return False
+
+    table_name = getattr(candidate, "__tablename__", None)
+    if not isinstance(table_name, str) or not table_name:
+        return False
+
+    try:
+        sa_inspect(candidate)
+    except Exception:
+        return False
+    return True
+
+
+def _model_sort_key(model: type) -> tuple[str, str]:
+    return (str(getattr(model, "__tablename__", "")), model.__name__)
+{% elif orm == "tortoise" %}
+def _is_project_model(candidate: object) -> bool:
+    if not isinstance(candidate, type):
+        return False
+    if not issubclass(candidate, TortoiseModel) or candidate is TortoiseModel:
+        return False
+
+    meta = getattr(candidate, "_meta", None)
+    if meta is None or getattr(meta, "abstract", False):
+        return False
+    return bool(getattr(meta, "db_table", None))
+
+
+def _model_sort_key(model: type) -> tuple[str, str]:
+    table_name = getattr(getattr(model, "_meta", None), "db_table", "")
+    return (str(table_name), model.__name__)
+{% endif %}
+
+
+def _discover_project_models() -> list[type]:
+    exported = getattr(project_tables, "__all__", None)
+    if isinstance(exported, (tuple, list)):
+        names = [item for item in exported if isinstance(item, str)]
+    else:
+        names = [name for name in dir(project_tables) if not name.startswith("_")]
+
+    discovered: list[type] = []
+    seen: set[tuple[str, str]] = set()
+    for name in names:
+        candidate = getattr(project_tables, name, None)
+        if not _is_project_model(candidate):
+            continue
+
+        marker = (candidate.__module__, candidate.__name__)
+        if marker in seen:
+            continue
+        seen.add(marker)
+        discovered.append(candidate)
+
+    return sorted(discovered, key=_model_sort_key)
+
+
+{% if orm == "tortoise" %}
+def _admin_modules() -> dict[str, list[str]]:
+    return {"models": list(MODEL_MODULES)}
+{% endif %}
+
+
+def register(app: Robyn) -> AdminSite:
+{% if orm == "tortoise" %}
+    admin_site = AdminSite(
+        app,
+        title="Robyn Admin",
+        prefix="admin",
+        db_url=TORTOISE_ORM["connections"]["default"],
+        modules=_admin_modules(),
+        generate_schemas=True,
+        default_admin_username={{ admin_username | tojson }},
+        default_admin_password={{ admin_password | tojson }},
+    )
+{% elif orm == "sqlalchemy" %}
+    admin_site = AdminSite(
+        app,
+        title="Robyn Admin",
+        prefix="admin",
+        session_factory=create_session,
+        generate_schemas=False,
+        default_admin_username={{ admin_username | tojson }},
+        default_admin_password={{ admin_password | tojson }},
+    )
+{% endif %}
+    for model in _discover_project_models():
+        admin_site.register_model(model, ModelAdmin)
+    return admin_site

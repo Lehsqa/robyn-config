@@ -6,7 +6,7 @@ from typing import Mapping
 
 from alembic import context
 from app.config import settings
-from app.models.models import Base
+from app.models.tables import Base
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
@@ -16,6 +16,7 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
+ADMIN_TABLE_PREFIX = "robyn_admin_"
 
 
 def _configure_section() -> Mapping[str, str]:
@@ -24,12 +25,31 @@ def _configure_section() -> Mapping[str, str]:
     return section
 
 
+def _include_object(
+    object_: object,
+    name: str | None,
+    type_: str,
+    reflected: bool,
+    compare_to: object | None,
+) -> bool:
+    if (
+        type_ == "table"
+        and reflected
+        and compare_to is None
+        and name is not None
+        and name.startswith(ADMIN_TABLE_PREFIX)
+    ):
+        return False
+    return True
+
+
 def run_migrations_offline() -> None:
     context.configure(
         url=settings.database.url,
         target_metadata=target_metadata,
         literal_binds=True,
         compare_type=True,
+        include_object=_include_object,
         dialect_opts={"paramstyle": "named"},
     )
 
@@ -54,6 +74,7 @@ def run_migrations_online() -> None:
             connection=connection,
             target_metadata=target_metadata,
             compare_type=True,
+            include_object=_include_object,
         )
         with context.begin_transaction():
             context.run_migrations()

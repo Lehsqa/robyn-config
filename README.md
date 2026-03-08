@@ -70,6 +70,23 @@ This will:
 - Register everything in the app configuration.
 - Respect your configured paths: `add` reads injection targets from `[tool.robyn-config.add]` in `pyproject.toml` (e.g., domain/operational/presentation paths for DDD or views/repository/urls for MVC). You can customize those paths before running `add` to steer where new code is written.
 
+### 🛡️ Add Admin Panel
+
+Add admin panel scaffolding to an existing project:
+
+```bash
+cd my-service
+robyn-config adminpanel
+```
+
+This generates a default superadmin with credentials `admin/admin`.
+
+You can override the default superadmin credentials when scaffolding:
+
+```bash
+robyn-config adminpanel -u superadmin -p super-secret-password ./my-service
+```
+
 ### 🏃 CLI Options
 
 ```
@@ -80,6 +97,7 @@ Options:
 
 Commands:
   add     Add new business logic to an existing robyn-config project.
+  adminpanel  Add admin panel scaffolding to an existing robyn-config project.
   create  Copy the template into destination with specific configurations.
 ```
 
@@ -98,6 +116,12 @@ Commands:
 **`add` command options:**
 
 - `name`: The name of the entity/feature to add (e.g., `user`, `order-item`).
+- `project_path`: Path to the project root. Defaults to current directory.
+
+**`adminpanel` command options:**
+
+- `-u`, `--username`: Default superadmin username. Defaults to `admin`.
+- `-p`, `--password`: Default superadmin password. Defaults to `admin`.
 - `project_path`: Path to the project root. Defaults to current directory.
 
 ## 🐍 Python Version Support

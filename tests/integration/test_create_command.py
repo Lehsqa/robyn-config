@@ -104,6 +104,13 @@ def test_create_project_structure(tmp_path, design, orm):
     # 3. Verify Design-specific Structure
     app_dir = project_dir / "src" / "app"
     assert app_dir.exists()
+    logging_content = (app_dir / "config" / "logging.py").read_text()
+    server_content = (app_dir / "server.py").read_text()
+    assert "logger.remove()" in server_content
+    assert "logger.add(" in server_content
+    assert "sys.stderr" in server_content
+    assert "if settings.logging.file:" in server_content
+    assert "file: str | None = \"app\"" in logging_content
 
     if design == "ddd":
         assert (app_dir / "domain").is_dir()

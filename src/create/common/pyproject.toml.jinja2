@@ -68,7 +68,7 @@ dependencies = [
   "SQLAlchemy[asyncio,mypy]>=2.0.29",
   "alembic>=1.13.2",
   "tortoise-orm>=0.20.0",
-  "aerich[toml]>=0.9.2"
+  "aerich[toml]>=0.9.2",
 ]
 
 [project.optional-dependencies]
@@ -269,10 +269,10 @@ domain_path = "src/app/domain"
 operational_path = "src/app/operational"
 presentation_path = "src/app/presentation"
 database_repository_path = "src/app/infrastructure/database/repository"
-database_table_path = "src/app/infrastructure/database/tables.py"
+database_table_path = "src/app/infrastructure/database/tables/__init__.py"
 {%- elif design == "mvc" %}
 [tool.robyn-config.add]
 views_path = "src/app/views"
 database_repository_path = "src/app/models/repository.py"
-database_table_path = "src/app/models/models.py"
+database_table_path = "src/app/models/tables/__init__.py"
 {%- endif %}

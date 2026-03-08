@@ -30,6 +30,19 @@ tests:
 tests.coverage:
 	uv run pytest --cov=./src/app --cov-report=term-missing --cov-report=html
 
+.PHONY: tests.create  # create new service
+tests.create:
+	robyn-config create my-service --orm sqlalchemy --design ddd ./my-service
+	robyn-config add product ./my-service
+	robyn-config adminpanel ./my-service
+	cd my-service && make makemigration
+	cd my-service && cp .env.example .env
+	cd my-service && docker compose up -d
+
+.PHONY: tests.delete  # delete service
+tests.delete:
+	cd my-service && docker compose down -v
+	rm -rf my-service
 
 # *************************************************
 # ********** code quality **********

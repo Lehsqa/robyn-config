@@ -1,0 +1,949 @@
+{# Table component #}
+<div class="rounded-xl border border-slate-200 dark:border-slate-700 admin-border-soft bg-surface-light dark:bg-surface-dark shadow-sm">
+    <div class="px-4 py-3 border-b border-slate-200 dark:border-slate-700 admin-border-soft-divider bg-slate-50/70 dark:bg-slate-900/30">
+        <div id="toolbar" class="flex flex-wrap items-center gap-2"></div>
+    </div>
+    <div class="table-responsive overflow-x-auto">
+        <table id="dataTable"></table>
+    </div>
+</div>
+
+{% macro table_scripts() %}
+<script>
+var translations = {
+    selected_items: "{{ get_text('selected_items', language) }}",
+    clear_selection: "{{ get_text('clear_selection', language) }}",
+    please_select_items: "{{ get_text('please_select_items', language) }}",
+    confirm_batch_delete: "{{ get_text('confirm_batch_delete', language) }}",
+    deleting: "{{ get_text('deleting', language) }}",
+    export_selected: "{{ get_text('export_selected', language) }}",
+    export_current: "{{ get_text('export_current', language) }}",
+    load_failed: "{{ get_text('load_failed', language) }}",
+    delete_success: "{{ get_text('delete_success', language) }}",
+    delete_failed: "{{ get_text('delete_failed', language) }}",
+    add: "{{ get_text('add', language) }}",
+    edit: "{{ get_text('edit', language) }}",
+    delete: "{{ get_text('delete', language) }}",
+    batch_delete: "{{ get_text('batch_delete', language) }}",
+    export: "{{ get_text('export', language) }}",
+    import: "{{ get_text('import', language) }}",
+};
+console.log('Translations:', translations);
+function renderToolbar() {
+    var $toolbar = $('#toolbar');
+    if (!$toolbar.length) {
+        return;
+    }
+    $toolbar.empty();
+}
+
+$(document).ready(function() {
+    if (!window.serverConfig) {
+        console.error('serverConfig not initialized');
+        return;
+    }
+
+    var config = window.serverConfig;
+    console.log('Table config:', config);
+    console.log('Inlines:', config.inlines);
+    
+    renderToolbar();
+    const primaryKeyField = String(config.pkName || 'id');
+    const primaryKeyFieldLower = primaryKeyField.toLowerCase();
+    const selectedRows = new Map();
+    let $table = null;
+
+    function getRowId(row) {
+        if (!row || row[primaryKeyField] === undefined || row[primaryKeyField] === null) {
+            return null;
+        }
+        return String(row[primaryKeyField]);
+    }
+
+    function addSelectedRows(rows) {
+        if (!Array.isArray(rows)) {
+            return;
+        }
+        rows.forEach(function(row) {
+            const rowId = getRowId(row);
+            if (rowId !== null) {
+                selectedRows.set(rowId, row);
+            }
+        });
+    }
+
+    function removeSelectedRows(rows) {
+        if (!Array.isArray(rows)) {
+            return;
+        }
+        rows.forEach(function(row) {
+            const rowId = getRowId(row);
+            if (rowId !== null) {
+                selectedRows.delete(rowId);
+            }
+        });
+    }
+
+    function syncCurrentPageSelectionCache() {
+        if (!$table) {
+            return;
+        }
+        const currentPageRows =
+            $table.bootstrapTable('getData', { useCurrentPage: true }) || [];
+        const currentPageIds = new Set();
+        currentPageRows.forEach(function(row) {
+            const rowId = getRowId(row);
+            if (rowId !== null) {
+                currentPageIds.add(rowId);
+            }
+        });
+
+        currentPageIds.forEach(function(rowId) {
+            selectedRows.delete(rowId);
+        });
+
+        const selectedOnPage = $table.bootstrapTable('getSelections') || [];
+        selectedOnPage.forEach(function(row) {
+            const rowId = getRowId(row);
+            if (rowId !== null) {
+                selectedRows.set(rowId, row);
+            }
+        });
+    }
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function getFieldPriority(field) {
+        const fieldName = String(field.name || '').toLowerCase();
+        const fieldType = String(field.field_type || '').toLowerCase();
+        const displayType = String(field.display_type || '').toLowerCase();
+        const isDateTimeField = (
+            ['datetime', 'date', 'time'].includes(fieldType) ||
+            ['datetime', 'date', 'time'].includes(displayType) ||
+            fieldName.endsWith('_at')
+        );
+
+        if (fieldName === primaryKeyFieldLower || fieldName === 'id') {
+            return 0;
+        }
+        if (isDateTimeField) {
+            return 2;
+        }
+        return 1;
+    }
+
+    const orderedFields = (config.tableFields || [])
+        .map((field, index) => ({ field, index }))
+        .sort((left, right) => {
+            const leftPriority = getFieldPriority(left.field);
+            const rightPriority = getFieldPriority(right.field);
+            if (leftPriority !== rightPriority) {
+                return leftPriority - rightPriority;
+            }
+            return left.index - right.index;
+        })
+        .map(item => item.field);
+
+    // Build table column config
+    var columns = [{checkbox: true}];
+    orderedFields.forEach(function(field) {
+        if (!field.hidden) {
+            var column = {
+                field: field.name,
+                title: field.label,
+                formatter: function(value, row) {
+                    const isPasswordField = (
+                        field.field_type === 'password' ||
+                        field.display_type === 'password' ||
+                        String(field.name || '').toLowerCase().includes('password')
+                    );
+                    if (isPasswordField) {
+                        const rawPassword = (
+                            row.data && row.data[field.name] !== undefined
+                        ) ? row.data[field.name] : value;
+                        return rawPassword ? '••••••••' : '';
+                    }
+
+                    const isPrimaryKeyColumn =
+                        String(field.name || '').toLowerCase() === primaryKeyFieldLower;
+                    if (isPrimaryKeyColumn) {
+                        const rawId = (
+                            row[primaryKeyField] !== undefined
+                                ? row[primaryKeyField]
+                                : (
+                                    row.data && row.data[primaryKeyField] !== undefined
+                                        ? row.data[primaryKeyField]
+                                        : value
+                                )
+                        );
+                        if (rawId !== undefined && rawId !== null && rawId !== '') {
+                            const safeId = escapeHtml(rawId);
+                            const encodedId = encodeURIComponent(String(rawId));
+                            return `<a class="admin-row-link" href="/admin/${config.route_id}/${encodedId}/change">${safeId}</a>`;
+                        }
+                    }
+
+                    // Handle switch display type
+                    if (field.display_type === 'switch') {
+                        // Determine whether current value is "on"
+                        const isChecked = (
+                            value === field.choices[true] || 
+                            value === true || 
+                            value === 'true' || 
+                            value === 'True' || 
+                            value === '1' || 
+                            value === 1
+                        );
+                        
+                        // Get display text
+                        const onText = field.labels ? field.labels[true] : 'Yes';
+                        const offText = field.labels ? field.labels[false] : 'No';
+                        
+                        // Get actual values
+                        const onValue = field.choices ? field.choices[true] : true;
+                        const offValue = field.choices ? field.choices[false] : false;
+                        
+                        console.log('Switch value:', {
+                            originalValue: value,
+                            isChecked: isChecked,
+                            onText: onText,
+                            offText: offText,
+                            onValue: onValue,
+                            offValue: offValue
+                        });
+                        
+                        return `
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" 
+                                       id="switch-${row.id}-${field.name}"
+                                       ${isChecked ? 'checked' : ''}
+                                       data-on-value="${onValue}"
+                                       data-off-value="${offValue}"
+                                       onchange="handleSwitchChange('${row.id}', '${field.name}', this)"
+                                       ${field.editable ? '' : 'disabled'}>
+                                <label class="form-check-label" for="switch-${row.id}-${field.name}">
+                                    ${isChecked ? onText : offText}
+                                </label>
+                            </div>
+                        `;
+                    }
+                    
+                    if (field.actions && field.actions.length > 0) {
+                        // Generate custom action buttons
+                        return field.actions.map(action => `
+                            <button class="btn btn-sm ${action.btn_class}"
+                                    onclick="handleCustomAction('${action.name}', '${row.id}', '${action.inline_model}')">
+                                ${action.icon ? `<i class="${action.icon}"></i> ` : ''}
+                                ${action.label}
+                            </button>
+                        `).join(' ');
+                    }
+                    
+                    if (row.display && row.display[field.name] !== undefined) {
+                        return row.display[field.name];
+                    }
+                    if (row.data && row.data[field.name] !== undefined) {
+                        return row.data[field.name];
+                    }
+                    return value || '';
+                }
+            };
+            if (field.sortable) column.sortable = true;
+            if (field.width) column.width = field.width;
+            columns.push(column);
+        }
+    });
+
+    // Initialize table and save to global variable
+    window.$table = $('#dataTable').bootstrapTable({
+        url: `/admin/${config.route_id}/data`,
+        method: 'GET',
+        columns: columns,  // Use the prepared column config
+        toggle: 'table',
+        pagination: true,
+        sidePagination: 'server',
+        pageNumber: 1,
+        pageSize: config.pageSize,
+        pageList: [10, 25, 50, 100],
+        search: true,
+        showColumns: true,
+        showRefresh: true,
+        showToggle: true,
+        idField: primaryKeyField,
+        uniqueId: primaryKeyField,
+        smartDisplay: false,
+        clickToSelect: true,
+        toolbar: '#toolbar',
+        locale: 'en-US',
+        cache: false,
+        maintainMetaData: true,
+        queryParamsType: 'limit',
+        queryParams: function(params) {
+            return {
+                limit: params.limit,
+                offset: params.offset,
+                search: params.search,
+                sort: params.sort,
+                order: params.order
+            };
+        },
+        responseHandler: function(res) {
+            console.log('Server response:', res);
+            if (!res || !res.data) {
+                console.error('Invalid response data:', res);
+                return { total: 0, rows: [] };
+            }
+            
+            // Handle returned data
+            var result = {
+                total: parseInt(res.total),  // Total record count
+                rows: res.data.map(function(item) {
+                    return {
+                        ...item.data,
+                        display: item.display
+                    };
+                })
+            };
+            console.log('Processed result:', result);
+            return result;
+        },
+        onLoadSuccess: function(data) {
+            console.log('Table data loaded:', data);
+            console.log('Total records:', data.total);
+            console.log('Current page data:', data.rows.length);
+
+            const currentRows = Array.isArray(data.rows) ? data.rows : [];
+            const currentPageSelectedIds = [];
+            currentRows.forEach(function(row) {
+                const rowId = getRowId(row);
+                if (rowId !== null && selectedRows.has(rowId)) {
+                    selectedRows.set(rowId, row);
+                    currentPageSelectedIds.push(rowId);
+                }
+            });
+            if (currentPageSelectedIds.length) {
+                $table.bootstrapTable('checkBy', {
+                    field: primaryKeyField,
+                    values: currentPageSelectedIds,
+                });
+            }
+            setTimeout(function() {
+                syncCurrentPageSelectionCache();
+                syncSelectionState();
+            }, 0);
+        },
+        onLoadError: function(status, res) {
+            console.error('Table load error:', status, res);
+            alert(translations.load_failed);
+        },
+        onPageChange: function(number, size) {
+            console.log('Page changed to:', number, 'Size:', size);
+        }
+    });
+
+    // Ensure table is initialized
+    console.log('Table initialized:', window.$table);
+    $table = window.$table;
+
+    function syncSelectionState() {
+        const selectedCount = selectedRows.size;
+        $('#batchDelete').prop('disabled', selectedCount === 0);
+        updateSelectionInfo(selectedCount);
+    }
+
+    // Listen for table selection events
+    $table.on('check.bs.table', function(_event, row) {
+        addSelectedRows([row]);
+        syncCurrentPageSelectionCache();
+        syncSelectionState();
+    });
+
+    $table.on('uncheck.bs.table', function(_event, row) {
+        removeSelectedRows([row]);
+        syncCurrentPageSelectionCache();
+        syncSelectionState();
+    });
+
+    $table.on('check-all.bs.table', function(_event, rows) {
+        const pageRows = Array.isArray(rows)
+            ? rows
+            : ($table.bootstrapTable('getData', { useCurrentPage: true }) || []);
+        addSelectedRows(pageRows);
+        syncCurrentPageSelectionCache();
+        syncSelectionState();
+    });
+
+    $table.on('uncheck-all.bs.table', function(_event, rows) {
+        const pageRows = Array.isArray(rows)
+            ? rows
+            : ($table.bootstrapTable('getData', { useCurrentPage: true }) || []);
+        removeSelectedRows(pageRows);
+        syncCurrentPageSelectionCache();
+        syncSelectionState();
+    });
+
+    function bindSelectAllToggle() {
+        const $selectAll = $('#dataTable thead input[name="btSelectAll"]');
+        $selectAll.off('click.adminSelectAll').on('click.adminSelectAll', function() {
+            const shouldSelectAll = this.checked;
+            const currentPageRows = $table.bootstrapTable('getData', { useCurrentPage: true }) || [];
+            setTimeout(function() {
+                if (shouldSelectAll) {
+                    addSelectedRows(currentPageRows);
+                } else {
+                    removeSelectedRows(currentPageRows);
+                }
+                syncCurrentPageSelectionCache();
+                syncSelectionState();
+            }, 0);
+        });
+    }
+
+    $table.on('post-header.bs.table post-body.bs.table', function() {
+        bindSelectAllToggle();
+    });
+    bindSelectAllToggle();
+
+    // Add selection info hint area
+    var $toolbar = $('#toolbar');
+    $('<div/>', {
+        id: 'selectionInfo',
+        class: 'admin-selection-box d-none',
+        role: 'alert'
+    }).appendTo($toolbar);
+
+    // Update selection info
+    function updateSelectionInfo(count) {
+        var $info = $('#selectionInfo');
+        if (count > 0) {
+            $info.html(
+                `<i class="bi bi-check2-circle"></i>
+                <span>${translations.selected_items.replace('{count}', count)}</span>
+                <button class="admin-selection-clear" onclick="clearSelection()">
+                    ${translations.clear_selection}
+                </button>`
+            );
+            $info.removeClass('d-none');
+        } else {
+            $info.addClass('d-none');
+        }
+    }
+
+    // Clear selection
+    window.clearSelection = function() {
+        selectedRows.clear();
+        $table.bootstrapTable('uncheckAll');
+        syncSelectionState();
+    };
+
+    window.removeSelectionById = function(id) {
+        if (id === undefined || id === null) {
+            return;
+        }
+        selectedRows.delete(String(id));
+        syncSelectionState();
+    };
+
+    // Batch delete feature
+    $('#batchDelete').click(function() {
+        var ids = Array.from(selectedRows.keys());
+        if (!ids.length) {
+            alert(translations.please_select_items);
+            return;
+        }
+
+        if (!confirm(translations.confirm_batch_delete.replace('{count}', ids.length))) {
+            return;
+        }
+
+        // Show loading indicator
+        var $btn = $(this);
+        var originalText = $btn.html();
+        $btn.prop('disabled', true)
+            .html(`<i class="bi bi-hourglass-split"></i> ${translations.deleting}`);
+
+        // Send batch delete request
+        $.ajax({
+            url: `/admin/${config.route_id}/batch_delete`,
+            method: 'POST',
+            data: { ids: ids },
+            dataType: 'json',  // Expect JSON response
+            success: function(response) {
+                if (response.success) {
+                    // Show success alert
+                    var $alert = $('<div/>', {
+                        class: 'alert alert-success alert-dismissible fade show mt-2',
+                        role: 'alert'
+                    }).html(`
+                        ${response.message || translations.delete_success}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `);
+                    $('#toolbar').append($alert);
+                    
+                    // Auto-close alert
+                    setTimeout(function() {
+                        $alert.alert('close');
+                    }, 3000);
+
+                    // Refresh table
+                    selectedRows.clear();
+                    $table.bootstrapTable('refresh');
+                    syncSelectionState();
+                } else {
+                    // Show error alert
+                    var $alert = $('<div/>', {
+                        class: 'alert alert-danger alert-dismissible fade show mt-2',
+                        role: 'alert'
+                    }).html(`
+                        ${response.message || translations.delete_failed}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    `);
+                    $('#toolbar').append($alert);
+                    
+                    // Auto-close alert
+                    setTimeout(function() {
+                        $alert.alert('close');
+                    }, 3000);
+                }
+            },
+            error: function(xhr) {
+                var message = translations.delete_failed;
+                try {
+                    var response = JSON.parse(xhr.responseText);
+                    message = response.message || message;
+                } catch (e) {
+                    console.error('Error parsing response:', e);
+                }
+                
+                // Show error alert
+                var $alert = $('<div/>', {
+                    class: 'alert alert-danger alert-dismissible fade show mt-2',
+                    role: 'alert'
+                }).html(`
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `);
+                $('#toolbar').append($alert);
+                
+                // Auto-close alert
+                setTimeout(function() {
+                    $alert.alert('close');
+                }, 3000);
+            },
+            complete: function() {
+                // Restore button state
+                $btn.prop('disabled', false).html(originalText);
+            }
+        });
+    });
+
+    // Function to refresh table data
+    window.refreshTable = function() {
+        $table.bootstrapTable('refresh', {
+            silent: false,
+            reset: true  // Reset page number and other state
+        });
+    };
+
+    // Export data feature
+    window.exportData = function(scope) {
+        var exportScope = scope || 'all';
+
+        // Get current table data or selected data
+        var data = exportScope === 'selected'
+            ? Array.from(selectedRows.values())
+            : $table.bootstrapTable('getData');
+        if (!data.length) {
+            alert(exportScope === 'selected'
+                ? translations.please_select_items
+                : translations.export_current);
+            return;
+        }
+        
+        // Get visible columns (exclude actions and checkbox columns)
+        var visibleColumns = $table.bootstrapTable('getVisibleColumns')
+            .filter(function(column) {
+                return column.field !== 'operate' && !column.checkbox;
+            });
+        
+        // Build CSV content
+        var csvContent = '\ufeff';
+        
+        // Add headers
+        csvContent += visibleColumns.map(function(column) {
+            return '"' + (column.title || column.field) + '"';
+        }).join(',') + '\n';
+        
+        // Add rows
+        data.forEach(function(row) {
+            csvContent += visibleColumns.map(function(column) {
+                var value;
+                // Display value
+                var cell = $table.find('tr[data-index="' + $table.bootstrapTable('getData').indexOf(row) + '"] td[data-field="' + column.field + '"]');
+                if (cell.length) {
+                    value = cell.text().trim();
+                } else {
+                    value = row[column.field] || '';
+                }
+                
+                // Handle special characters
+                if (typeof value === 'string') {
+                    // Remove HTML tags
+                    value = value.replace(/<[^>]+>/g, '');
+                    // Escape double quotes
+                    value = value.replace(/"/g, '""');
+                }
+                
+                return '"' + value + '"';
+            }).join(',') + '\n';
+        });
+        
+        // Create Blob object
+        var blob = new Blob([csvContent], {
+            type: 'text/csv;charset=utf-8;'
+        });
+        
+        // Create download link
+        var link = document.createElement('a');
+        var url = URL.createObjectURL(blob);
+        var timestamp = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
+        var filename = config.modelName + '_export_' + timestamp + '.csv';
+        
+        link.setAttribute('href', url);
+        link.setAttribute('download', filename);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        
+        // Trigger download
+        link.click();
+        
+        // Cleanup
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        
+        // Notify user
+        var message = exportScope === 'selected'
+            ? translations.export_selected
+            : translations.export_current;
+        alert(message);
+    };
+
+    $('#exportBtn').click(function() {
+        exportData('all');
+    });
+
+    // Add custom action handler
+    window.handleCustomAction = async function(action, id, inlineModel) {
+        if (action === 'view_documents') {
+            try {
+                const response = await fetch(`/admin/${config.route_id}/inline_data?parent_id=${id}&inline_model=${inlineModel}`);
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText);
+                }
+                
+                const result = await response.json();
+                if (!result.success) {
+                    throw new Error(result.error || 'Failed to load data');
+                }
+                
+                // geting inline config
+                const inlineConfig = window.serverConfig.inlines.find(i => i.model === inlineModel);
+                if (!inlineConfig) {
+                    throw new Error('Inline config not found');
+                }
+                
+                // show inline modal
+                showInlineModal({
+                    title: inlineConfig.title,
+                    model: inlineModel,
+                    parentId: id,
+                    data: result.data,
+                    config: inlineConfig
+                });
+            } catch (error) {
+                console.error('Error loading inline data:', error);
+                alert('Failed to load data: ' + (error.message || 'Unknown error'));
+            }
+        }
+    };
+
+    // show inline modal
+    function showInlineModal(options) {
+        console.log('Showing inline modal with options:', options);
+        console.log('Fields config:', options.config.fields);
+        const modalHtml = `
+            <div class="modal fade" id="inlineModal" tabindex="-1">
+                <div class="modal-dialog modal-xl" style="max-width: 90%; width: 1200px;">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">${options.title}</h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover">
+                                    <thead>
+                                        <tr>
+                                            ${options.config.fields.map(f => `<th>${f.label}</th>`).join('')}
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${generateInlineTableRows(options)}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // remove existing modal
+        const existingModal = document.getElementById('inlineModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // add new modal
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // show modal
+        const modal = new bootstrap.Modal(document.getElementById('inlineModal'));
+        modal.show();
+    }
+
+    // generate inline table rows
+    function generateInlineTableRows(options) {
+        return options.data.map(item => `
+            <tr>
+                ${options.config.fields.map(field => {
+                    const value = item.display[field.name] || item.data[field.name] || '';
+                    
+                    // Handle links and other display types
+                    if (field.is_link || field.display_type === 'link') {
+                        const baseUrl = `/admin/${options.model}/${item.data.id}`;
+                        return `<td><a href="${baseUrl}" class="text-decoration-none link-primary" 
+                                  title="View details">${value}</a></td>`;
+                    }
+                    
+                    switch (field.display_type) {
+                        case 'boolean':
+                            return `<td>${value === 'True' ? 
+                                '<i class="bi bi-check-circle text-success"></i>' : 
+                                '<i class="bi bi-x-circle text-danger"></i>'}</td>`;
+                        case 'datetime':
+                            return `<td><span class="text-muted">${value}</span></td>`;
+                        case 'status':
+                            return `<td><span class="badge bg-primary">${value}</span></td>`;
+                        default:
+                            return `<td>${value}</td>`;
+                    }
+                }).join('')}
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editInlineRecord('${options.model}', '${item.data.id}')">
+                        <i class="bi bi-pencil"></i> Edit
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteInlineRecord('${options.model}', '${item.data.id}')">
+                        <i class="bi bi-trash"></i> Delete
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+    }
+
+    // edit inline record
+    window.editInlineRecord = function(model, id) {
+        // Load record data and open edit form
+        fetch(`/admin/${model}/${id}`)
+            .then(response => response.json())
+            .then(data => {
+                showFormModal('edit', data);
+            })
+            .catch(error => {
+                console.error('Error loading record:', error);
+                alert('Failed to load data');
+            });
+    };
+
+    // delete inline record
+    window.deleteInlineRecord = function(model, id) {
+        if (confirm('Are you sure you want to delete this record?')) {
+            fetch(`/admin/${model}/${id}/delete`, {
+                method: 'POST'
+            })
+            .then(response => {
+                if (response.ok) {
+                    // refresh table
+                    document.getElementById('inlineModal').querySelector('tbody').innerHTML = 
+                        generateInlineTableRows(currentInlineOptions);
+                } else {
+                    alert('Delete failed');
+                }
+            })
+            .catch(error => {
+                console.error('Delete error:', error);
+                alert('Delete failed');
+            });
+        }
+    };
+});
+
+// change switch
+window.handleSwitchChange = async function(id, field, switchElement) {
+    const isChecked = switchElement.checked;
+    const onValue = switchElement.dataset.onValue;
+    const offValue = switchElement.dataset.offValue;
+    const newValue = isChecked ? onValue : offValue;
+    
+    try {
+        const response = await fetch(`/admin/${window.serverConfig.route_id}/${id}/edit`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+                [field]: newValue
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Update failed');
+        }
+        
+        // refresh table
+        $('#dataTable').bootstrapTable('refresh');
+        
+    } catch (error) {
+        console.error('Switch change error:', error);
+        alert('Update failed');
+        // restore switch state
+        switchElement.checked = !isChecked;
+    }
+};
+
+function handleAction(action, id, rowData) {
+    console.log('Action:', action, 'ID:', id);
+    console.log('Raw row data:', rowData);
+    
+    let row = null;
+    if (rowData && rowData !== 'undefined' && rowData !== 'NaN') {
+        try {
+            // parse row data
+            const decodedData = decodeURIComponent(rowData);
+            console.log('Decoded data:', decodedData);
+            
+            row = JSON.parse(decodedData);
+            console.log('Parsed row data:', row);
+            
+            if (!row || typeof row !== 'object') {
+                throw new Error('Invalid row data format');
+            }
+            
+            row.id = id;
+            
+            // if edit action, ensure JSON fields are handled correctly
+            if (action === 'edit') {
+                const config = window.serverConfig;
+                const jsonFields = config.tableFields
+                    .filter(f => f.display_type === 'json')
+                    .map(f => f.name);
+                
+                console.log('JSON fields:', jsonFields);
+                
+                // handle all JSON fields
+                for (const fieldName of jsonFields) {
+                    if (row[fieldName] !== undefined) {
+                        try {
+                            // if JSON string, validate and keep as is
+                            if (typeof row[fieldName] === 'string') {
+                                JSON.parse(row[fieldName]); // validate JSON format
+                            } 
+                            // if object, convert to string
+                            else if (typeof row[fieldName] === 'object') {
+                                row[fieldName] = JSON.stringify(row[fieldName]);
+                            }
+                        } catch (e) {
+                            console.error(`Error processing JSON field ${fieldName}:`, e);
+                            row[fieldName] = '[]';
+                        }
+                    }
+                }
+            }
+            
+            console.log('Final processed row data:', row);
+        } catch (e) {
+            console.error('Error parsing row data:', e);
+            alert('Invalid record format. Refresh and try again.');
+            return;
+        }
+    }
+    
+    switch(action) {
+        case 'edit':
+            if (!id || id === 'undefined') {
+                console.error('Invalid id for edit action');
+                alert('Invalid record ID');
+                return;
+            }
+            if (!row) {
+                console.error('No row data for edit action');
+                alert('Unable to read record data');
+                return;
+            }
+            $('#formModal').data({
+                currentData: row,
+                action: 'edit',
+                routeId: window.serverConfig.route_id
+            });
+            showFormModal('edit', row);
+            break;
+        case 'delete':
+            if (!id || id === 'undefined') {
+                console.error('Invalid id for delete action');
+                alert('Invalid record ID');
+                return;
+            }
+            if(confirm('Are you sure you want to delete this record?')) {
+                deleteRecord(id);
+            }
+            break;
+        default:
+            console.log('Unknown action:', action);
+    }
+}
+</script>
+{% endmacro %}
+
+<style>
+    /* beautify switch */
+    .form-switch {
+        padding-left: 2.5em;
+    }
+    
+    .form-switch .form-check-input {
+        width: 2em;
+        margin-left: -2.5em;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='rgba%280, 0, 0, 0.25%29'/%3e%3c/svg%3e");
+        background-position: left center;
+        border-radius: 2em;
+        transition: background-position .15s ease-in-out;
+    }
+    
+    .form-switch .form-check-input:checked {
+        background-position: right center;
+        background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
+    }
+    
+    .form-check-label {
+        margin-left: 0.5em;
+    }
+</style>

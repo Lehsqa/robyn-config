@@ -10,6 +10,8 @@ from pathlib import Path
 import click
 
 from add import add_business_logic
+from add import read_project_config
+from adminpanel import add_adminpanel
 from create import (
     DESIGN_CHOICES,
     InteractiveCreateConfig,
@@ -69,6 +71,21 @@ def _restore_project_backup(project_path: Path, backup_path: Path) -> None:
 
 def _interactive_terminal_available() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _is_adminpanel_marked_created(config: dict) -> bool:
+    adminpanel_config = config.get("adminpanel")
+    if not isinstance(adminpanel_config, dict):
+        return False
+
+    created_value = adminpanel_config.get("created")
+    if isinstance(created_value, bool):
+        return created_value
+    if isinstance(created_value, str):
+        return created_value.strip().lower() in {"1", "true", "yes", "on"}
+    if isinstance(created_value, int):
+        return created_value != 0
+    return bool(created_value)
 
 
 @click.group(name="robyn-config")
@@ -224,6 +241,80 @@ def add(name: str, project_path: Path) -> None:
         click.echo(
             click.style(
                 f"Successfully added '{name}' business logic!", fg="green"
+            )
+        )
+    except Exception as e:
+        if backup_path:
+            _restore_project_backup(project_path, backup_path)
+        raise click.ClickException(click.style(str(e), fg="red")) from e
+    finally:
+        if backup_dir:
+            shutil.rmtree(backup_dir, ignore_errors=True)
+
+
+@cli.command("adminpanel")
+@click.option(
+    "-u",
+    "--username",
+    "admin_username",
+    default="admin",
+    show_default=True,
+    help="Default superadmin username for generated admin panel.",
+)
+@click.option(
+    "-p",
+    "--password",
+    "admin_password",
+    default="admin",
+    show_default=True,
+    help="Default superadmin password for generated admin panel.",
+)
+@click.argument(
+    "project_path",
+    type=click.Path(
+        exists=True, file_okay=False, dir_okay=True, path_type=Path
+    ),
+    default=".",
+)
+def adminpanel(
+    admin_username: str, admin_password: str, project_path: Path
+) -> None:
+    """Add admin panel scaffolding to an existing robyn-config project."""
+    backup_dir: Path | None = None
+    backup_path: Path | None = None
+    project_path = project_path.resolve()
+
+    try:
+        if not admin_username.strip():
+            raise click.ClickException("Admin username cannot be empty.")
+        if not admin_password:
+            raise click.ClickException("Admin password cannot be empty.")
+
+        project_config = read_project_config(project_path)
+        if _is_adminpanel_marked_created(project_config):
+            should_update = click.confirm(
+                "Admin panel is already marked as created. Do you want to update the existing adminpanel module?",
+                default=False,
+            )
+            if not should_update:
+                click.echo(
+                    click.style(
+                        "Skipped admin panel update.",
+                        fg="yellow",
+                    )
+                )
+                return
+
+        backup_dir, backup_path = _backup_project(project_path)
+        add_adminpanel(
+            project_path,
+            admin_username=admin_username,
+            admin_password=admin_password,
+        )
+        click.echo(
+            click.style(
+                "Successfully added admin panel scaffolding!",
+                fg="green",
             )
         )
     except Exception as e:

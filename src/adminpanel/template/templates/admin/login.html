@@ -1,0 +1,63 @@
+{% extends "admin/base.html" %}
+
+{% block title %}{{ site_title }} | Login{% endblock %}
+
+{% block content %}
+<div class="w-full max-w-md">
+    <div class="rounded-2xl border border-slate-200 dark:border-slate-700 admin-border-soft bg-surface-light dark:bg-surface-dark shadow-xl p-8">
+        <div class="flex items-center justify-center gap-3 mb-8">
+            <div class="text-primary">
+                <span class="material-symbols-outlined text-[34px]">rocket_launch</span>
+            </div>
+            <div>
+                <h1 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{{ site_title }}</h1>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Sign in to continue</p>
+            </div>
+        </div>
+
+        {% if error %}
+        <div class="mb-4 rounded-lg border border-rose-300 bg-rose-50 text-rose-700 px-4 py-3 text-sm dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+            {{ error }}
+        </div>
+        {% endif %}
+
+        <form method="post" class="space-y-4">
+            <div>
+                <label for="username" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Username</label>
+                <input
+                    id="username"
+                    name="username"
+                    type="text"
+                    required
+                    placeholder="Enter username"
+                    class="admin-themed-input w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30"
+                >
+            </div>
+
+            <div>
+                <label for="password" class="block text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">Password</label>
+                <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    required
+                    placeholder="Enter password"
+                    class="admin-themed-input w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-2.5 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30"
+                >
+            </div>
+
+            <button
+                type="submit"
+                class="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-bold text-white hover:bg-primary/90 transition-colors"
+            >
+                <span class="material-symbols-outlined text-[18px]">login</span>
+                Log in
+            </button>
+        </form>
+
+        {% if copyright %}
+        <p class="mt-6 text-center text-xs text-slate-500 dark:text-slate-400">{{ copyright }}</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
