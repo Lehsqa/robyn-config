@@ -87,14 +87,12 @@ You can override the default superadmin credentials when scaffolding:
 robyn-config adminpanel -u superadmin -p super-secret-password ./my-service
 ```
 
-The `adminpanel` command will:
-- Generate the admin module in `src/app/infrastructure/adminpanel` for DDD projects, or in `src/app/adminpanel` for MVC projects.
-- Read ORM from `[tool.robyn-config].orm` and scaffold only required ORM internals while keeping generated module filenames ORM-agnostic.
-- Wire `adminpanel.register(...)` into `src/app/server.py`.
-- Respect `[tool.robyn-config.add].database_table_path` for injecting admin tables (`Role`, `UserRole`).
-- Write/update `[tool.robyn-config.adminpanel]` metadata in `pyproject.toml` with `created = true`.
-- Ensure required dependencies exist in the target project: `jinja2`, `aiosqlite`, `pandas`, `openpyxl`.
-- Prompt before overwriting if admin panel scaffolding was already created.
+This will:
+- Add an `adminpanel` module to your project and register it in the application.
+- Provide a modern admin UI with Dark/Light themes.
+- Auto-discover available project models and show them in the admin navigation.
+- Enable CRUD operations for discovered model tables.
+- Bootstrap admin authentication with a default superadmin user (configurable via `-u/--username` and `-p/--password`).
 
 ### 🏃 CLI Options
 
@@ -179,7 +177,7 @@ Feel free to open an issue for any clarifications or suggestions.
 
     ```bash
     uv venv && source .venv/bin/activate
-    uv pip install -e .[dev]
+    uv pip install -e ".[dev]"
     ```
 
 3.  Run linters and tests:
