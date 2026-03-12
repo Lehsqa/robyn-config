@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="uk">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Robyn & robyn-config Deep Dive</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;600;700&family=Fira+Code:wght@400;500&family=Inter:wght@300;400;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        /* CORE SETUP */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: #020617;
+            display: grid;
+            gap: 30px;
+            place-items: center;
+            padding: 40px 0;
+        }
+
+        .slide-container {
+            width: 1280px;
+            height: 720px;
+            background: radial-gradient(circle at 10% 10%, #1e293b 0%, #020617 100%);
+            color: #f8fafc;
+            font-family: 'Inter', sans-serif;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            padding: 40px 60px;
+            box-shadow: 0 30px 60px -12px rgba(0, 0, 0, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* BACKGROUND ELEMENTS */
+        .slide-container::before {
+            content: '';
+            position: absolute;
+            top: -20%;
+            right: -10%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(56, 189, 248, 0.1) 0%, transparent 70%);
+            z-index: 0;
+        }
+
+        /* TYPOGRAPHY */
+        h1,
+        h2,
+        h3 {
+            font-family: 'Urbanist', sans-serif;
+            font-weight: 700;
+            z-index: 1;
+        }
+
+        .slide-title {
+            font-size: 38px;
+            color: #38bdf8;
+            margin-bottom: 25px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        p,
+        li {
+            font-size: 19px;
+            line-height: 1.5;
+            color: #94a3b8;
+        }
+
+        strong {
+            color: #f1f5f9;
+        }
+
+        /* CODE BLOCK STYLING */
+        pre {
+            background: #0f172a;
+            border: 1px solid #1e293b;
+            border-radius: 12px;
+            padding: 15px;
+            font-family: 'Fira Code', monospace;
+            font-size: 14px;
+            color: #e2e8f0;
+            overflow: hidden;
+            width: 100%;
+            position: relative;
+        }
+
+        .code-keyword {
+            color: #ff7b72;
+        }
+
+        .code-func {
+            color: #d2a8ff;
+        }
+
+        .code-str {
+            color: #a5d6ff;
+        }
+
+        .code-comment {
+            color: #8b949e;
+        }
+
+        .code-decorator {
+            color: #d2a8ff;
+            font-weight: bold;
+        }
+
+        /* LAYOUTS */
+        .content-area {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            z-index: 1;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            align-items: start;
+        }
+
+        .three-column {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            width: 100%;
+        }
+
+        /* TILES & COMPONENTS */
+        .tile {
+            background: rgba(30, 41, 59, 0.4);
+            padding: 25px;
+            border-radius: 16px;
+            border: 1px solid rgba(56, 189, 248, 0.1);
+        }
+
+        .tile h3 {
+            color: #38bdf8;
+            font-size: 24px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .icon-circle {
+            width: 50px;
+            height: 50px;
+            background: rgba(56, 189, 248, 0.1);
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            color: #38bdf8;
+        }
+
+        .bullet-list {
+            list-style: none;
+        }
+
+        .bullet-list li {
+            position: relative;
+            padding-left: 35px;
+            margin-bottom: 12px;
+            font-size: 18px;
+        }
+
+        .bullet-list li i {
+            position: absolute;
+            left: 0;
+            top: 4px;
+            color: #38bdf8;
+            font-size: 16px;
+        }
+
+        .image-wrapper {
+            border-radius: 16px;
+            overflow: hidden;
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            height: 100%;
+            background: #0f172a;
+        }
+
+        .image-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .comparison-code-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+        }
+
+        .comparison-code-grid div {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .comparison-code-grid h4 {
+            font-family: 'Urbanist';
+            color: #38bdf8;
+            margin-bottom: 10px;
+            font-size: 20px;
+            text-align: center;
+        }
+
+        .result-box {
+            background: #064e3b;
+            color: #34d399;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-top: 10px;
+            font-family: 'Fira Code';
+        }
+
+        /* Tree adjustments */
+        .tree-pre {
+            font-size: 10px;
+            line-height: 1.2;
+            padding: 10px;
+            max-height: 520px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #38bdf8 #0f172a;
+        }
+
+        .speed-charts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 22px;
+            width: 100%;
+        }
+
+        .chart-card {
+            background: rgba(15, 23, 42, 0.65);
+            border: 1px solid rgba(56, 189, 248, 0.2);
+            border-radius: 14px;
+            padding: 18px;
+        }
+
+        .chart-card h3 {
+            font-family: 'Urbanist', sans-serif;
+            color: #38bdf8;
+            margin-bottom: 14px;
+            font-size: 22px;
+        }
+
+        .bar-row {
+            margin-bottom: 12px;
+        }
+
+        .bar-head {
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Fira Code', monospace;
+            font-size: 13px;
+            color: #cbd5e1;
+            margin-bottom: 6px;
+        }
+
+        .bar-track {
+            height: 16px;
+            background: #0b1224;
+            border: 1px solid #1e293b;
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 999px;
+        }
+
+        .bar-robyn {
+            background: #38bdf8;
+        }
+
+        .bar-fastapi {
+            background: #34d399;
+        }
+
+        .bar-django {
+            background: #f59e0b;
+        }
+
+        .chart-note {
+            margin-top: 14px;
+            text-align: center;
+            font-size: 14px;
+            color: #94a3b8;
+        }
+
+        .chart-sources {
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .source-link {
+            font-family: 'Fira Code', monospace;
+            font-size: 12px;
+            color: #38bdf8;
+            margin-top: 8px;
+            word-break: break-all;
+        }
+
+        .source-link a {
+            color: #38bdf8;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Slide 1: Title -->
+    <div class="slide-container" id="slide1">
+        <div class="content-area" style="justify-content: center; align-items: center; text-align: center;">
+            <h1 style="font-size: 96px; margin-bottom: 10px;">Robyn <span style="color:#38bdf8;">Unleashed</span></h1>
+            <p style="font-size: 32px; letter-spacing: 2px; color: #64748b;">Професійна автоматизація Rust-powered
+                Python бекенду</p>
+        </div>
+    </div>
+
+    <!-- Slide 1b: What is Robyn -->
+    <div class="slide-container" id="slide1b">
+        <h2 class="slide-title">Що Таке Robyn Framework?</h2>
+        <div class="content-area">
+            <div class="two-column">
+                <div>
+                    <p style="margin-bottom: 20px;">Robyn — це асинхронний Python веб-фреймворк із ядром на Rust,
+                        створений для швидкого API-розроблення з мінімальним boilerplate.</p>
+                    <ul class="bullet-list">
+                        <li><i class="fa-solid fa-gauge-high"></i> <strong>Швидкодія:</strong> Rust runtime та
+                            ефективна обробка запитів.</li>
+                        <li><i class="fa-solid fa-code"></i> <strong>Мінімалізм:</strong> Простий route-first підхід
+                            для REST API.</li>
+                        <li><i class="fa-solid fa-wand-magic-sparkles"></i> <strong>Сучасні можливості:</strong>
+                            Вбудовані AI, MCP, SSE, GraphQL та інтеграція Rust-коду.</li>
+                        <li><i class="fa-solid fa-rocket"></i> <strong>Production-ready:</strong> Підтримка
+                            воркерів, CLI flags і зручного дев-режиму.</li>
+                    </ul>
+                </div>
+                <div>
+                    <pre><code><span class="code-keyword">from</span> robyn <span class="code-keyword">import</span> Robyn
+
+app = Robyn(__file__)
+
+<span class="code-decorator">@app.get("/")</span>
+<span class="code-keyword">def</span> <span class="code-func">health</span>():
+    <span class="code-keyword">return</span> {<span class="code-str">"framework"</span>: <span class="code-str">"Robyn"</span>, <span class="code-str">"status"</span>: <span class="code-str">"ok"</span>}
+
+app.start(port=<span class="code-func">8080</span>)</code></pre>
+                    <div class="result-box" style="margin-top: 14px;">Коротко: швидкий Python API framework з
+                        Rust-серцем і сучасним DX.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 2: AI Agents Integration -->
+    <div class="slide-container" id="slide2">
+        <h2 class="slide-title">AI та Agents у Robyn</h2>
+        <div class="content-area">
+            <div class="two-column">
+                <div>
+                    <p style="margin-bottom: 20px;">Robyn надає вбудовану інтеграцію з LLM та агентами для прикладних
+                        AI-сценаріїв у backend API.</p>
+                    <ul class="bullet-list">
+                        <li><i class="fa-solid fa-robot"></i> <strong>AI Configure:</strong> Централізоване налаштування
+                            провайдера, ключа та моделі.</li>
+                        <li><i class="fa-solid fa-brain"></i> <strong>@agent:</strong> Декларативне створення
+                            агента-асистента з runner-режимом.</li>
+                        <li><i class="fa-solid fa-comment-dots"></i> <strong>Agents Examples:</strong> Готові приклади
+                            запуску агентів з репозиторію Robyn.</li>
+                    </ul>
+                </div>
+                <div>
+                    <pre><code><span class="code-keyword">from</span> robyn <span class="code-keyword">import</span> Robyn, Request
+<span class="code-keyword">from</span> robyn.ai <span class="code-keyword">import</span> agent, configure
+
+configure(
+    provider=<span class="code-str">"openai"</span>,
+    api_key=<span class="code-str">"your-api-key-here"</span>,
+    model=<span class="code-str">"gpt-4o-mini"</span>
+)
+
+<span class="code-decorator">@agent</span>(runner=<span class="code-str">"simple"</span>, instructions=<span class="code-str">"You are a helpful coding assistant."</span>)
+<span class="code-keyword">def</span> <span class="code-func">coding_assistant</span>():
+    <span class="code-keyword">pass</span>
+
+app = Robyn(__file__)
+
+<span class="code-decorator">@app.post("/chat")</span>
+<span class="code-keyword">async def</span> <span class="code-func">chat</span>(request: Request):
+    body = request.json()
+    user_message = body.get(<span class="code-str">"message"</span>, <span class="code-str">""</span>)
+    response = <span class="code-keyword">await</span> coding_assistant.run(user_message)
+    <span class="code-keyword">return</span> {<span class="code-str">"response"</span>: response}</code></pre>
+                    <p class="source-link">Source: https://robyn.tech/documentation/en/api_reference/ai</p>
+
+                    <pre style="margin-top: 12px; font-size: 12px;"><code><span class="code-comment"># Agents quick start</span>
+python examples/agents.py
+python examples/agent_skills.py</code></pre>
+                    <p class="source-link">Source: https://robyn.tech/documentation/en/api_reference/agents</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 3: MCP (Model Context Protocol) -->
+    <div class="slide-container" id="slide3">
+        <h2 class="slide-title">MCP: Model Context Protocol</h2>
+        <div class="content-area">
+            <div class="two-column">
+                <div>
+                    <pre><code><span class="code-keyword">from</span> robyn <span class="code-keyword">import</span> Robyn
+<span class="code-keyword">from</span> robyn.mcp <span class="code-keyword">import</span> MCPContext
+
+app = Robyn(__file__)
+
+<span class="code-decorator">@app.mcp("greet_user")</span>
+<span class="code-keyword">def</span> <span class="code-func">greet_user</span>(name: str, ctx: MCPContext):
+    <span class="code-keyword">return</span> <span class="code-str">f"Hello {name}! Your request ID is {ctx.request_id}"</span>
+
+<span class="code-keyword">if</span> __name__ == <span class="code-str">"__main__"</span>:
+    app.start(port=<span class="code-func">8080</span>)</code></pre>
+                    <p class="source-link">Source: https://robyn.tech/documentation/en/api_reference/mcps</p>
+                </div>
+                <div>
+                    <p>Robyn дозволяє вашому додатку виступати як хост для MCP серверів, надаючи агентам доступ до
+                        інструментів у стандартний спосіб.</p>
+                    <ul class="bullet-list" style="margin-top: 20px;">
+                        <li><i class="fa-solid fa-plug"></i> <strong>Interoperability:</strong> Сумісність зі
+                            стандартами Anthropic та іншими LLM провайдерами.</li>
+                        <li><i class="fa-solid fa-toolbox"></i> <strong>Tool Discovery:</strong> Автоматичне виявлення
+                            доступних інструментів та ресурсів.</li>
+                        <li><i class="fa-solid fa-network-wired"></i> <strong>Seamless:</strong> Швидке підключення
+                            зовнішніх контекстів через CLI або код.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 4: Rust Core & Const Requests -->
+    <div class="slide-container" id="slide4">
+        <h2 class="slide-title">Rust Core & Екстремальна Швидкість</h2>
+        <div class="content-area">
+            <div class="two-column">
+                <div>
+                    <ul class="bullet-list">
+                        <li><i class="fa-solid fa-server"></i> <strong>Rust Server з коробки:</strong> Повноцінний
+                            HTTP-сервер, де конфігурація воркерів та потоків виконується прямо в Python коді.</li>
+                        <li><i class="fa-solid fa-bolt"></i> <strong>Const Requests:</strong> Унікальна можливість
+                            створювати маршрути, що кешуються на рівні Rust-енергонезалежного шару.</li>
+                        <li><i class="fa-solid fa-microchip"></i> <strong>Hybrid Code:</strong> Можливість підключення
+                            власного Rust-коду для критичних обчислень.</li>
+                    </ul>
+                </div>
+                <div>
+                    <pre><code><span class="code-keyword">from</span> robyn <span class="code-keyword">import</span> Robyn
+<span class="code-keyword">import</span> rustimport.import_hook
+import rust_code
+
+app = Robyn(__file__)
+
+<span class="code-decorator">@app.get("/sync", const=True)</span>
+<span class="code-keyword">def</span> <span class="code-func">sync_get</span>():
+    <span class="code-keyword">return</span> <span class="code-str">"Hello, world!"</span>
+
+<span class="code-decorator">@app.get("/")</span>
+<span class="code-keyword">def</span> <span class="code-func">h</span>(request):
+    rust_code.hello()
+    <span class="code-keyword">return</span> <span class="code-str">"Hello World"</span></code></pre>
+                    <pre style="margin-top: 10px; font-size: 11px;"><code><span class="code-comment"># Усі доступні flags запуску Robyn</span>
+python app.py <span class="code-str">-h</span> <span class="code-str">--help</span>
+python app.py <span class="code-str">--processes 4</span> <span class="code-str">--workers 2</span>
+python app.py <span class="code-str">--dev</span>
+python app.py <span class="code-str">--log-level INFO</span>
+python app.py <span class="code-str">--create</span>
+python app.py <span class="code-str">--docs</span>
+python app.py <span class="code-str">--open-browser</span>
+python app.py <span class="code-str">--version</span>
+python app.py <span class="code-str">--compile-rust-path ./src/rust</span>
+python app.py <span class="code-str">--create-rust-file rust_code</span>
+python app.py <span class="code-str">--disable-openapi</span>
+python app.py <span class="code-str">--fast</span></code></pre>
+                    <p class="source-link">Source: https://robyn.tech/documentation/en/api_reference/const_requests</p>
+                    <p class="source-link">Source: https://robyn.tech/documentation/en/api_reference/using_rust_directly
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 5: SSE, IP & GraphQL -->
+    <div class="slide-container" id="slide5">
+        <h2 class="slide-title">Real-time та Сучасні API</h2>
+        <div class="content-area">
+            <div class="two-column">
+                <div>
+                    <pre><code><span class="code-keyword">from</span> robyn <span class="code-keyword">import</span> Robyn, Request, Headers
+<span class="code-keyword">from</span> robyn.types <span class="code-keyword">import</span> HttpMethod
+<span class="code-keyword">from</span> robyn.robyn <span class="code-keyword">import</span> jsonify
+
+app = Robyn(__file__)
+
+<span class="code-decorator">@app.get("/sync")</span>
+<span class="code-keyword">def</span> <span class="code-func">sync_get</span>(request: Request):
+    <span class="code-keyword">def</span> <span class="code-func">my_gen</span>():
+        <span class="code-keyword">for</span> i <span class="code-keyword">in</span> <span class="code-func">range</span>(<span class="code-func">10</span>):
+            <span class="code-keyword">yield</span> <span class="code-str">f"message {i}\n"</span>
+    <span class="code-keyword">return</span> my_gen(), Headers({<span class="code-str">"Content-Type"</span>: <span class="code-str">"text/event-stream"</span>})
+
+<span class="code-decorator">@app.get("/client-ip")</span>
+<span class="code-keyword">def</span> <span class="code-func">get_client_ip</span>(request: Request):
+    <span class="code-keyword">return</span> {<span class="code-str">"ip"</span>: request.ip_addr}
+
+<span class="code-decorator">@app.route(endpoint="/graphql", methods=[HttpMethod.POST, HttpMethod.GET])</span>
+<span class="code-keyword">async def</span> <span class="code-func">graphql_router</span>(request: Request):
+    body = request.json()
+    query = body.get(<span class="code-str">"query"</span>)
+    <span class="code-keyword">return</span> jsonify({<span class="code-str">"query"</span>: query})</code></pre>
+                    <p class="source-link">Source: https://robyn.tech/documentation/en/api_reference/server_sent_events
+                    </p>
+                    <p class="source-link">Source: https://robyn.tech/documentation/en/api_reference/advanced_features
+                    </p>
+                    <p class="source-link">Source: https://robyn.tech/documentation/en/api_reference/graphql-support</p>
+                </div>
+                <div>
+                    <ul class="bullet-list">
+                        <li><i class="fa-solid fa-tower-broadcast"></i> <strong>SSE:</strong> Повноцінна підтримка
+                            стрімінгу даних (Server-Sent Events) у реальному часі.</li>
+                        <li><i class="fa-solid fa-address-card"></i> <strong>Client IP:</strong> Прямий доступ до
+                            <code>request.ip_addr</code> без маніпуляцій із заголовками.
+                        </li>
+                        <li><i class="fa-solid fa-diagram-project"></i> <strong>Вбудований GraphQL:</strong> Готова
+                            інтеграція для побудови гнучких API.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 5b: CRUD comparison -->
+    <div class="slide-container" id="slide5b">
+        <h2 class="slide-title">CRUD Порівняння: Robyn vs FastAPI vs Django</h2>
+        <div class="content-area">
+            <div class="comparison-code-grid">
+                <div>
+                    <h4>Robyn (Minimalistic)</h4>
+                    <pre style="font-size: 10px; line-height: 1.28;"><code><span class="code-keyword">from</span> robyn <span class="code-keyword">import</span> Robyn, Request, jsonify
+
+app = Robyn(__file__)
+users = {<span class="code-func">1</span>: {<span class="code-str">"id"</span>: <span class="code-func">1</span>, <span class="code-str">"name"</span>: <span class="code-str">"Anna"</span>}}
+
+<span class="code-decorator">@app.get("/user/:id")</span>
+<span class="code-keyword">def</span> <span class="code-func">get_u</span>(r: Request):
+    uid = <span class="code-func">int</span>(r.path_params[<span class="code-str">"id"</span>])
+    user = users.get(uid)
+    <span class="code-keyword">return</span> jsonify(user <span class="code-keyword">or</span> {<span class="code-str">"error"</span>: <span class="code-str">"not found"</span>})
+
+<span class="code-decorator">@app.post("/user")</span>
+<span class="code-keyword">def</span> <span class="code-func">add_u</span>(r: Request):
+    data = r.json()
+    uid = <span class="code-func">max</span>(users.keys()) + <span class="code-func">1</span>
+    users[uid] = {<span class="code-str">"id"</span>: uid, <span class="code-str">"name"</span>: data[<span class="code-str">"name"</span>]}
+    <span class="code-keyword">return</span> jsonify(users[uid])
+
+<span class="code-decorator">@app.delete("/user/:id")</span>
+<span class="code-keyword">def</span> <span class="code-func">del_u</span>(r: Request):
+    users.pop(<span class="code-func">int</span>(r.path_params[<span class="code-str">"id"</span>]), <span class="code-keyword">None</span>)
+    <span class="code-keyword">return</span> jsonify({<span class="code-str">"ok"</span>: <span class="code-keyword">True</span>})
+
+app.start(port=<span class="code-func">8080</span>)</code></pre>
+                </div>
+                <div>
+                    <h4>FastAPI (Type Safe)</h4>
+                    <pre style="font-size: 10px; line-height: 1.28;"><code><span class="code-keyword">from</span> fastapi <span class="code-keyword">import</span> FastAPI, HTTPException
+<span class="code-keyword">from</span> pydantic <span class="code-keyword">import</span> BaseModel
+<span class="code-keyword">import</span> uvicorn
+
+app = FastAPI()
+users = {<span class="code-func">1</span>: {<span class="code-str">"id"</span>: <span class="code-func">1</span>, <span class="code-str">"name"</span>: <span class="code-str">"Anna"</span>}}
+
+<span class="code-keyword">class</span> <span class="code-func">UserIn</span>(BaseModel):
+    name: str
+
+<span class="code-decorator">@app.get("/user/{id}")</span>
+<span class="code-keyword">def</span> <span class="code-func">get_u</span>(id: <span class="code-func">int</span>):
+    <span class="code-keyword">if</span> id <span class="code-keyword">not in</span> users:
+        <span class="code-keyword">raise</span> HTTPException(status_code=<span class="code-func">404</span>, detail=<span class="code-str">"not found"</span>)
+    <span class="code-keyword">return</span> users[id]
+
+<span class="code-decorator">@app.post("/user")</span>
+<span class="code-keyword">def</span> <span class="code-func">add_u</span>(user: UserIn):
+    uid = <span class="code-func">max</span>(users.keys()) + <span class="code-func">1</span>
+    users[uid] = {<span class="code-str">"id"</span>: uid, <span class="code-str">"name"</span>: user.name}
+    <span class="code-keyword">return</span> users[uid]
+
+<span class="code-decorator">@app.delete("/user/{id}")</span>
+<span class="code-keyword">def</span> <span class="code-func">del_u</span>(id: <span class="code-func">int</span>):
+    users.pop(id, <span class="code-keyword">None</span>)
+    <span class="code-keyword">return</span> {<span class="code-str">"ok"</span>: <span class="code-keyword">True</span>}
+
+uvicorn.run(app, host=<span class="code-str">"0.0.0.0"</span>, port=<span class="code-func">8000</span>)</code></pre>
+                </div>
+                <div>
+                    <h4>Django DRF (Class Based)</h4>
+                    <pre style="font-size: 10px; line-height: 1.28;"><code><span class="code-keyword">from</span> django.urls <span class="code-keyword">import</span> path, include
+<span class="code-keyword">from</span> rest_framework <span class="code-keyword">import</span> serializers, viewsets, routers
+<span class="code-keyword">from</span> .models <span class="code-keyword">import</span> User
+
+<span class="code-keyword">class</span> <span class="code-func">UserSer</span>(serializers.ModelSerializer):
+    <span class="code-keyword">class</span> <span class="code-func">Meta</span>:
+        model = User
+        fields = [<span class="code-str">"id"</span>, <span class="code-str">"name"</span>, <span class="code-str">"email"</span>]
+
+<span class="code-keyword">class</span> <span class="code-func">UserViewSet</span>(viewsets.ModelViewSet):
+    queryset = User.objects.all()
+    serializer_class = UserSer
+
+router = routers.DefaultRouter()
+router.register(<span class="code-str">"user"</span>, UserViewSet, basename=<span class="code-str">"user"</span>)
+urlpatterns = [path(<span class="code-str">"api/"</span>, include(router.urls))]
+
+<span class="code-comment"># run: python manage.py runserver 0.0.0.0:8000</span></code></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 5c: Performance comparison image -->
+    <div class="slide-container" id="slide5c">
+        <h2 class="slide-title">ПОРІВНЯННЯ ШВИДКОСТІ: Robyn vs FastAPI vs Django</h2>
+        <div class="content-area">
+            <div class="speed-charts">
+                <div class="chart-card">
+                    <h3>JSON Serializer (All Modifications)</h3>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>fastapi [socketify.py asgi_pypy3]</span><span>676,461</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-fastapi" style="width: 100%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>robyn [const]</span><span>510,465</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-robyn" style="width: 75.5%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>fastapi</span><span>354,899</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-fastapi" style="width: 52.5%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>robyn</span><span>336,682</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-robyn" style="width: 49.8%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>fastapi-uvicorn</span><span>322,402</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-fastapi" style="width: 47.7%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>fastapi [socketify.py asgi]</span><span>296,308</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-fastapi" style="width: 43.8%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>django [socketify.py wsgi]</span><span>183,425</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-django" style="width: 27.1%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>django</span><span>164,870</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-django" style="width: 24.4%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>fastapi-hypercorn</span><span>11,996</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-fastapi" style="width: 1.8%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <h3>Plaintext (All Modifications)</h3>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>fastapi [socketify.py asgi_pypy3]</span><span>746,603</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-fastapi" style="width: 100%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>robyn [const]</span><span>613,683</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-robyn" style="width: 82.2%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>robyn</span><span>446,397</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-robyn" style="width: 59.8%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>fastapi [socketify.py asgi]</span><span>348,710</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-fastapi" style="width: 46.7%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>fastapi</span><span>338,365</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-fastapi" style="width: 45.3%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>fastapi-uvicorn</span><span>305,149</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-fastapi" style="width: 40.9%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>django [socketify.py wsgi]</span><span>216,050</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-django" style="width: 28.9%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>django</span><span>179,697</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-django" style="width: 24.1%;"></div>
+                        </div>
+                    </div>
+                    <div class="bar-row">
+                        <div class="bar-head"><span>fastapi-hypercorn</span><span>108,509</span></div>
+                        <div class="bar-track">
+                            <div class="bar-fill bar-fastapi" style="width: 14.5%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-note">Round 23 (Physical). Формула: best RPS =
+                totalRequests / (endTime - startTime).</div>
+            <div class="chart-sources">
+                <p class="source-link">Sources: <a
+                        href="https://www.techempower.com/benchmarks/#section=data-r23&l=zijzen-pa7&f=zik0zb-zik0zj-zik0zj-zik0zj-zik0zj-zik0zj-zik0zj-ziimf3-zik0zj-zik0zj-zik0zj-zik0zj-v2qiv3-zik0zj-zik0zj-jz6rj&test=json">JSON
+                        Serializer</a> | <a
+                        href="https://www.techempower.com/benchmarks/#section=data-r23&l=zijzen-pa7&f=zik0zb-zik0zj-zik0zj-zik0zj-zik0zj-zik0zj-zik0zj-ziimf3-zik0zj-zik0zj-zik0zj-zik0zj-v2qiv3-zik0zj-zik0zj-jz6rj&test=plaintext">Plaintext</a>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 6: What is robyn-config -->
+    <div class="slide-container" id="slide1c">
+        <h2 class="slide-title">Що Таке robyn-config?</h2>
+        <div class="content-area">
+            <div class="two-column">
+                <div>
+                    <p style="margin-bottom: 20px;"><strong>robyn-config</strong> — CLI-надбудова для Robyn, яка
+                        автоматизує створення, розширення та підтримку production-ready бекенд-проєктів.</p>
+                    <ul class="bullet-list">
+                        <li><i class="fa-solid fa-seedling"></i> <strong>create:</strong> Генерує основу проєкту
+                            (архітектура, Docker, налаштування якості).</li>
+                        <li><i class="fa-solid fa-puzzle-piece"></i> <strong>add:</strong> Додає нові сутності та
+                            маршрути з авто-реєстрацією.</li>
+                        <li><i class="fa-solid fa-sliders"></i> <strong>adminpanel:</strong> Створює веб-адмінку для
+                            CRUD-операцій.</li>
+                        <li><i class="fa-solid fa-gear"></i> <strong>DevEx:</strong> Менше рутини, більше часу на
+                            бізнес-логіку.</li>
+                    </ul>
+                </div>
+                <div>
+                    <pre><code><span class="code-comment"># 1) Створення нового проєкту</span>
+robyn-config create
+
+<span class="code-comment"># 2) Додавання сутності</span>
+robyn-config add
+
+<span class="code-comment"># 3) Генерація адмінпанелі</span>
+robyn-config adminpanel
+
+<span class="code-comment"># 4) Запуск застосунку</span>
+uv run python -m cli</code></pre>
+                    <div class="result-box" style="margin-top: 14px;">Результат: структурований Robyn-проєкт із
+                        швидким стартом для команди.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 7: create command & DDD structure -->
+    <div class="slide-container" id="slide6">
+        <h2 class="slide-title">robyn-config create</h2>
+        <div class="content-area">
+            <div class="two-column">
+                <div>
+                    <p>Фундаментальна команда для ініціалізації проєкту. Створює складну архітектуру (DDD/MVC) з усіма
+                        налаштуваннями.</p>
+                    <ul class="bullet-list" style="margin-top: 15px;">
+                        <li><i class="fa-solid fa-sitemap"></i> <strong>Архітектура:</strong> Підтримка Domain-Driven
+                            Design (DDD).</li>
+                        <li><i class="fa-solid fa-database"></i> <strong>Infrastructure:</strong> Готова інтеграція з
+                            Alembic та SQLAlchemy.</li>
+                        <li><i class="fa-solid fa-box"></i> <strong>Containerization:</strong> Docker & Docker Compose з
+                            коробки.</li>
+                    </ul>
+                    <div class="result-box">Результат: Професійна структура готова до масштабування.</div>
+                </div>
+                <pre class="tree-pre"><code>├── 📁 compose
+│   └── 📁 app
+│       ├── 🐳 Dockerfile
+│       ├── 📄 dev.sh
+│       └── 🐍 prod.py
+├── 📁 src
+│   └── 📁 app
+│       ├── 📁 config
+│       │   ├── 📁 integrations
+│       │   ├── 🐍 authentication.py
+│       │   ├── 🐍 database.py
+│       │   └── 🐍 public_api.py
+│       ├── 📁 domain
+│       │   ├── 📁 users
+│       │   │   ├── 🐍 entities.py
+│       │   │   ├── 🐍 repository.py
+│       │   │   └── 🐍 services.py
+│       ├── 📁 infrastructure
+│       │   ├── 📁 database
+│       │   │   ├── 📁 migrations
+│       │   │   ├── 📁 repository
+│       │   │   └── 📁 tables
+│       ├── 📁 presentation
+│       │   ├── 📁 users
+│       │   │   ├── 🐍 contracts.py
+│       │   │   └── 🐍 rest.py
+├── ⚙️ docker-compose.yml
+├── ⚙️ pyproject.toml
+└── 📄 uv.lock</code></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 8: add command -->
+    <div class="slide-container" id="slide7">
+        <h2 class="slide-title">robyn-config add</h2>
+        <div class="content-area">
+            <div class="two-column">
+                <pre><code><span class="code-comment">$ robyn-config add</span>
+<span class="code-comment">? Enter entity name: product</span>
+<span class="code-comment">? Choose component: all</span>
+
+<span class="code-func">CREATE</span> models/product.py
+<span class="code-func">CREATE</span> repos/product_repo.py
+<span class="code-func">CREATE</span> routes/product_routes.py
+<span class="code-func">UPDATE</span> routes/__init__.py</code></pre>
+                <div>
+                    <p>Динамічне розширення проєкту новими сутностями за секунди.</p>
+                    <ul class="bullet-list" style="margin-top: 20px;">
+                        <li><i class="fa-solid fa-plus"></i> <strong>Smart Generation:</strong> Створює всю вертикаль
+                            коду.</li>
+                        <li><i class="fa-solid fa-link"></i> <strong>Auto-Wiring:</strong> Авто-реєстрація маршрутів.
+                        </li>
+                    </ul>
+                    <div class="result-box">Результат: Готовий функціонал, інтегрований у систему.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 9: adminpanel command -->
+    <div class="slide-container" id="slide8">
+        <h2 class="slide-title">robyn-config adminpanel</h2>
+        <div class="content-area">
+            <div class="two-column">
+                <div>
+                    <p>Генерація професійного інтерфейсу для управління даними.</p>
+                    <ul class="bullet-list" style="margin-top: 20px;">
+                        <li><i class="fa-solid fa-eye"></i> <strong>Discovery:</strong> Авто-знаходження моделей.</li>
+                        <li><i class="fa-solid fa-table"></i> <strong>Full CRUD:</strong> Керування записами через
+                            браузер.</li>
+                        <li><i class="fa-solid fa-lock"></i> <strong>Auth:</strong> Вбудована безпека та авторизація.
+                        </li>
+                    </ul>
+                    <div class="result-box">Результат: Повноцінна веб-адмінка з Dark/Light темами.</div>
+                </div>
+                <div class="image-wrapper">
+                    <img src="image.png" alt="Robyn Admin Panel Dashboard">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 10: Production Readiness -->
+    <div class="slide-container" id="slide9">
+        <h2 class="slide-title">Production Readiness & DevEx</h2>
+        <div class="content-area">
+            <div class="three-column">
+                <div class="tile">
+                    <div class="icon-circle"><i class="fa-solid fa-vial"></i></div>
+                    <h3>Якість коду</h3>
+                    <p>Вбудовані конфіги для <strong>Ruff</strong>, <strong>MyPy</strong> та <strong>Pytest</strong>.
+                    </p>
+                </div>
+                <div class="tile">
+                    <div class="icon-circle"><i class="fa-solid fa-ship"></i></div>
+                    <h3>Деплой</h3>
+                    <p>Оптимізовані <strong>Multi-stage Dockerfiles</strong> та compose.</p>
+                </div>
+                <div class="tile">
+                    <div class="icon-circle"><i class="fa-solid fa-brain"></i></div>
+                    <h3>AI Ready</h3>
+                    <p>Підтримка <strong>AI Agent Skills</strong> для автоматизації процесів.</p>
+                </div>
+            </div>
+            <div style="margin-top: 40px; text-align: center;">
+                <p>Все це разом створює <strong>найкращий Developer Experience (DevEx)</strong> у світі Python бекенду.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 11: Q&A -->
+    <div class="slide-container" id="slide10">
+        <div class="content-area" style="justify-content: center; align-items: center; text-align: center;">
+            <h2 style="font-size: 72px; margin-bottom: 20px;">Питання?</h2>
+            <div class="icon-circle" style="width: 100px; height: 100px; font-size: 40px;">
+                <i class="fa-solid fa-comments"></i>
+            </div>
+            <div style="margin-top: 50px;">
+                <p>Корисні посилання:</p>
+                <p style="color: #38bdf8; font-family: 'Fira Code'; margin-top: 10px;">robyn.tech |
+                    github.com/Lehsqa/robyn-config</p>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>
