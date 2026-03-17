@@ -117,9 +117,7 @@ def _ensure_project_dependency(
 
     normalized_dependency = _normalize_dependency_name(dependency)
     for line in lines[start_index + 1 : end_index]:
-        existing_dependency = _extract_dependency_name_from_project_entry(
-            line
-        )
+        existing_dependency = _extract_dependency_name_from_project_entry(line)
         if (
             existing_dependency is not None
             and _normalize_dependency_name(existing_dependency)

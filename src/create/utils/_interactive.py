@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-from .utils import DESIGN_CHOICES, ORM_CHOICES, PACKAGE_MANAGER_CHOICES
+from ._config import DESIGN_CHOICES, ORM_CHOICES, PACKAGE_MANAGER_CHOICES
 
 TEXTUAL_IMPORT_ERROR: ModuleNotFoundError | None = None
 

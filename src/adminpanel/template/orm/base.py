@@ -3,7 +3,13 @@ from typing import Any, Type
 
 
 class BaseORMAdapter(ABC):
-    """ORM adapter base for admin data operations."""
+    """ORM adapter base for admin data operations.
+
+    NOTE: This class is not used internally by the admin panel's ModelAdmin
+    classes (which interface with their ORM directly). It exists solely as a
+    user-facing abstraction for building custom ORM adapters outside the admin
+    panel's built-in Tortoise/SQLAlchemy backends.
+    """
 
     @abstractmethod
     async def list(self, model: Type[Any], **filters) -> list[Any]:

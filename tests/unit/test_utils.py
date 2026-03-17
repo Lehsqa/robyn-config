@@ -3,7 +3,11 @@ from pathlib import Path
 from unittest.mock import patch
 
 from src.create import utils as create_utils
+from src.create.utils import _config as create_config
+from src.create.utils import _filesystem as create_filesystem
 from src.add import utils as add_utils
+from src.add.utils import _injection as add_injection
+from src.add.utils import _paths as add_paths
 
 
 # --- Tests for src/create/utils.py ---
@@ -18,9 +22,9 @@ def test_collect_common_items(tmp_path):
     (common_dir / "compose").mkdir()
     (common_dir / ".DS_Store").touch()
 
-    with patch("src.create.utils.COMMON_DIR", common_dir):
+    with patch("src.create.utils._filesystem.COMMON_DIR", common_dir):
         # SQLAlchemy should include everything (alembic.ini is kept)
-        items_sql = create_utils._collect_common_items("sqlalchemy", "uv")
+        items_sql = create_filesystem._collect_common_items("sqlalchemy", "uv")
         assert Path("Makefile") in items_sql
         assert Path("README.md") in items_sql
         assert Path("alembic.ini") in items_sql
@@ -30,7 +34,7 @@ def test_collect_common_items(tmp_path):
         assert Path(".DS_Store") not in items_sql
 
         # Tortoise should exclude alembic.ini
-        items_tortoise = create_utils._collect_common_items(
+        items_tortoise = create_filesystem._collect_common_items(
             "tortoise", "poetry"
         )
         assert Path("Makefile") in items_tortoise
@@ -42,7 +46,7 @@ def test_collect_common_items(tmp_path):
 
 def test_get_template_config():
     """Test that template config is retrieved correctly."""
-    config = create_utils._get_template_config(
+    config = create_config._get_template_config(
         "ddd", "sqlalchemy", "mypro", "uv"
     )
     assert config["design"] == "ddd"
@@ -51,7 +55,7 @@ def test_get_template_config():
     assert config["package_manager"] == "uv"
 
     with pytest.raises(SystemExit):
-        create_utils._get_template_config("invalid", "orm", "proj", "uv")
+        create_config._get_template_config("invalid", "orm", "proj", "uv")
 
 
 # --- Tests for src/add/utils.py ---
@@ -77,42 +81,42 @@ def test_format_comment():
 def test_read_project_config(tmp_path):
     # Missing file
     with pytest.raises(FileNotFoundError):
-        add_utils.read_project_config(tmp_path)
+        add_paths.read_project_config(tmp_path)
 
     # Missing section
     pyproject = tmp_path / "pyproject.toml"
     pyproject.write_text("[tool.other]\nkey='val'")
     with pytest.raises(ValueError, match="No \\[tool.robyn-config\\]"):
-        add_utils.read_project_config(tmp_path)
+        add_paths.read_project_config(tmp_path)
 
     # Valid config
     pyproject.write_text("[tool.robyn-config]\ndesign='ddd'\norm='sqlalchemy'")
-    config = add_utils.read_project_config(tmp_path)
+    config = add_paths.read_project_config(tmp_path)
     assert config["design"] == "ddd"
     assert config["orm"] == "sqlalchemy"
 
 
 def test_ensure_import_from(tmp_path):
     file_path = tmp_path / "test_import.py"
-    
+
     # 1. New file creation
-    add_utils._ensure_import_from(file_path, ".models", "User")
+    add_injection._ensure_import_from(file_path, ".models", "User")
     assert file_path.read_text().strip() == "from .models import User"
 
     # 2. Append to existing import
-    add_utils._ensure_import_from(file_path, ".models", "Product")
+    add_injection._ensure_import_from(file_path, ".models", "Product")
     content = file_path.read_text()
     assert "from .models import User, Product" in content
 
     # 3. Append with comment preservation
     file_path.write_text("from .models import User  # old comment")
-    add_utils._ensure_import_from(file_path, ".models", "Product")
+    add_injection._ensure_import_from(file_path, ".models", "Product")
     content = file_path.read_text()
     assert "from .models import User, Product  # old comment" in content
 
     # 4. Handle multiline parenthesis import
     file_path.write_text("from .models import (\n    User,\n)")
-    add_utils._ensure_import_from(file_path, ".models", "Product")
+    add_injection._ensure_import_from(file_path, ".models", "Product")
     content = file_path.read_text()
     assert "    User," in content
     assert "    Product," in content
@@ -120,12 +124,12 @@ def test_ensure_import_from(tmp_path):
 
 def test_add_to_all_list(tmp_path):
     file_path = tmp_path / "test_all.py"
-    
+
     # Create file with existing __all__
     file_path.write_text('__all__ = (\n    "User",\n)')
-    
-    add_utils._add_to_all_list(file_path, "Product")
-    
+
+    add_injection._add_to_all_list(file_path, "Product")
+
     content = file_path.read_text()
     assert '"User",' in content
     assert '"Product",' in content

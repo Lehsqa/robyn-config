@@ -23,7 +23,9 @@ def register_model_view_routes(site: Any) -> None:
 
         search_values = {
             field.name: unquote(
-                first_value(request.query_params.get(f"search_{field.name}"), "")
+                first_value(
+                    request.query_params.get(f"search_{field.name}"), ""
+                )
             )
             for field in model_admin.search_fields
             if request.query_params.get(f"search_{field.name}")
@@ -102,10 +104,14 @@ def register_model_view_routes(site: Any) -> None:
             return Response(status_code=404, description="model not found")
 
         if not await site.check_permission(request, route_id, "add"):
-            return Response(status_code=403, description="No create permission")
+            return Response(
+                status_code=403, description="No create permission"
+            )
 
         language = await site._get_language(request)
-        form_fields = [field.to_dict() for field in await model_admin.get_form_fields()]
+        form_fields = [
+            field.to_dict() for field in await model_admin.get_form_fields()
+        ]
         can_add = model_admin.allow_add and await site.check_permission(
             request, route_id, "add"
         )
@@ -159,7 +165,9 @@ def register_model_view_routes(site: Any) -> None:
             return Response(status_code=404, description="Record not found")
 
         language = await site._get_language(request)
-        form_fields = [field.to_dict() for field in await model_admin.get_form_fields()]
+        form_fields = [
+            field.to_dict() for field in await model_admin.get_form_fields()
+        ]
         form_data = await model_admin.serialize_object(obj, for_display=False)
         can_edit = model_admin.enable_edit and await site.check_permission(
             request, route_id, "edit"

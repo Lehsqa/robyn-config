@@ -1,12 +1,11 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable, Type
 from urllib.parse import unquote
 
 from robyn import Request
 from sqlalchemy import DateTime, String, or_
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.inspection import inspect as sa_inspect
 
 from ..fields import DisplayType, SearchField, TableField
@@ -20,22 +19,25 @@ from .helpers import (
 )
 from .queryset import SQLAlchemyQuerySet
 
+logger = logging.getLogger(__name__)
+
 
 class ModelAdmin(BaseModelAdmin):
+    # NOTE: Inline model support is not implemented for SQLAlchemy.
+    # get_inline_formsets, get_inline_data, and _build_frontend_inlines
+    # return empty results via BaseModelAdmin defaults.
     inlines: list[Type[InlineModelAdmin]] = []
 
     def __init__(
         self,
         model: type[Any],
-        session_factory: Callable[[], AsyncSession] | None = None,
+        transaction: Callable | None = None,
     ) -> None:
-        if session_factory is None:
-            raise ValueError(
-                "session_factory is required for SQLAlchemy admin"
-            )
+        if transaction is None:
+            raise ValueError("transaction is required for SQLAlchemy admin")
 
         self._initialize_common_attributes(model)
-        self.session_factory = session_factory
+        self.transaction = transaction
         mapper = sa_inspect(self.model)
         self._columns = {col.name: col for col in mapper.columns}
         pk_columns = [col.name for col in mapper.primary_key]
@@ -46,37 +48,25 @@ class ModelAdmin(BaseModelAdmin):
             inline_class(self.model) for inline_class in self.inlines
         ]
 
-    def _process_fields(self) -> None:
-        if not self.table_fields:
-            self.table_fields = [
-                TableField(name=name) for name in self._columns.keys()
-            ]
+    def _get_default_table_fields(self):
+        return [TableField(name=name) for name in self._columns.keys()]
 
-        for field in self.table_fields:
-            model_field = self._columns.get(field.name)
-            if model_field is None:
-                continue
-            if model_field.primary_key:
-                field.readonly = True
-                field.editable = False
-            elif isinstance(model_field.type, DateTime):
-                field.readonly = True
-                field.sortable = True
-                if not field.display_type:
-                    field.display_type = DisplayType.DATETIME
-            elif _is_boolean_column(model_field):
-                if not field.display_type:
-                    field.display_type = DisplayType.BOOLEAN
+    def _is_pk_field(self, field_name: str) -> bool:
+        col = self._columns.get(field_name)
+        return col is not None and col.primary_key
 
-            if not hasattr(field, "editable") or field.editable is None:
-                field.editable = False
+    def _is_datetime_field(self, field_name: str) -> bool:
+        col = self._columns.get(field_name)
+        return col is not None and isinstance(col.type, DateTime)
 
-        self._finalize_field_configuration()
+    def _is_boolean_field(self, field_name: str) -> bool:
+        col = self._columns.get(field_name)
+        return col is not None and _is_boolean_column(col)
 
     async def get_queryset(
         self, request: Request, params: dict
     ) -> SQLAlchemyQuerySet:
-        queryset = SQLAlchemyQuerySet(self.model, self.session_factory)
+        queryset = SQLAlchemyQuerySet(self.model, self.transaction)
         normalized_params: dict[str, Any] = {}
         for key, value in params.items():
             normalized_params[key] = (
@@ -142,11 +132,8 @@ class ModelAdmin(BaseModelAdmin):
 
     async def get_object(self, pk: Any):
         pk_value = _coerce_pk(pk, self._columns.get(self.pk_name))
-        session = self.session_factory()
-        try:
+        async with self.transaction() as session:
             return await session.get(self.model, pk_value)
-        finally:
-            await session.close()
 
     async def serialize_object(
         self, obj: Any, for_display: bool = True
@@ -162,8 +149,7 @@ class ModelAdmin(BaseModelAdmin):
                 if field.related_model and field.related_key:
                     fk_value = getattr(obj, field.related_key, None)
                     if fk_value:
-                        session = self.session_factory()
-                        try:
+                        async with self.transaction() as session:
                             related_obj = await session.get(
                                 field.related_model, fk_value
                             )
@@ -180,8 +166,6 @@ class ModelAdmin(BaseModelAdmin):
                                     else ""
                                 )
                                 continue
-                        finally:
-                            await session.close()
                     result[field.name] = ""
                     continue
 
@@ -221,65 +205,55 @@ class ModelAdmin(BaseModelAdmin):
     async def handle_edit(
         self, request: Request, object_id: str, data: dict
     ) -> tuple[bool, str]:
-        session = self.session_factory()
         try:
-            obj = await session.get(
-                self.model,
-                _coerce_pk(object_id, self._columns.get(self.pk_name)),
-            )
-            if not obj:
-                return False, "Record not found"
-            processed = await self.process_form_data(
-                data,
-                skip_empty_password=True,
-                current_object=obj,
-            )
-            for field, value in processed.items():
-                if field in self._columns:
-                    setattr(obj, field, value)
-            await session.commit()
+            async with self.transaction() as session:
+                obj = await session.get(
+                    self.model,
+                    _coerce_pk(object_id, self._columns.get(self.pk_name)),
+                )
+                if not obj:
+                    return False, "Record not found"
+                processed = await self.process_form_data(
+                    data,
+                    skip_empty_password=True,
+                    current_object=obj,
+                )
+                for field, value in processed.items():
+                    if field in self._columns:
+                        setattr(obj, field, value)
             return True, "Updated successfully"
-        except SQLAlchemyError as exc:
-            await session.rollback()
+        except Exception as exc:
+            logger.exception("Edit failed for object '%s'", object_id)
             return False, f"Update failed: {exc}"
-        finally:
-            await session.close()
 
     async def handle_add(
         self, request: Request, data: dict
     ) -> tuple[bool, str]:
-        session = self.session_factory()
         try:
-            payload = await self.process_form_data(data)
-            obj = self.model(**payload)
-            session.add(obj)
-            await session.commit()
+            async with self.transaction() as session:
+                payload = await self.process_form_data(data)
+                session.add(self.model(**payload))
             return True, "Created successfully"
-        except SQLAlchemyError as exc:
-            await session.rollback()
+        except Exception as exc:
+            logger.exception("Create failed for model '%s'", self.model)
             return False, f"Create failed: {exc}"
-        finally:
-            await session.close()
 
     async def handle_delete(
         self, request: Request, object_id: str
     ) -> tuple[bool, str]:
-        session = self.session_factory()
         try:
-            obj = await session.get(
-                self.model,
-                _coerce_pk(object_id, self._columns.get(self.pk_name)),
-            )
-            if not obj:
-                return False, "Record not found"
-            await session.delete(obj)
-            await session.commit()
+            async with self.transaction() as session:
+                obj = await session.get(
+                    self.model,
+                    _coerce_pk(object_id, self._columns.get(self.pk_name)),
+                )
+                if not obj:
+                    return False, "Record not found"
+                await session.delete(obj)
             return True, "Deleted successfully"
-        except SQLAlchemyError as exc:
-            await session.rollback()
+        except Exception as exc:
+            logger.exception("Delete failed for object '%s'", object_id)
             return False, f"Delete failed: {exc}"
-        finally:
-            await session.close()
 
     async def handle_batch_delete(
         self, request: Request, ids: list
@@ -307,3 +281,19 @@ class ModelAdmin(BaseModelAdmin):
         limit = max(1, int(params.get("limit", self.per_page)))
         queryset = queryset.offset(offset).limit(limit)
         return queryset, total
+
+    async def bulk_import(
+        self, rows: list[dict]
+    ) -> tuple[int, int, list[str]]:
+        success_count = 0
+        error_count = 0
+        errors: list[str] = []
+        async with self.transaction() as session:
+            for payload in rows:
+                try:
+                    session.add(self.model(**payload))
+                    success_count += 1
+                except Exception as exc:
+                    error_count += 1
+                    errors.append(str(exc))
+        return success_count, error_count, errors

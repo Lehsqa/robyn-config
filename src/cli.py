@@ -5,6 +5,7 @@ from __future__ import annotations
 import shutil
 import sys
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 import click
@@ -67,6 +68,19 @@ def _restore_project_backup(project_path: Path, backup_path: Path) -> None:
         for child in project_path.iterdir():
             _remove_path(child)
     shutil.copytree(backup_path, project_path, dirs_exist_ok=True)
+
+
+@contextmanager
+def project_backup(project_path: Path):
+    """Context manager for safe project mutation with automatic rollback on failure."""
+    backup_dir, backup_path = _backup_project(project_path)
+    try:
+        yield
+    except Exception:
+        _restore_project_backup(project_path, backup_path)
+        raise
+    finally:
+        shutil.rmtree(backup_dir, ignore_errors=True)
 
 
 def _interactive_terminal_available() -> bool:
@@ -231,25 +245,17 @@ def create(
 )
 def add(name: str, project_path: Path) -> None:
     """Add new business logic to an existing robyn-config project."""
-    backup_dir: Path | None = None
-    backup_path: Path | None = None
     project_path = project_path.resolve()
-
     try:
-        backup_dir, backup_path = _backup_project(project_path)
-        add_business_logic(project_path, name)
+        with project_backup(project_path):
+            add_business_logic(project_path, name)
         click.echo(
             click.style(
                 f"Successfully added '{name}' business logic!", fg="green"
             )
         )
     except Exception as e:
-        if backup_path:
-            _restore_project_backup(project_path, backup_path)
         raise click.ClickException(click.style(str(e), fg="red")) from e
-    finally:
-        if backup_dir:
-            shutil.rmtree(backup_dir, ignore_errors=True)
 
 
 @cli.command("adminpanel")
@@ -280,8 +286,6 @@ def adminpanel(
     admin_username: str, admin_password: str, project_path: Path
 ) -> None:
     """Add admin panel scaffolding to an existing robyn-config project."""
-    backup_dir: Path | None = None
-    backup_path: Path | None = None
     project_path = project_path.resolve()
 
     try:
@@ -305,12 +309,12 @@ def adminpanel(
                 )
                 return
 
-        backup_dir, backup_path = _backup_project(project_path)
-        add_adminpanel(
-            project_path,
-            admin_username=admin_username,
-            admin_password=admin_password,
-        )
+        with project_backup(project_path):
+            add_adminpanel(
+                project_path,
+                admin_username=admin_username,
+                admin_password=admin_password,
+            )
         click.echo(
             click.style(
                 "Successfully added admin panel scaffolding!",
@@ -318,12 +322,7 @@ def adminpanel(
             )
         )
     except Exception as e:
-        if backup_path:
-            _restore_project_backup(project_path, backup_path)
         raise click.ClickException(click.style(str(e), fg="red")) from e
-    finally:
-        if backup_dir:
-            shutil.rmtree(backup_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

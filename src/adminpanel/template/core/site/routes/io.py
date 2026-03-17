@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import io
+import logging
 import os
-import traceback
 import uuid
 from typing import Any
 
@@ -10,6 +10,8 @@ import pandas as pd
 from robyn import Request, jsonify
 
 from ..helpers import ALLOWED_UPLOAD_EXTENSIONS
+
+logger = logging.getLogger(__name__)
 
 
 def register_io_routes(site: Any) -> None:
@@ -36,7 +38,9 @@ def register_io_routes(site: Any) -> None:
                     }
                 )
 
-            upload_path = request.form_data.get("upload_path", "static/uploads")
+            upload_path = request.form_data.get(
+                "upload_path", "static/uploads"
+            )
             uploaded_files = []
             for file_name, file_bytes in files.items():
                 if not file_name.lower().endswith(ALLOWED_UPLOAD_EXTENSIONS):
@@ -48,7 +52,9 @@ def register_io_routes(site: Any) -> None:
                         }
                     )
 
-                safe_filename = f"{uuid.uuid4().hex}{os.path.splitext(file_name)[1]}"
+                safe_filename = (
+                    f"{uuid.uuid4().hex}{os.path.splitext(file_name)[1]}"
+                )
                 os.makedirs(upload_path, exist_ok=True)
                 file_path = os.path.join(upload_path, safe_filename)
                 with open(file_path, "wb") as file_obj:
@@ -71,7 +77,7 @@ def register_io_routes(site: Any) -> None:
                 }
             )
         except Exception as exc:
-            traceback.print_exc()
+            logger.exception("Upload failed")
             return jsonify(
                 {
                     "code": 500,
@@ -83,7 +89,16 @@ def register_io_routes(site: Any) -> None:
     @site.app.post(f"/{site.prefix}/:route_id/import")
     async def handle_import(request: Request):
         try:
+            user = await site._get_current_user(request)
+            if not user:
+                return jsonify({"success": False, "message": "Not logged in"})
+
             route_id = request.path_params.get("route_id")
+            if not await site.check_permission(request, route_id, "import"):
+                return jsonify(
+                    {"success": False, "message": "No import permission"}
+                )
+
             model_admin = site.get_model_admin(route_id)
             if not model_admin or not model_admin.allow_import:
                 return jsonify(
@@ -95,11 +110,15 @@ def register_io_routes(site: Any) -> None:
 
             files = request.files
             if not files:
-                return jsonify({"success": False, "message": "No file uploaded"})
+                return jsonify(
+                    {"success": False, "message": "No file uploaded"}
+                )
 
             filename = list(files.keys())[0]
             file_data = next(iter(files.values()))
-            if not any(filename.endswith(ext) for ext in [".xlsx", ".xls", ".csv"]):
+            if not any(
+                filename.endswith(ext) for ext in [".xlsx", ".xls", ".csv"]
+            ):
                 return jsonify(
                     {
                         "success": False,
@@ -128,36 +147,20 @@ def register_io_routes(site: Any) -> None:
                     }
                 )
 
-            success_count = 0
-            error_count = 0
-            errors: list[str] = []
-            session = site.session_factory()
-            try:
-                for _, row in dataframe.iterrows():
-                    try:
-                        payload = {
-                            field: row[field] for field in model_admin.import_fields
-                        }
-                        session.add(model_admin.model(**payload))
-                        success_count += 1
-                    except Exception as exc:
-                        error_count += 1
-                        errors.append(str(exc))
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
-            finally:
-                await session.close()
+            rows = [
+                {field: row[field] for field in model_admin.import_fields}
+                for _, row in dataframe.iterrows()
+            ]
+            success_count, error_count, errors = await model_admin.bulk_import(
+                rows
+            )
 
-            user = await site._get_current_user(request)
-            if user:
-                site._record_action(
-                    username=user.username,
-                    action="import",
-                    target=route_id,
-                    details=f"success={success_count},failed={error_count}",
-                )
+            site._record_action(
+                username=user.username,
+                action="import",
+                target=route_id,
+                details=f"success={success_count},failed={error_count}",
+            )
             return jsonify(
                 {
                     "success": True,
@@ -169,5 +172,7 @@ def register_io_routes(site: Any) -> None:
                 }
             )
         except Exception as exc:
-            traceback.print_exc()
-            return jsonify({"success": False, "message": f"Import failed: {exc}"})
+            logger.exception("Import failed")
+            return jsonify(
+                {"success": False, "message": f"Import failed: {exc}"}
+            )

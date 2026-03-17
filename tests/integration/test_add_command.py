@@ -11,42 +11,12 @@ try:
 except ImportError:
     import tomli as tomllib
 
-from tests.integration.test_create_command import create_fake_package_managers
-
-ROOT = Path(__file__).resolve().parents[2]
-
-COMBINATIONS = [
-    ("ddd", "sqlalchemy"),
-    ("ddd", "tortoise"),
-    ("mvc", "sqlalchemy"),
-    ("mvc", "tortoise"),
-]
-
-
-def run_cli_create(
-    destination: Path, design: str, orm: str, bin_dir: Path | None = None
-) -> None:
-    """Create a new project using the CLI."""
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT / "src")
-    if bin_dir:
-        env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "cli",
-            "create",
-            "test-app",
-            "--orm",
-            orm,
-            "--design",
-            design,
-            str(destination),
-        ],
-        check=True,
-        env=env,
-    )
+from tests.integration.conftest import (
+    ROOT,
+    COMBINATIONS,
+    create_fake_package_managers,
+    run_cli_create,
+)
 
 
 def run_cli_add(project_path: Path, name: str) -> None:

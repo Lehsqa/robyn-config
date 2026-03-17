@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from abc import ABC, abstractmethod
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -49,9 +50,7 @@ class _AdminPanelConfig(BaseModel):
             payload[field_name] = value
 
         payload.setdefault("verbose_name", model.__name__)
-        payload.setdefault(
-            "add_form_title", f"Add {payload['verbose_name']}"
-        )
+        payload.setdefault("add_form_title", f"Add {payload['verbose_name']}")
         payload.setdefault(
             "edit_form_title", f"Edit {payload['verbose_name']}"
         )
@@ -60,10 +59,72 @@ class _AdminPanelConfig(BaseModel):
         return cls.model_validate(payload)
 
 
-class BaseModelAdmin:
+class BaseModelAdmin(ABC):
     """Shared, ORM-agnostic behaviour for admin model handlers."""
 
     inlines: list[type[InlineModelAdmin]] = []
+
+    # ---- abstract hooks for ORM-specific type detection ----
+
+    @abstractmethod
+    def _get_default_table_fields(self) -> list: ...
+
+    @abstractmethod
+    def _is_pk_field(self, field_name: str) -> bool: ...
+
+    @abstractmethod
+    def _is_datetime_field(self, field_name: str) -> bool: ...
+
+    @abstractmethod
+    def _is_boolean_field(self, field_name: str) -> bool: ...
+
+    # ---- abstract CRUD methods ----
+
+    @abstractmethod
+    async def get_queryset(self, request, params: dict): ...
+
+    @abstractmethod
+    async def serialize_object(
+        self, obj, for_display: bool = True
+    ) -> dict: ...
+
+    @abstractmethod
+    async def handle_add(self, request, data: dict) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    async def handle_edit(
+        self, request, object_id: str, data: dict
+    ) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    async def handle_delete(
+        self, request, object_id: str
+    ) -> tuple[bool, str]: ...
+
+    @abstractmethod
+    async def handle_batch_delete(
+        self, request, ids: list
+    ) -> tuple[bool, str, int]: ...
+
+    @abstractmethod
+    async def handle_query(self, request, params: dict) -> tuple:
+        """Return (queryset, total_count).
+
+        Implementations should catch ORM errors internally and return a safe
+        fallback (e.g. an empty queryset with count 0) rather than propagating
+        exceptions, so that route handlers are not crashed by query failures.
+        """
+        ...
+
+    @abstractmethod
+    async def get_object(self, pk) -> object: ...
+
+    @abstractmethod
+    async def bulk_import(
+        self, rows: list[dict]
+    ) -> tuple[int, int, list[str]]: ...
+
+    # ---- concrete methods ----
 
     def _initialize_common_attributes(self, model: type[Any]) -> None:
         config = _AdminPanelConfig.from_admin_class(self.__class__, model)
@@ -112,6 +173,29 @@ class BaseModelAdmin:
 
         if not self.add_form_fields:
             self.add_form_fields = self.form_fields
+
+    def _process_fields(self) -> None:
+        """Process model fields using ORM-specific type detection hooks."""
+        if not self.table_fields:
+            self.table_fields = self._get_default_table_fields()
+
+        for field in self.table_fields:
+            if self._is_pk_field(field.name):
+                field.readonly = True
+                field.editable = False
+            elif self._is_datetime_field(field.name):
+                field.readonly = True
+                field.sortable = True
+                if not field.display_type:
+                    field.display_type = DisplayType.DATETIME
+            elif self._is_boolean_field(field.name):
+                if not field.display_type:
+                    field.display_type = DisplayType.BOOLEAN
+
+            if not hasattr(field, "editable") or field.editable is None:
+                field.editable = False
+
+        self._finalize_field_configuration()
 
     def get_field(self, field_name: str) -> TableField | None:
         return self.table_field_map.get(field_name)
@@ -186,7 +270,10 @@ class BaseModelAdmin:
             return False
 
         current_password = getattr(current_object, field.name, None)
-        return isinstance(current_password, str) and field_value == current_password
+        return (
+            isinstance(current_password, str)
+            and field_value == current_password
+        )
 
     def _hash_password_if_needed(
         self, field: FormField, processed_value: Any

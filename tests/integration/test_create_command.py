@@ -5,42 +5,11 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[2]
-
-
-COMBINATIONS = [
-    ("ddd", "sqlalchemy"),
-    ("ddd", "tortoise"),
-    ("mvc", "sqlalchemy"),
-    ("mvc", "tortoise"),
-]
-
-
-def _write_fake_manager(bin_dir: Path, name: str, lock_name: str) -> None:
-    script = bin_dir / name
-    script.write_text(
-        "#!/usr/bin/env bash\n"
-        'cmd=\"$1\"\n'
-        'if [ -n \"$cmd\" ]; then\n'
-        "  shift\n"
-        "fi\n"
-        'if [ \"$cmd\" = \"lock\" ]; then\n'
-        f"  touch \"$PWD/{lock_name}\"\n"
-        "  exit 0\n"
-        "fi\n"
-        f"echo \"{name} stub: unsupported command $cmd\" >&2\n"
-        "exit 1\n"
-    )
-    script.chmod(0o755)
-
-
-def create_fake_package_managers(tmp_path: Path) -> Path:
-    """Create lightweight stubs for uv and poetry to avoid network calls."""
-    bin_dir = tmp_path / "fake_bin"
-    bin_dir.mkdir()
-    _write_fake_manager(bin_dir, "uv", "uv.lock")
-    _write_fake_manager(bin_dir, "poetry", "poetry.lock")
-    return bin_dir
+from tests.integration.conftest import (
+    ROOT,
+    COMBINATIONS,
+    create_fake_package_managers,
+)
 
 
 def run_create_command(
@@ -83,7 +52,7 @@ def test_create_project_structure(tmp_path, design, orm):
     project_dir = tmp_path / "test_project"
     fake_bin = create_fake_package_managers(tmp_path)
     result = run_create_command(project_dir, design, orm, bin_dir=fake_bin)
-    
+
     # Check CLI execution success
     assert result.returncode == 0, f"CLI create failed: {result.stderr}"
 
@@ -94,7 +63,7 @@ def test_create_project_structure(tmp_path, design, orm):
     assert (project_dir / "compose" / "app" / "Dockerfile").exists()
     assert (project_dir / "compose" / "app" / "dev.sh").exists()
     assert (project_dir / "uv.lock").exists()
-    
+
     # 2. Verify ORM-specific files
     if orm == "sqlalchemy":
         assert (project_dir / "alembic.ini").exists()

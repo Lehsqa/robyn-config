@@ -1,56 +1,25 @@
-"""Utility functions for the 'create' command."""
+"""Filesystem operations for the 'create' command."""
 
 from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import Iterable, Mapping
 
 import click
 from jinja2 import Environment, StrictUndefined
 
-ORM_CHOICES: Sequence[str] = ("sqlalchemy", "tortoise")
-DESIGN_CHOICES: Sequence[str] = ("ddd", "mvc")
-PACKAGE_MANAGER_CHOICES: Sequence[str] = ("uv", "poetry")
-PACKAGE_ROOT = Path(__file__).resolve().parent
+from ._config import (
+    LOCK_FILE_BY_MANAGER,
+    ORM_CHOICES,
+    _get_template_config,
+)
+
+PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = PACKAGE_ROOT.resolve()
 COMMON_DIR = (SRC_DIR / "common").resolve()
 COMPOSE_APP_DIR = (COMMON_DIR / "compose" / "app").resolve()
-LOCK_FILE_BY_MANAGER: Mapping[str, str] = {
-    "uv": "uv.lock",
-    "poetry": "poetry.lock",
-}
-PACKAGE_MANAGER_DOWNLOAD_URLS: Mapping[str, str] = {
-    "uv": "https://docs.astral.sh/uv/getting-started/installation/",
-    "poetry": "https://python-poetry.org/docs/#installation",
-}
-
-TEMPLATE_CONFIGS: Mapping[str, dict[str, str]] = {
-    "ddd:sqlalchemy": {
-        "design": "ddd",
-        "orm": "sqlalchemy",
-        "alembic_script_location": "src/app/infrastructure/database/migrations",
-    },
-    "ddd:tortoise": {
-        "design": "ddd",
-        "orm": "tortoise",
-        "tortoise_orm_path": "src.app.infrastructure.database.services.engine.TORTOISE_ORM",
-        "tortoise_migrations_location": "./src/app/infrastructure/database/migrations",
-    },
-    "mvc:sqlalchemy": {
-        "design": "mvc",
-        "orm": "sqlalchemy",
-        "alembic_script_location": "src/app/models/migrations",
-    },
-    "mvc:tortoise": {
-        "design": "mvc",
-        "orm": "tortoise",
-        "tortoise_orm_path": "app.models.database.TORTOISE_ORM",
-        "tortoise_migrations_location": "./src/app/models/migrations",
-    },
-}
 
 JINJA_ENV = Environment(undefined=StrictUndefined)
 
@@ -147,25 +116,6 @@ def prepare_destination(
     else:
         destination.mkdir(parents=True, exist_ok=True)
     return destination
-
-
-def _get_template_config(
-    design: str, orm_type: str, project_name: str, package_manager: str
-) -> dict[str, str]:
-    """Get the template configuration for the given design and ORM type."""
-    key = f"{design}:{orm_type}"
-    config = TEMPLATE_CONFIGS.get(key)
-    if config is None:
-        print(
-            f"Unsupported configuration '{key}'. "
-            f"Valid options: {', '.join(TEMPLATE_CONFIGS.keys())}."
-        )
-        raise SystemExit(1)
-    return {
-        **config,
-        "name": project_name,
-        "package_manager": package_manager,
-    }
 
 
 def _render_template(
@@ -322,57 +272,3 @@ def get_generated_items(
 ) -> set[Path]:
     """Return the set of items this template would generate."""
     return _collect_generated_items(orm_type, design, package_manager)
-
-
-def ensure_package_manager_available(package_manager: str) -> None:
-    """Validate the requested package manager is available on PATH."""
-    if package_manager not in PACKAGE_MANAGER_CHOICES:
-        raise click.ClickException(
-            "Unsupported package manager "
-            f"'{package_manager}'. Choose from: {', '.join(PACKAGE_MANAGER_CHOICES)}"
-        )
-
-    if shutil.which(package_manager) is None:
-        download_url = PACKAGE_MANAGER_DOWNLOAD_URLS.get(package_manager)
-        download_hint = (
-            f" Download it from {download_url} before running the create command."
-            if download_url
-            else " Install it before running the create command."
-        )
-        raise click.ClickException(
-            f"Package manager '{package_manager}' is not installed.{download_hint}"
-        )
-
-
-def apply_package_manager(destination: Path, package_manager: str) -> None:
-    """Generate the lock file for the project using the chosen package manager."""
-    ensure_package_manager_available(package_manager)
-
-    lock_file = LOCK_FILE_BY_MANAGER.get(package_manager, "lock file")
-    lock_path = destination / lock_file
-    env = os.environ.copy()
-    if package_manager == "uv":
-        env.setdefault("UV_CACHE_DIR", str(destination / ".uv-cache"))
-    else:
-        env.setdefault("POETRY_CACHE_DIR", str(destination / ".poetry-cache"))
-    if package_manager == "uv":
-        command = ["uv", "lock"]
-    else:
-        command = ["poetry", "lock", "--no-interaction", "--quiet"]
-
-    result = subprocess.run(
-        command, cwd=destination, capture_output=True, text=True, env=env
-    )
-    if result.returncode != 0:
-        message = (
-            result.stderr.strip() or result.stdout.strip() or "Unknown error"
-        )
-        raise click.ClickException(
-            f"Failed to generate {lock_file} with {package_manager}: {message}"
-        )
-    if lock_file and not lock_path.exists():
-        output = result.stdout.strip() or result.stderr.strip()
-        detail = f" ({output})" if output else ""
-        raise click.ClickException(
-            f"{package_manager} finished without creating {lock_file}{detail}"
-        )

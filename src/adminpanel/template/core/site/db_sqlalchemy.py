@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 
 from ...models import AdminUser
+from .auth_common import ADVISORY_LOCK_ID
 
 
 async def ensure_default_admin(site: Any) -> None:
@@ -17,77 +18,72 @@ async def ensure_default_admin(site: Any) -> None:
         if site._default_admin_initialized:
             return
 
-        session = site.session_factory()
         advisory_lock_acquired = False
-        advisory_lock_id = 193384911
-        try:
-            dialect_name, driver_name = get_session_dialect(session)
-            is_postgresql = dialect_name == "postgresql" or (
-                "postgres" in driver_name
-            )
-
-            if is_postgresql:
-                await session.execute(
-                    text("SELECT pg_advisory_lock(:lock_id)"),
-                    {"lock_id": advisory_lock_id},
+        async with site.transaction() as session:
+            try:
+                dialect_name, driver_name = get_session_dialect(session)
+                is_postgresql = dialect_name == "postgresql" or (
+                    "postgres" in driver_name
                 )
-                advisory_lock_acquired = True
 
-            result = await session.execute(
-                select(AdminUser).where(
-                    or_(
-                        AdminUser.username == site.default_admin_username,
-                        AdminUser.email == "admin@example.com",
-                    )
-                )
-            )
-            admin_user = result.scalar_one_or_none()
-            if admin_user is None:
                 if is_postgresql:
                     await session.execute(
-                        pg_insert(AdminUser)
-                        .values(
-                            username=site.default_admin_username,
-                            password=AdminUser.hash_password(
-                                site.default_admin_password
-                            ),
-                            email="admin@example.com",
-                            is_superuser=True,
-                            is_active=True,
-                        )
-                        .on_conflict_do_nothing()
+                        text("SELECT pg_advisory_lock(:lock_id)"),
+                        {"lock_id": ADVISORY_LOCK_ID},
                     )
-                    await session.commit()
-                else:
-                    session.add(
-                        AdminUser(
-                            username=site.default_admin_username,
-                            password=AdminUser.hash_password(
-                                site.default_admin_password
-                            ),
-                            email="admin@example.com",
-                            is_superuser=True,
-                            is_active=True,
+                    advisory_lock_acquired = True
+
+                result = await session.execute(
+                    select(AdminUser).where(
+                        or_(
+                            AdminUser.username == site.default_admin_username,
+                            AdminUser.email == "admin@example.com",
                         )
                     )
+                )
+                admin_user = result.scalar_one_or_none()
+                if admin_user is None:
+                    if is_postgresql:
+                        await session.execute(
+                            pg_insert(AdminUser)
+                            .values(
+                                username=site.default_admin_username,
+                                password=AdminUser.hash_password(
+                                    site.default_admin_password
+                                ),
+                                email="admin@example.com",
+                                is_superuser=True,
+                                is_active=True,
+                            )
+                            .on_conflict_do_nothing()
+                        )
+                    else:
+                        try:
+                            async with session.begin_nested():
+                                session.add(
+                                    AdminUser(
+                                        username=site.default_admin_username,
+                                        password=AdminUser.hash_password(
+                                            site.default_admin_password
+                                        ),
+                                        email="admin@example.com",
+                                        is_superuser=True,
+                                        is_active=True,
+                                    )
+                                )
+                        except IntegrityError:
+                            pass  # Admin already exists from a concurrent process
+            finally:
+                if advisory_lock_acquired:
                     try:
-                        await session.commit()
-                    except IntegrityError:
-                        await session.rollback()
-            site._default_admin_initialized = True
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            if advisory_lock_acquired:
-                try:
-                    await session.execute(
-                        text("SELECT pg_advisory_unlock(:lock_id)"),
-                        {"lock_id": advisory_lock_id},
-                    )
-                except Exception:
-                    pass
-            await session.close()
+                        await session.execute(
+                            text("SELECT pg_advisory_unlock(:lock_id)"),
+                            {"lock_id": ADVISORY_LOCK_ID},
+                        )
+                    except Exception:
+                        pass
+
+        site._default_admin_initialized = True
 
 
 def get_session_dialect(session: Any) -> tuple[str, str]:

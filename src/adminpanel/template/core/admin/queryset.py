@@ -4,7 +4,6 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from sqlalchemy import and_, delete, func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from .helpers import _build_filter_expression, _get_model_column
 
@@ -21,11 +20,11 @@ class SQLAlchemyQuerySet:
     def __init__(
         self,
         model: type[Any],
-        session_factory: Callable[[], AsyncSession],
+        transaction: Callable,
         state: _QueryState | None = None,
     ) -> None:
         self.model = model
-        self.session_factory = session_factory
+        self.transaction = transaction
         self._state = state or _QueryState(
             filters=[], order=[], offset=0, limit=None
         )
@@ -33,7 +32,7 @@ class SQLAlchemyQuerySet:
     def _clone(self) -> "SQLAlchemyQuerySet":
         return SQLAlchemyQuerySet(
             self.model,
-            self.session_factory,
+            self.transaction,
             _QueryState(
                 filters=list(self._state.filters),
                 order=list(self._state.order),
@@ -83,25 +82,18 @@ class SQLAlchemyQuerySet:
         stmt = select(func.count()).select_from(self.model)
         if self._state.filters:
             stmt = stmt.where(and_(*self._state.filters))
-        session = self.session_factory()
-        try:
+        async with self.transaction() as session:
             result = await session.execute(stmt)
             count = result.scalar_one_or_none()
             return int(count or 0)
-        finally:
-            await session.close()
 
     async def delete(self) -> int:
         stmt = delete(self.model)
         if self._state.filters:
             stmt = stmt.where(and_(*self._state.filters))
-        session = self.session_factory()
-        try:
+        async with self.transaction() as session:
             result = await session.execute(stmt)
-            await session.commit()
             return int(result.rowcount or 0)
-        finally:
-            await session.close()
 
     async def all(self) -> list[Any]:
         stmt = select(self.model)
@@ -113,13 +105,9 @@ class SQLAlchemyQuerySet:
             stmt = stmt.offset(self._state.offset)
         if self._state.limit is not None:
             stmt = stmt.limit(self._state.limit)
-
-        session = self.session_factory()
-        try:
+        async with self.transaction() as session:
             result = await session.execute(stmt)
             return list(result.scalars().all())
-        finally:
-            await session.close()
 
     async def first(self) -> Any | None:
         rows = await self.limit(1).all()
@@ -134,4 +122,3 @@ class SQLAlchemyQuerySet:
                 yield row
 
         return _generator()
-

@@ -40,7 +40,9 @@ def register_dashboard_routes(site: Any) -> None:
                 "resolved_log_path": resolved_log_path,
             }
         )
-        return site.jinja_template.render_template("admin/index.html", **context)
+        return site.jinja_template.render_template(
+            "admin/index.html", **context
+        )
 
     @site.app.get(f"/{site.prefix}/models")
     async def models_index(request: Request):
@@ -60,7 +62,9 @@ def register_dashboard_routes(site: Any) -> None:
             language=language,
             active_tab="models",
         )
-        return site.jinja_template.render_template("admin/models.html", **context)
+        return site.jinja_template.render_template(
+            "admin/models.html", **context
+        )
 
     @site.app.get(f"/{site.prefix}/users")
     async def users_alias(request: Request):
