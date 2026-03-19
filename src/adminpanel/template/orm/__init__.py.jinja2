@@ -13,18 +13,18 @@ from .tortoise import TortoiseAdapter
 def resolve_adapter(
     orm: str,
     *,
-    session_factory: Callable[[], Any] | None = None,
+    transaction: Callable | None = None,
 ) -> BaseORMAdapter:
 {% if orm == "tortoise" %}
     if orm == "tortoise":
-        return TortoiseAdapter()
+        return TortoiseAdapter(transaction=transaction)
 {% elif orm == "sqlalchemy" %}
     if orm == "sqlalchemy":
-        if session_factory is None:
+        if transaction is None:
             raise ValueError(
-                "session_factory is required for sqlalchemy adapter"
+                "transaction is required for sqlalchemy adapter"
             )
-        return SQLAlchemyAdapter(session_factory=session_factory)
+        return SQLAlchemyAdapter(transaction=transaction)
 {% endif %}
     raise ValueError(f"Unsupported ORM adapter: {orm}")
 

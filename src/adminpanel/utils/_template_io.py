@@ -11,9 +11,7 @@ from jinja2 import Environment, StrictUndefined
 JINJA_ENV = Environment(undefined=StrictUndefined)
 
 
-def _resolve_variant_target_rel_path(
-    rel_path: Path, orm: str
-) -> Path | None:
+def _resolve_variant_target_rel_path(rel_path: Path, orm: str) -> Path | None:
     if rel_path.suffix != ".py":
         return rel_path
 
@@ -23,6 +21,12 @@ def _resolve_variant_target_rel_path(
                 return None
 
     if rel_path.parts and rel_path.parts[0] == "orm":
+        if rel_path.name == "sqlalchemy.py" and orm != "sqlalchemy":
+            return None
+        if rel_path.name == "tortoise.py" and orm != "tortoise":
+            return None
+
+    if rel_path.parts and "provider" in rel_path.parts:
         if rel_path.name == "sqlalchemy.py" and orm != "sqlalchemy":
             return None
         if rel_path.name == "tortoise.py" and orm != "tortoise":

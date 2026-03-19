@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import operator
 from functools import reduce
-from typing import Any, Dict, Type
+from typing import Any, Callable, Dict, Type
 from urllib.parse import unquote
 
 from robyn import Request
@@ -22,46 +22,40 @@ logger = logging.getLogger(__name__)
 class ModelAdmin(BaseModelAdmin):
     inlines: list[Type[InlineModelAdmin]] = []
 
-    def __init__(self, model: Type[Model]):
+    def __init__(
+        self, model: Type[Model], transaction: Callable | None = None
+    ):
         self._initialize_common_attributes(model)
+        self.transaction = transaction
         self.pk_name = getattr(self.model._meta, "pk_attr", "id")
 
         self._process_fields()
-        self._inline_instances = [
-            inline_class(self.model) for inline_class in self.inlines
-        ]
-
-    def _process_fields(self) -> None:
-        if not self.table_fields:
-            self.table_fields = [
-                TableField(name=field_name)
-                for field_name in self.model._meta.fields_map.keys()
-            ]
-
-        for field in self.table_fields:
-            model_field = self.model._meta.fields_map.get(field.name)
-            if model_field and model_field.pk:
-                field.readonly = True
-                field.editable = False
-            elif isinstance(model_field, fields.DatetimeField):
-                field.readonly = True
-                field.sortable = True
-                if not field.display_type:
-                    field.display_type = DisplayType.DATETIME
-            elif isinstance(model_field, fields.BooleanField):
-                if not field.display_type:
-                    field.display_type = DisplayType.BOOLEAN
-
-            if not hasattr(field, "editable") or field.editable is None:
-                field.editable = False
-
         self.ordering = [
             f"-{field.name}" if not field.sortable else field.name
             for field in self.table_fields
             if field.sortable
         ]
+        self._inline_instances = [
+            inline_class(self.model) for inline_class in self.inlines
+        ]
 
-        self._finalize_field_configuration()
+    def _get_default_table_fields(self):
+        return [
+            TableField(name=field_name)
+            for field_name in self.model._meta.fields_map.keys()
+        ]
+
+    def _is_pk_field(self, field_name: str) -> bool:
+        model_field = self.model._meta.fields_map.get(field_name)
+        return model_field is not None and model_field.pk
+
+    def _is_datetime_field(self, field_name: str) -> bool:
+        model_field = self.model._meta.fields_map.get(field_name)
+        return isinstance(model_field, fields.DatetimeField)
+
+    def _is_boolean_field(self, field_name: str) -> bool:
+        model_field = self.model._meta.fields_map.get(field_name)
+        return isinstance(model_field, fields.BooleanField)
 
     async def get_queryset(self, request: Request, params: dict) -> QuerySet:
         queryset = self.model.all()
@@ -107,7 +101,9 @@ class ModelAdmin(BaseModelAdmin):
                     search_conditions.append(Q(**query_dict))
 
             if search_conditions:
-                queryset = queryset.filter(reduce(operator.or_, search_conditions))
+                queryset = queryset.filter(
+                    reduce(operator.or_, search_conditions)
+                )
 
         filter_fields = await self.get_filter_fields()
         for filter_field in filter_fields:
@@ -115,7 +111,9 @@ class ModelAdmin(BaseModelAdmin):
             if not filter_value:
                 continue
             try:
-                query_dict = await filter_field.build_filter_query(filter_value)
+                query_dict = await filter_field.build_filter_query(
+                    filter_value
+                )
             except Exception:
                 logger.exception(
                     "Error building filter query for %s", filter_field.name
@@ -320,9 +318,7 @@ class ModelAdmin(BaseModelAdmin):
             if not inline:
                 return []
 
-            parent_instance = await self.model.get(
-                **{self.pk_name: parent_id}
-            )
+            parent_instance = await self.model.get(**{self.pk_name: parent_id})
             if not parent_instance:
                 return []
 
@@ -367,18 +363,20 @@ class ModelAdmin(BaseModelAdmin):
         self, request: Request, object_id: str, data: dict
     ) -> tuple[bool, str]:
         try:
-            obj = await self.get_object(object_id)
-            if not obj:
-                return False, "Record not found"
-
-            processed_data = await self.process_form_data(
-                data,
-                skip_empty_password=True,
-                current_object=obj,
-            )
-            for field, value in processed_data.items():
-                setattr(obj, field, value)
-            await obj.save()
+            async with self.transaction() as connection:
+                obj = await self.model.get_or_none(
+                    **{self.pk_name: object_id}, using_db=connection
+                )
+                if not obj:
+                    return False, "Record not found"
+                processed_data = await self.process_form_data(
+                    data,
+                    skip_empty_password=True,
+                    current_object=obj,
+                )
+                for field, value in processed_data.items():
+                    setattr(obj, field, value)
+                await obj.save(using_db=connection)
             return True, "Updated successfully"
         except Exception as exc:
             logger.exception("Edit failed for object '%s'", object_id)
@@ -388,8 +386,9 @@ class ModelAdmin(BaseModelAdmin):
         self, request: Request, data: dict
     ) -> tuple[bool, str]:
         try:
-            processed_data = await self.process_form_data(data)
-            await self.model.create(**processed_data)
+            async with self.transaction() as connection:
+                processed_data = await self.process_form_data(data)
+                await self.model.create(**processed_data, using_db=connection)
             return True, "Created successfully"
         except Exception as exc:
             logger.exception("Create failed for model '%s'", self.model)
@@ -399,10 +398,13 @@ class ModelAdmin(BaseModelAdmin):
         self, request: Request, object_id: str
     ) -> tuple[bool, str]:
         try:
-            obj = await self.get_object(object_id)
-            if not obj:
-                return False, "Record not found"
-            await obj.delete()
+            async with self.transaction() as connection:
+                obj = await self.model.get_or_none(
+                    **{self.pk_name: object_id}, using_db=connection
+                )
+                if not obj:
+                    return False, "Record not found"
+                await obj.delete(using_db=connection)
             return True, "Deleted successfully"
         except Exception as exc:
             logger.exception("Delete failed for object '%s'", object_id)
@@ -445,3 +447,19 @@ class ModelAdmin(BaseModelAdmin):
         except Exception:
             logger.exception("Query failed for model '%s'", self.model)
             return self.model.all(), 0
+
+    async def bulk_import(
+        self, rows: list[dict]
+    ) -> tuple[int, int, list[str]]:
+        success_count = 0
+        error_count = 0
+        errors: list[str] = []
+        async with self.transaction() as connection:
+            for payload in rows:
+                try:
+                    await self.model.create(**payload, using_db=connection)
+                    success_count += 1
+                except Exception as exc:
+                    error_count += 1
+                    errors.append(str(exc))
+        return success_count, error_count, errors

@@ -4,10 +4,11 @@ import asyncio
 import os
 from typing import Any
 
-from tortoise import Tortoise, connections
+from tortoise import Tortoise
 from tortoise.exceptions import IntegrityError as TortoiseIntegrityError
 
 from ...auth_models import AdminUser
+from .auth_common import ADVISORY_LOCK_ID
 
 
 def ensure_sqlite_directory(db_url: str | None) -> str | None:
@@ -45,49 +46,56 @@ async def ensure_default_admin(site: Any) -> None:
         if site._default_admin_initialized:
             return
 
-        advisory_lock_acquired = False
-        advisory_lock_id = 193384911
         db_url = str(site.db_url or "").strip().lower()
         using_postgres = db_url.startswith("postgres")
-        try:
-            if using_postgres:
-                connection = connections.get("default")
-                await connection.execute_query(
-                    f"SELECT pg_advisory_lock({advisory_lock_id})"
-                )
-                advisory_lock_acquired = True
+        advisory_lock_acquired = False
 
-            existing_admin = await AdminUser.filter(
-                username=site.default_admin_username
-            ).first()
-            if not existing_admin:
-                existing_admin = await AdminUser.filter(
-                    email="admin@example.com"
-                ).first()
-
-            if not existing_admin:
-                try:
-                    await AdminUser.create(
-                        username=site.default_admin_username,
-                        password=AdminUser.hash_password(
-                            site.default_admin_password
-                        ),
-                        email="admin@example.com",
-                        is_superuser=True,
-                        is_active=True,
-                    )
-                except TortoiseIntegrityError:
-                    pass
-            site._default_admin_initialized = True
-        finally:
-            if advisory_lock_acquired:
-                try:
-                    connection = connections.get("default")
+        async with site.transaction() as connection:
+            try:
+                if using_postgres:
                     await connection.execute_query(
-                        f"SELECT pg_advisory_unlock({advisory_lock_id})"
+                        f"SELECT pg_advisory_lock({ADVISORY_LOCK_ID})"
                     )
-                except Exception:
-                    pass
+                    advisory_lock_acquired = True
+
+                existing_admin = (
+                    await AdminUser.filter(
+                        username=site.default_admin_username
+                    )
+                    .using_db(connection)
+                    .first()
+                )
+                if not existing_admin:
+                    existing_admin = (
+                        await AdminUser.filter(email="admin@example.com")
+                        .using_db(connection)
+                        .first()
+                    )
+
+                if not existing_admin:
+                    try:
+                        await AdminUser.create(
+                            username=site.default_admin_username,
+                            password=AdminUser.hash_password(
+                                site.default_admin_password
+                            ),
+                            email="admin@example.com",
+                            is_superuser=True,
+                            is_active=True,
+                            using_db=connection,
+                        )
+                    except TortoiseIntegrityError:
+                        pass
+            finally:
+                if advisory_lock_acquired:
+                    try:
+                        await connection.execute_query(
+                            f"SELECT pg_advisory_unlock({ADVISORY_LOCK_ID})"
+                        )
+                    except Exception:
+                        pass
+
+        site._default_admin_initialized = True
 
 
 def setup_admin_db(site: Any) -> None:

@@ -107,7 +107,10 @@ class ModelAdminMetadata(BaseModel):
 _PLURALIZATION_RULES: dict[
     str, tuple[Callable[[str], bool], Callable[[str], str]]
 ] = {
-    "already_plural": (lambda lower_word: lower_word.endswith("s"), lambda word: word),
+    "already_plural": (
+        lambda lower_word: lower_word.endswith("s"),
+        lambda word: word,
+    ),
     "es_suffix": (
         lambda lower_word: lower_word.endswith(("x", "z", "ch", "sh")),
         lambda word: f"{word}es",

@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import json
 import secrets
+from abc import ABC, abstractmethod
 from collections import deque
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional, Type
+from typing import Any
 
 from robyn import Request, Robyn
 from robyn.templating import JinjaTemplate
@@ -14,59 +15,28 @@ from robyn.templating import JinjaTemplate
 from ....i18n.translations import TRANSLATIONS
 from ...admin import ModelAdmin
 from ...menu import MenuItem, MenuManager
-from ..auth import (
-    check_permission,
-    generate_session_token,
-    get_current_user,
-    get_language,
-    verify_session_token,
-)
 from ..base import (
     ModelAdminMetadata,
     SiteRuntimeConfig,
     merge_admin_settings,
     pluralize_word,
 )
-from ..db import ensure_default_admin, get_session_dialect, setup_admin_db
-from ..helpers import decode_cookie_payload, encode_cookie_payload, parse_cookie_header
+from ..helpers import (
+    decode_cookie_payload,
+    encode_cookie_payload,
+    parse_cookie_header,
+)
 from ..routes import setup_routes
 
 
-class AdminSite:
-    """SQLAlchemy-backed admin site."""
+class BaseAdminSite(ABC):
+    """Base admin site with shared logic for all ORM backends."""
 
     def __init__(
         self,
         app: Robyn,
-        title: str = "QC Robyn Admin",
-        prefix: str = "admin",
-        copyright: str = "QC Robyn Admin",
-        session_factory: Optional[Callable[[], Any]] = None,
-        generate_schemas: bool = False,
-        default_language: str = "en_US",
-        default_admin_username: str = "admin",
-        default_admin_password: str = "admin",
-        startup_function: Optional[Callable] = None,
-        orm: str = "sqlalchemy",
-        **_: Any,
+        runtime_config: SiteRuntimeConfig,
     ) -> None:
-        if session_factory is None:
-            raise ValueError("session_factory is required for SQLAlchemy admin")
-
-        runtime_config = SiteRuntimeConfig.model_validate(
-            {
-                "title": title,
-                "prefix": prefix,
-                "copyright": copyright,
-                "default_language": default_language,
-                "default_admin_username": default_admin_username,
-                "default_admin_password": default_admin_password,
-                "startup_function": startup_function,
-                "generate_schemas": generate_schemas,
-                "orm": orm,
-            }
-        )
-
         self.app = app
         self.title = runtime_config.title
         self.prefix = runtime_config.prefix
@@ -78,25 +48,40 @@ class AdminSite:
         self.menu_manager = MenuManager()
         self.copyright = runtime_config.copyright
         self.startup_function = runtime_config.startup_function
-        self.session_factory = session_factory
         self.generate_schemas = runtime_config.generate_schemas
         self.orm = runtime_config.orm
         self._default_admin_initialized = False
         self._default_admin_init_lock = asyncio.Lock()
 
+        self._runtime_config = runtime_config
+
         self._setup_templates()
+
+    def _post_init(self) -> None:
         self._init_admin_db()
         self._setup_routes()
-
         self.session_secret = secrets.token_hex(32)
         self.session_expire = 24 * 60 * 60
-        self.max_recent_actions = runtime_config.max_recent_actions
+        self.max_recent_actions = self._runtime_config.max_recent_actions
         self.recent_actions: list[dict[str, str]] = []
         self.default_settings: dict[str, Any] = (
-            runtime_config.default_settings.model_dump()
+            self._runtime_config.default_settings.model_dump()
         )
 
-    async def _get_visible_models(self, request: Request) -> dict[str, ModelAdmin]:
+    @abstractmethod
+    def _init_admin_db(self) -> None: ...
+
+    @abstractmethod
+    async def _ensure_default_admin(self) -> None: ...
+
+    @abstractmethod
+    def register_model(
+        self, model: type[Any], admin_class: type[ModelAdmin] | None = None
+    ) -> None: ...
+
+    async def _get_visible_models(
+        self, request: Request
+    ) -> dict[str, ModelAdmin]:
         visible: dict[str, ModelAdmin] = {}
         for route_id, model_admin in self.models.items():
             if await self.check_permission(request, route_id, "view"):
@@ -158,7 +143,9 @@ class AdminSite:
                 grouped[category_name],
                 key=lambda item: str(item["display_name"]).lower(),
             )
-            categories.append({"name": category_name, "models": models_in_category})
+            categories.append(
+                {"name": category_name, "models": models_in_category}
+            )
         return categories
 
     def _record_action(
@@ -170,7 +157,9 @@ class AdminSite:
     ) -> None:
         self.recent_actions.append(
             {
-                "timestamp": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"),
+                "timestamp": datetime.utcnow().strftime(
+                    "%Y-%m-%d %H:%M:%S UTC"
+                ),
                 "username": username or "system",
                 "action": action,
                 "target": target,
@@ -178,7 +167,9 @@ class AdminSite:
             }
         )
         if len(self.recent_actions) > self.max_recent_actions:
-            self.recent_actions = self.recent_actions[-self.max_recent_actions :]
+            self.recent_actions = self.recent_actions[
+                -self.max_recent_actions :
+            ]
 
     def _get_admin_settings(self, request: Request) -> dict[str, Any]:
         return merge_admin_settings(
@@ -199,7 +190,9 @@ class AdminSite:
         ]
         return "; ".join(attrs)
 
-    def _read_log_lines(self, log_file_path: str, max_lines: int) -> tuple[list[str], str]:
+    def _read_log_lines(
+        self, log_file_path: str, max_lines: int
+    ) -> tuple[list[str], str]:
         max_lines = max(20, min(int(max_lines), 2000))
         candidate = Path(log_file_path)
         if not candidate.is_absolute():
@@ -210,8 +203,13 @@ class AdminSite:
             return [f"Log file does not exist: {resolved_path}"], resolved_path
 
         try:
-            with candidate.open("r", encoding="utf-8", errors="replace") as handle:
-                lines = [line.rstrip("\n") for line in deque(handle, maxlen=max_lines)]
+            with candidate.open(
+                "r", encoding="utf-8", errors="replace"
+            ) as handle:
+                lines = [
+                    line.rstrip("\n")
+                    for line in deque(handle, maxlen=max_lines)
+                ]
             if not lines:
                 return ["Log file is empty."], resolved_path
             return lines, resolved_path
@@ -226,18 +224,12 @@ class AdminSite:
         ).get(key, key)
 
     def _setup_templates(self) -> None:
-        # provider/sqlalchemy.py -> site -> core -> adminpanel
+        # provider/<backend>.py -> provider -> site -> core -> adminpanel
         current_dir = Path(__file__).resolve().parents[3]
         template_dir = str(current_dir / "templates")
         self.template_dir = template_dir
         self.jinja_template = JinjaTemplate(template_dir)
         self.jinja_template.env.globals.update({"get_text": self.get_text})
-
-    def _init_admin_db(self) -> None:
-        setup_admin_db(self)
-
-    async def _ensure_default_admin(self) -> None:
-        await ensure_default_admin(self)
 
     def _setup_routes(self) -> None:
         setup_routes(self)
@@ -245,51 +237,35 @@ class AdminSite:
     def init_register_auth_models(self) -> None:
         return None
 
-    @staticmethod
-    def _get_session_dialect(session: Any) -> tuple[str, str]:
-        return get_session_dialect(session)
-
-    def register_model(
-        self,
-        model: Type[Any],
-        admin_class: Optional[Type[ModelAdmin]] = None,
-    ) -> None:
-        if admin_class is None:
-            admin_class = ModelAdmin
-
-        instance = admin_class(model, session_factory=self.session_factory)
-        instance.site = self
-
-        route_id = f"{model.__name__}Admin" if admin_class is ModelAdmin else admin_class.__name__
-        base_route_id = route_id
-        counter = 1
-        while route_id in self.models:
-            route_id = f"{base_route_id}{counter}"
-            counter += 1
-
-        instance.route_id = route_id
-        self.models[route_id] = instance
-        self.model_registry.setdefault(model.__name__, []).append(instance)
-
     def _generate_session_token(self, user_id: int) -> str:
+        from ..auth import generate_session_token
+
         return generate_session_token(self, user_id)
 
-    def _verify_session_token(self, token: str) -> tuple[bool, Optional[int]]:
+    def _verify_session_token(self, token: str) -> tuple[bool, int | None]:
+        from ..auth import verify_session_token
+
         return verify_session_token(self, token)
 
     async def _get_current_user(self, request: Request):
+        from ..auth import get_current_user
+
         return await get_current_user(self, request)
 
     async def _get_language(self, request: Request) -> str:
+        from ..auth import get_language
+
         return await get_language(self, request)
 
     async def check_permission(
         self, request: Request, model_name: str, action: str
     ) -> bool:
+        from ..auth import check_permission
+
         return await check_permission(self, request, model_name, action)
 
-    def register_menu(self, menu_item: MenuItem):
+    def register_menu(self, menu_item: MenuItem) -> None:
         self.menu_manager.register_menu(menu_item)
 
-    def get_model_admin(self, route_id: str) -> Optional[ModelAdmin]:
+    def get_model_admin(self, route_id: str) -> ModelAdmin | None:
         return self.models.get(route_id)

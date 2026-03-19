@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import traceback
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import parse_qs
@@ -9,6 +9,8 @@ from urllib.parse import parse_qs
 from robyn import Request, Response
 
 from ..helpers import body_to_text, first_value
+
+logger = logging.getLogger(__name__)
 
 AuthenticateUser = Callable[[Any, str, str], Awaitable[tuple[int, str] | None]]
 
@@ -35,7 +37,9 @@ def register_auth_routes(
             "active_tab": "",
             "admin_settings": site._get_admin_settings(request),
         }
-        return site.jinja_template.render_template("admin/login.html", **context)
+        return site.jinja_template.render_template(
+            "admin/login.html", **context
+        )
 
     @site.app.post(f"/{site.prefix}/login")
     async def admin_login_post(request: Request):
@@ -84,8 +88,10 @@ def register_auth_routes(
                 },
             )
         except Exception as exc:
-            traceback.print_exc()
-            return Response(status_code=500, description=f"Login failed: {exc}")
+            logger.exception("Login failed")
+            return Response(
+                status_code=500, description=f"Login failed: {exc}"
+            )
 
     @site.app.get(f"/{site.prefix}/logout")
     async def admin_logout(request: Request):

@@ -27,12 +27,13 @@ __all__ = [
 
 {% if design == "ddd" and orm == "tortoise" %}
 from app.infrastructure.database.services.engine import MODEL_MODULES, TORTOISE_ORM
+from app.infrastructure.database.services.transactions import transaction
 {% elif design == "ddd" and orm == "sqlalchemy" %}
-from app.infrastructure.database.services.session import create_session
+from app.infrastructure.database.services.transactions import transaction
 {% elif design == "mvc" and orm == "tortoise" %}
-from app.models.database import MODEL_MODULES, TORTOISE_ORM
+from app.models.database import MODEL_MODULES, TORTOISE_ORM, transaction
 {% elif design == "mvc" and orm == "sqlalchemy" %}
-from app.models.database import create_session
+from app.models.database import transaction
 {% endif %}
 project_tables = load_project_tables_module()
 
@@ -111,6 +112,7 @@ def register(app: Robyn) -> AdminSite:
         prefix="admin",
         db_url=TORTOISE_ORM["connections"]["default"],
         modules=_admin_modules(),
+        transaction=transaction,
         generate_schemas=True,
         default_admin_username={{ admin_username | tojson }},
         default_admin_password={{ admin_password | tojson }},
@@ -120,7 +122,7 @@ def register(app: Robyn) -> AdminSite:
         app,
         title="Robyn Admin",
         prefix="admin",
-        session_factory=create_session,
+        transaction=transaction,
         generate_schemas=False,
         default_admin_username={{ admin_username | tojson }},
         default_admin_password={{ admin_password | tojson }},

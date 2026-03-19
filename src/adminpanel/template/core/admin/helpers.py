@@ -53,9 +53,7 @@ def _build_filter_expression(model: type[Any], key: str, value: Any):
     normalized_value = _normalize_filter_value(value)
     operator_map: dict[str, Callable[[Any], Any]] = {
         "exact": lambda current_value: column == current_value,
-        "icontains": lambda current_value: column.ilike(
-            f"%{current_value}%"
-        ),
+        "icontains": lambda current_value: column.ilike(f"%{current_value}%"),
         "contains": lambda current_value: column.contains(current_value),
         "in": lambda current_value: column.in_(
             _normalize_in_lookup_value(current_value)

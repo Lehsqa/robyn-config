@@ -3,7 +3,6 @@ from __future__ import annotations
 from .models import AdminUser
 from .project_tables import load_project_tables_module
 
-
 _tables = load_project_tables_module()
 
 Role = _tables.Role

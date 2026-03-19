@@ -2,6 +2,7 @@
 
 from .utils import (
     DESIGN_CHOICES,
+    InteractiveCreateConfig,
     ORM_CHOICES,
     PACKAGE_MANAGER_CHOICES,
     apply_package_manager,
@@ -10,9 +11,6 @@ from .utils import (
     ensure_package_manager_available,
     get_generated_items,
     prepare_destination,
-)
-from .interactive import (
-    InteractiveCreateConfig,
     run_create_interactive,
 )
 

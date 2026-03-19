@@ -5,7 +5,7 @@ from urllib.parse import parse_qs
 
 from robyn import Request, Response, jsonify
 
-from ..helpers import body_to_text, first_value, parse_form_payload
+from ..helpers import body_to_text, first_value, parse_form_payload, to_int
 
 
 def register_model_mutation_routes(site: Any) -> None:
@@ -16,7 +16,9 @@ def register_model_mutation_routes(site: Any) -> None:
         if not model_admin:
             return Response(status_code=404, description="Model not found")
         if not await site.check_permission(request, route_id, "add"):
-            return Response(status_code=403, description="No create permission")
+            return Response(
+                status_code=403, description="No create permission"
+            )
 
         params = parse_qs(body_to_text(request.body))
         form_data = parse_form_payload(params)
@@ -44,7 +46,9 @@ def register_model_mutation_routes(site: Any) -> None:
         if not model_admin:
             return Response(status_code=404, description="Model not found")
         if not model_admin.enable_edit:
-            return Response(status_code=403, description="model not allow edit")
+            return Response(
+                status_code=403, description="model not allow edit"
+            )
         if not await site.check_permission(request, route_id, "edit"):
             return Response(status_code=403, description="No edit permission")
 
@@ -81,7 +85,9 @@ def register_model_mutation_routes(site: Any) -> None:
         if not model_admin:
             return Response(status_code=404, description="Model not found")
         if not await site.check_permission(request, route_id, "delete"):
-            return Response(status_code=403, description="No delete permission")
+            return Response(
+                status_code=403, description="No delete permission"
+            )
 
         success, message = await model_admin.handle_delete(request, object_id)
         if success:
@@ -105,8 +111,8 @@ def register_model_mutation_routes(site: Any) -> None:
 
         params: dict = request.query_params.to_dict()
         query_params = {
-            "limit": int(first_value(params.get("limit"), 10)),
-            "offset": int(first_value(params.get("offset"), 0)),
+            "limit": max(1, to_int(first_value(params.get("limit"), 10), 10)),
+            "offset": max(0, to_int(first_value(params.get("offset"), 0), 0)),
             "search": first_value(params.get("search"), ""),
             "sort": first_value(params.get("sort"), ""),
             "order": first_value(params.get("order"), "asc"),
@@ -145,9 +151,11 @@ def register_model_mutation_routes(site: Any) -> None:
                 }
             )
 
-        success, message, deleted_count = await model_admin.handle_batch_delete(
-            request,
-            ids,
+        success, message, deleted_count = (
+            await model_admin.handle_batch_delete(
+                request,
+                ids,
+            )
         )
         if success:
             site._record_action(
