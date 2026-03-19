@@ -32,17 +32,17 @@ tests.coverage:
 
 .PHONY: tests.create  # create new service
 tests.create:
-	robyn-config create my-service --orm sqlalchemy --design ddd ./my-service
-	robyn-config add product ./my-service
-	robyn-config adminpanel ./my-service
-	cd my-service && make makemigration
-	cd my-service && cp .env.example .env
-	cd my-service && docker compose up -d
+	robyn-config create service_test --orm sqlalchemy --design ddd ./service_test
+	robyn-config add product ./service_test
+	robyn-config adminpanel ./service_test
+	cd service_test && make makemigration
+	cd service_test && cp .env.example .env
+	cd service_test && docker compose up -d
 
 .PHONY: tests.delete  # delete service
 tests.delete:
-	cd my-service && docker compose down -v
-	rm -rf my-service
+	cd service_test && docker compose down -v
+	rm -rf service_test
 
 # *************************************************
 # ********** code quality **********

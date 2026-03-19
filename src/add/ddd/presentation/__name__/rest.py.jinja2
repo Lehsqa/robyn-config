@@ -1,68 +1,51 @@
 """{{ Name }} REST API routes."""
 
-from robyn import Request, Response, Robyn
-from starlette import status
+from robyn import Request, Response as RobynResponse, Robyn
 
-from ...domain.{{ name }} import {{ Name }}Flat
-from ...infrastructure.application import json_response
+from ...infrastructure.application import JSON_HEADERS, Response, ResponseMulti
 from ...operational import {{ name }} as {{ name }}_ops
-from .._helpers import parse_body
 from .contracts import {{ Name }}CreateBody, {{ Name }}UpdateBody, {{ Name }}Public
-
-
-def _serialize(instance: {{ Name }}Flat) -> dict:
-    return {{ Name }}Public.model_validate(instance).model_dump(by_alias=True)
 
 
 def register(app: Robyn) -> None:
     """Register {{ name }} routes."""
 
     @app.get("/{{ name }}s")
-    async def {{ name }}_list(request: Request) -> Response:
+    async def {{ name }}_list(request: Request) -> ResponseMulti[{{ Name }}Public]:
         """Get all {{ name }}s."""
         items = await {{ name }}_ops.get_all()
-        return json_response(
-            payload=[_serialize(item) for item in items],
-            status_code=status.HTTP_200_OK,
+        return ResponseMulti[{{ Name }}Public](
+            result=[{{ Name }}Public.model_validate(item) for item in items]
         )
 
     @app.get("/{{ name }}s/:id")
-    async def {{ name }}_get(request: Request) -> Response:
+    async def {{ name }}_get(request: Request) -> Response[{{ Name }}Public]:
         """Get a {{ name }} by ID."""
         id_ = int(request.path_params["id"])
         item = await {{ name }}_ops.get(id_=id_)
-        return json_response(
-            payload=_serialize(item),
-            status_code=status.HTTP_200_OK,
-        )
+        return Response[{{ Name }}Public](result={{ Name }}Public.model_validate(item))
 
     @app.post("/{{ name }}s")
-    async def {{ name }}_create(request: Request) -> Response:
+    async def {{ name }}_create(body: {{ Name }}CreateBody) -> RobynResponse:
         """Create a new {{ name }}."""
-        payload = await parse_body(request, {{ Name }}CreateBody)
-        item = await {{ name }}_ops.create(payload=payload.model_dump())
-        return json_response(
-            payload=_serialize(item),
-            status_code=status.HTTP_201_CREATED,
+        item = await {{ name }}_ops.create(payload=body.model_dump())
+        payload = Response[{{ Name }}Public](result={{ Name }}Public.model_validate(item))
+        return RobynResponse(
+            status_code=201,
+            headers=JSON_HEADERS,
+            description=payload.model_dump_json(),
         )
 
     @app.put("/{{ name }}s/:id")
-    async def {{ name }}_update(request: Request) -> Response:
+    async def {{ name }}_update(request: Request, body: {{ Name }}UpdateBody) -> Response[{{ Name }}Public]:
         """Update a {{ name }}."""
         id_ = int(request.path_params["id"])
-        payload = await parse_body(request, {{ Name }}UpdateBody)
-        item = await {{ name }}_ops.update(id_=id_, payload=payload.model_dump(exclude_unset=True))
-        return json_response(
-            payload=_serialize(item),
-            status_code=status.HTTP_200_OK,
-        )
+        item = await {{ name }}_ops.update(id_=id_, payload=body.model_dump(exclude_unset=True))
+        return Response[{{ Name }}Public](result={{ Name }}Public.model_validate(item))
 
     @app.delete("/{{ name }}s/:id")
-    async def {{ name }}_delete(request: Request) -> Response:
+    async def {{ name }}_delete(request: Request) -> RobynResponse:
         """Delete a {{ name }}."""
         id_ = int(request.path_params["id"])
         await {{ name }}_ops.delete(id_=id_)
-        return json_response(
-            payload={},
-            status_code=status.HTTP_200_OK,
-        )
+        return RobynResponse(status_code=200, headers={}, description="")

@@ -27,3 +27,6 @@ dist/
 
 # IDE
 .vscode/
+
+# Service
+service_test/

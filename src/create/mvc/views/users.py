@@ -1,19 +1,17 @@
 import uuid
 
-from robyn import Request, Response, Robyn
-from starlette import status
-
+from robyn import Request, Response as RobynResponse, Robyn
 from ..authentication import AuthProvider, pwd_context
 from ..cache import CacheRepository
 from ..config import settings
 from ..mailing import EmailMessage, mailing_service
 from ..models import UsersRepository, transaction
-from ..schemas import EmailChange, UserFlat, UserUncommitted
+from ..schemas import EmailChange, Response, UserFlat, UserUncommitted
 from ..utils import (
+    JSON_HEADERS,
     DatabaseError,
     NotFoundError,
     UnprocessableError,
-    json_response,
 )
 from .authentication import require_user_id
 from .contracts import (
@@ -26,11 +24,10 @@ from .contracts import (
     UserCreateBody,
     UserPublic,
 )
-from .helpers import parse_body
 
 
-def _serialize(user: UserFlat) -> dict:
-    return UserPublic.model_validate(user).model_dump(by_alias=True)
+def _wrap(user: UserFlat) -> Response[UserPublic]:
+    return Response[UserPublic](result=UserPublic.model_validate(user))
 
 
 def _activation_link(key: uuid.UUID) -> str:
@@ -136,22 +133,20 @@ async def _create_user(payload: UserCreateBody) -> UserFlat:
 
 def register(app: Robyn) -> None:
     @app.post("/users")
-    async def user_create(request: Request) -> Response:
-        payload = await parse_body(request, UserCreateBody)
-        user = await _create_user(payload)
-        return json_response(
-            payload=_serialize(user),
-            status_code=status.HTTP_201_CREATED,
+    async def user_create(body: UserCreateBody) -> RobynResponse:
+        user = await _create_user(body)
+        return RobynResponse(
+            status_code=201,
+            headers=JSON_HEADERS,
+            description=_wrap(user).model_dump_json(),
         )
 
     @app.post("/users/activate")
-    async def user_activate(request: Request) -> Response:
-        payload = await parse_body(request, ActivationBody)
-
+    async def user_activate(body: ActivationBody) -> Response[UserPublic]:
         async with CacheRepository[UserFlat]() as cache:
             try:
                 cache_entry = await cache.get(
-                    namespace="activation", key=payload.key
+                    namespace="activation", key=body.key
                 )
             except NotFoundError as exc:
                 raise UnprocessableError(
@@ -166,16 +161,12 @@ def register(app: Robyn) -> None:
                     payload={"is_active": True},
                 )
 
-            await cache.delete(namespace="activation", key=payload.key)
+            await cache.delete(namespace="activation", key=body.key)
 
-        return json_response(
-            payload=_serialize(user),
-            status_code=status.HTTP_200_OK,
-        )
+        return _wrap(user)
 
     @app.post("/users/password/change", auth_required=True)
-    async def user_password_change(request: Request) -> Response:
-        payload = await parse_body(request, PasswordChangeBody)
+    async def user_password_change(request: Request, body: PasswordChangeBody) -> Response[UserPublic]:
         user_id = require_user_id(request)
 
         async with transaction():
@@ -183,7 +174,7 @@ def register(app: Robyn) -> None:
             user = await repo.get(id_=user_id)
 
             if not pwd_context.verify(
-                payload.old_password, user.password, scheme="bcrypt"
+                body.old_password, user.password, scheme="bcrypt"
             ):
                 raise UnprocessableError(message="Password invalid")
 
@@ -192,41 +183,34 @@ def register(app: Robyn) -> None:
                 value=user.id,
                 payload={
                     "password": pwd_context.hash(
-                        payload.new_password, scheme="bcrypt"
+                        body.new_password, scheme="bcrypt"
                     ),
                     "auth_provider": AuthProvider.INTERNAL,
                 },
             )
 
-        return json_response(
-            payload=_serialize(updated),
-            status_code=status.HTTP_200_OK,
-        )
+        return _wrap(updated)
 
     @app.post("/users/password/reset/request")
-    async def user_password_reset_request(request: Request) -> Response:
-        payload = await parse_body(request, PasswordResetRequestBody)
-
+    async def user_password_reset_request(body: PasswordResetRequestBody) -> RobynResponse:
         try:
             async with transaction():
                 repo = UsersRepository()
-                user = await repo.get_by_login(login=payload.email)
+                user = await repo.get_by_login(login=body.email)
         except NotFoundError:
-            return json_response({}, status_code=status.HTTP_202_ACCEPTED)
+            return RobynResponse(status_code=202, headers={}, description="")
 
         reset_key = uuid.uuid4()
         await _cache_password_reset(user, reset_key)
         await _send_password_reset_email(user, reset_key)
-        return json_response({}, status_code=status.HTTP_202_ACCEPTED)
+        return RobynResponse(status_code=202, headers={}, description="")
 
     @app.post("/users/password/reset/confirm")
-    async def user_password_reset_confirm(request: Request) -> Response:
-        payload = await parse_body(request, PasswordResetConfirmBody)
-
+    async def user_password_reset_confirm(body: PasswordResetConfirmBody) -> Response[UserPublic]:
         async with CacheRepository[UserFlat]() as cache:
             try:
                 cache_entry = await cache.get(
-                    namespace="password-reset", key=payload.key
+                    namespace="password-reset", key=body.key
                 )
             except NotFoundError as exc:
                 raise UnprocessableError(
@@ -240,22 +224,18 @@ def register(app: Robyn) -> None:
                     value=cache_entry.instance.id,
                     payload={
                         "password": pwd_context.hash(
-                            payload.password, scheme="bcrypt"
+                            body.password, scheme="bcrypt"
                         ),
                         "auth_provider": AuthProvider.INTERNAL,
                     },
                 )
 
-            await cache.delete(namespace="password-reset", key=payload.key)
+            await cache.delete(namespace="password-reset", key=body.key)
 
-        return json_response(
-            payload=_serialize(user),
-            status_code=status.HTTP_200_OK,
-        )
+        return _wrap(user)
 
     @app.post("/users/email-change/request", auth_required=True)
-    async def user_email_change_request(request: Request) -> Response:
-        payload = await parse_body(request, EmailChangeRequestBody)
+    async def user_email_change_request(request: Request, body: EmailChangeRequestBody) -> RobynResponse:
         user_id = require_user_id(request)
 
         async with transaction():
@@ -263,20 +243,18 @@ def register(app: Robyn) -> None:
             user = await repo.get(id_=user_id)
 
         change_key = uuid.uuid4()
-        entry = EmailChange(user_id=user.id, email=payload.email)
+        entry = EmailChange(user_id=user.id, email=body.email)
         await _cache_email_change(entry, change_key)
-        await _send_email_change_email(payload.email, change_key)
+        await _send_email_change_email(body.email, change_key)
 
-        return json_response({}, status_code=status.HTTP_202_ACCEPTED)
+        return RobynResponse(status_code=202, headers={}, description="")
 
     @app.post("/users/email-change/confirm")
-    async def user_email_change_confirm(request: Request) -> Response:
-        payload = await parse_body(request, EmailChangeConfirmBody)
-
+    async def user_email_change_confirm(body: EmailChangeConfirmBody) -> Response[UserPublic]:
         async with CacheRepository[EmailChange]() as cache:
             try:
                 cache_entry = await cache.get(
-                    namespace="email-change", key=payload.key
+                    namespace="email-change", key=body.key
                 )
             except NotFoundError as exc:
                 raise UnprocessableError(
@@ -294,9 +272,6 @@ def register(app: Robyn) -> None:
                     },
                 )
 
-            await cache.delete(namespace="email-change", key=payload.key)
+            await cache.delete(namespace="email-change", key=body.key)
 
-        return json_response(
-            payload=_serialize(user),
-            status_code=status.HTTP_200_OK,
-        )
+        return _wrap(user)

@@ -1,36 +1,6 @@
 """Helpers for Robyn handlers."""
 
-from typing import Type, TypeVar
-
-import msgspec
-from pydantic import BaseModel, ValidationError
 from robyn import Request
-
-from ..infrastructure.application import BadRequestError
-
-T = TypeVar("T", bound=BaseModel)
-
-
-def _clean_body(body: bytes | str | None) -> bytes:
-    if body is None:
-        return b"{}"
-    raw = body.encode() if isinstance(body, str) else body
-    return raw or b"{}"
-
-
-async def parse_body(request: Request, model: Type[T]) -> T:
-    try:
-        payload = msgspec.json.decode(_clean_body(request.body))
-    except msgspec.DecodeError as exc:
-        raise BadRequestError(message=f"JSON is malformed: {exc}") from exc
-
-    if not isinstance(payload, dict):
-        raise BadRequestError(message="Request body must be an object")
-
-    try:
-        return model(**payload)
-    except ValidationError as exc:
-        raise BadRequestError(message=exc.errors()[0]["msg"]) from exc
 
 
 def _normalized_headers(request: Request) -> dict[str, str]:
