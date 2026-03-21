@@ -10,7 +10,7 @@ from ..helpers import body_to_text, first_value
 
 
 def register_dashboard_routes(site: Any) -> None:
-    @site.app.get(f"/{site.prefix}")
+    @site.app.get(f"/{site.prefix}", openapi_name="Admin Dashboard", openapi_tags=["Admin"])
     async def admin_index(request: Request):
         user = await site._get_current_user(request)
         if not user:
@@ -44,7 +44,7 @@ def register_dashboard_routes(site: Any) -> None:
             "admin/index.html", **context
         )
 
-    @site.app.get(f"/{site.prefix}/models")
+    @site.app.get(f"/{site.prefix}/models", openapi_name="Admin Models Index", openapi_tags=["Admin"])
     async def models_index(request: Request):
         user = await site._get_current_user(request)
         if not user:
@@ -66,7 +66,7 @@ def register_dashboard_routes(site: Any) -> None:
             "admin/models.html", **context
         )
 
-    @site.app.get(f"/{site.prefix}/users")
+    @site.app.get(f"/{site.prefix}/users", openapi_name="Admin Users Alias", openapi_tags=["Admin"])
     async def users_alias(request: Request):
         user = await site._get_current_user(request)
         if not user:
@@ -81,7 +81,7 @@ def register_dashboard_routes(site: Any) -> None:
             headers={"Location": f"/{site.prefix}/models"},
         )
 
-    @site.app.get(f"/{site.prefix}/settings")
+    @site.app.get(f"/{site.prefix}/settings", openapi_name="Admin Settings", openapi_tags=["Admin"])
     async def settings_page(request: Request):
         user = await site._get_current_user(request)
         if not user:
@@ -103,7 +103,7 @@ def register_dashboard_routes(site: Any) -> None:
             "admin/settings.html", **context
         )
 
-    @site.app.post(f"/{site.prefix}/settings")
+    @site.app.post(f"/{site.prefix}/settings", openapi_name="Save Admin Settings", openapi_tags=["Admin"])
     async def settings_save(request: Request):
         user = await site._get_current_user(request)
         if not user:

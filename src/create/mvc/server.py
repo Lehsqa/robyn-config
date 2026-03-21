@@ -9,6 +9,7 @@ from app.utils import error_response
 from app.views.authentication import JWTAuthenticationHandler
 from loguru import logger
 from robyn import Robyn
+from robyn.openapi import Components, OpenAPI, OpenAPIInfo
 
 logger.remove()
 logger.add(
@@ -32,7 +33,26 @@ if not settings.debug:
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     logging.getLogger("alembic").setLevel(logging.WARNING)
 
-app = Robyn(__file__)
+app = Robyn(
+    __file__,
+    openapi=OpenAPI(
+        info=OpenAPIInfo(
+            title=settings.public_api.name,
+            version=settings.public_api.version,
+            components=Components(
+                securitySchemes={
+                    "BearerAuth": {
+                        "type": "http",
+                        "scheme": "bearer",
+                        "bearerFormat": "JWT",
+                    }
+                }
+            ),
+        ),
+    ),
+)
+
+app.openapi.openapi_spec["security"] = [{"BearerAuth": []}]
 
 # Configure app
 app.exception(error_response)

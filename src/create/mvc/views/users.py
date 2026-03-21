@@ -132,7 +132,7 @@ async def _create_user(payload: UserCreateBody) -> UserFlat:
 
 
 def register(app: Robyn) -> None:
-    @app.post("/users")
+    @app.post("/users", openapi_name="Create User", openapi_tags=["Users"])
     async def user_create(body: UserCreateBody) -> RobynResponse:
         user = await _create_user(body)
         return RobynResponse(
@@ -141,7 +141,7 @@ def register(app: Robyn) -> None:
             description=_wrap(user).model_dump_json(),
         )
 
-    @app.post("/users/activate")
+    @app.post("/users/activate", openapi_name="Activate User", openapi_tags=["Users"])
     async def user_activate(body: ActivationBody) -> Response[UserPublic]:
         async with CacheRepository[UserFlat]() as cache:
             try:
@@ -165,7 +165,7 @@ def register(app: Robyn) -> None:
 
         return _wrap(user)
 
-    @app.post("/users/password/change", auth_required=True)
+    @app.post("/users/password/change", auth_required=True, openapi_name="Change Password", openapi_tags=["Users"])
     async def user_password_change(request: Request, body: PasswordChangeBody) -> Response[UserPublic]:
         user_id = require_user_id(request)
 
@@ -191,7 +191,7 @@ def register(app: Robyn) -> None:
 
         return _wrap(updated)
 
-    @app.post("/users/password/reset/request")
+    @app.post("/users/password/reset/request", openapi_name="Request Password Reset", openapi_tags=["Users"])
     async def user_password_reset_request(body: PasswordResetRequestBody) -> RobynResponse:
         try:
             async with transaction():
@@ -205,7 +205,7 @@ def register(app: Robyn) -> None:
         await _send_password_reset_email(user, reset_key)
         return RobynResponse(status_code=202, headers={}, description="")
 
-    @app.post("/users/password/reset/confirm")
+    @app.post("/users/password/reset/confirm", openapi_name="Confirm Password Reset", openapi_tags=["Users"])
     async def user_password_reset_confirm(body: PasswordResetConfirmBody) -> Response[UserPublic]:
         async with CacheRepository[UserFlat]() as cache:
             try:
@@ -234,7 +234,7 @@ def register(app: Robyn) -> None:
 
         return _wrap(user)
 
-    @app.post("/users/email-change/request", auth_required=True)
+    @app.post("/users/email-change/request", auth_required=True, openapi_name="Request Email Change", openapi_tags=["Users"])
     async def user_email_change_request(request: Request, body: EmailChangeRequestBody) -> RobynResponse:
         user_id = require_user_id(request)
 
@@ -249,7 +249,7 @@ def register(app: Robyn) -> None:
 
         return RobynResponse(status_code=202, headers={}, description="")
 
-    @app.post("/users/email-change/confirm")
+    @app.post("/users/email-change/confirm", openapi_name="Confirm Email Change", openapi_tags=["Users"])
     async def user_email_change_confirm(body: EmailChangeConfirmBody) -> Response[UserPublic]:
         async with CacheRepository[EmailChange]() as cache:
             try:

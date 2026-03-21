@@ -10,7 +10,7 @@ from ..helpers import first_value
 
 
 def register_model_view_routes(site: Any) -> None:
-    @site.app.get(f"/{site.prefix}/:route_id/search")
+    @site.app.get(f"/{site.prefix}/:route_id/search", openapi_name="Admin Model Search", openapi_tags=["Admin"])
     async def model_search(request: Request):
         route_id: str = request.path_params.get("route_id")
         user = await site._get_current_user(request)
@@ -40,7 +40,7 @@ def register_model_view_routes(site: Any) -> None:
             data.append({"display": display, "data": raw})
         return jsonify({"data": data})
 
-    @site.app.get(f"/{site.prefix}/:route_id")
+    @site.app.get(f"/{site.prefix}/:route_id", openapi_name="Admin Model List", openapi_tags=["Admin"])
     async def model_list(request: Request):
         route_id: str = request.path_params.get("route_id")
         user = await site._get_current_user(request)
@@ -88,7 +88,7 @@ def register_model_view_routes(site: Any) -> None:
             "admin/model_list.html", **context
         )
 
-    @site.app.get(f"/{site.prefix}/:route_id/add")
+    @site.app.get(f"/{site.prefix}/:route_id/add", openapi_name="Admin Add Model Form", openapi_tags=["Admin"])
     async def model_add(request: Request):
         route_id: str = request.path_params.get("route_id")
         user = await site._get_current_user(request)
@@ -140,7 +140,7 @@ def register_model_view_routes(site: Any) -> None:
             "admin/model_change.html", **context
         )
 
-    @site.app.get(f"/{site.prefix}/:route_id/:id/change")
+    @site.app.get(f"/{site.prefix}/:route_id/:id/change", openapi_name="Admin Change Model Form", openapi_tags=["Admin"])
     async def model_change(request: Request):
         route_id: str = request.path_params.get("route_id")
         object_id: str = unquote(str(request.path_params.get("id", "")))

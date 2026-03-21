@@ -10,7 +10,7 @@ from .contracts import {{ Name }}CreateBody, {{ Name }}UpdateBody, {{ Name }}Pub
 def register(app: Robyn) -> None:
     """Register {{ name }} routes."""
 
-    @app.get("/{{ name }}s")
+    @app.get("/{{ name }}s", openapi_name="List {{ Name }}s", openapi_tags=["{{ Name }}"])
     async def {{ name }}_list(request: Request) -> ResponseMulti[{{ Name }}Public]:
         """Get all {{ name }}s."""
         items = await {{ name }}_ops.get_all()
@@ -18,14 +18,14 @@ def register(app: Robyn) -> None:
             result=[{{ Name }}Public.model_validate(item) for item in items]
         )
 
-    @app.get("/{{ name }}s/:id")
+    @app.get("/{{ name }}s/:id", openapi_name="Get {{ Name }}", openapi_tags=["{{ Name }}"])
     async def {{ name }}_get(request: Request) -> Response[{{ Name }}Public]:
         """Get a {{ name }} by ID."""
         id_ = int(request.path_params["id"])
         item = await {{ name }}_ops.get(id_=id_)
         return Response[{{ Name }}Public](result={{ Name }}Public.model_validate(item))
 
-    @app.post("/{{ name }}s")
+    @app.post("/{{ name }}s", openapi_name="Create {{ Name }}", openapi_tags=["{{ Name }}"])
     async def {{ name }}_create(body: {{ Name }}CreateBody) -> RobynResponse:
         """Create a new {{ name }}."""
         item = await {{ name }}_ops.create(payload=body.model_dump())
@@ -36,14 +36,14 @@ def register(app: Robyn) -> None:
             description=payload.model_dump_json(),
         )
 
-    @app.put("/{{ name }}s/:id")
+    @app.put("/{{ name }}s/:id", openapi_name="Update {{ Name }}", openapi_tags=["{{ Name }}"])
     async def {{ name }}_update(request: Request, body: {{ Name }}UpdateBody) -> Response[{{ Name }}Public]:
         """Update a {{ name }}."""
         id_ = int(request.path_params["id"])
         item = await {{ name }}_ops.update(id_=id_, payload=body.model_dump(exclude_unset=True))
         return Response[{{ Name }}Public](result={{ Name }}Public.model_validate(item))
 
-    @app.delete("/{{ name }}s/:id")
+    @app.delete("/{{ name }}s/:id", openapi_name="Delete {{ Name }}", openapi_tags=["{{ Name }}"])
     async def {{ name }}_delete(request: Request) -> RobynResponse:
         """Delete a {{ name }}."""
         id_ = int(request.path_params["id"])
