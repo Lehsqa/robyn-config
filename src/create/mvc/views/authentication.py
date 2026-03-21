@@ -90,7 +90,7 @@ class JWTAuthenticationHandler(AuthenticationHandler):
 
 
 def register(app: Robyn) -> None:
-    @app.post("/auth/login")
+    @app.post("/auth/login", openapi_name="Login", openapi_tags=["Authentication"])
     async def login(body: LoginRequestBody) -> Response[TokenResponse]:
         async with transaction():
             repo = UsersRepository()
@@ -112,7 +112,7 @@ def register(app: Robyn) -> None:
         token = create_access_token(user.id, user.email, user.username)
         return Response[TokenResponse](result=TokenResponse(access_token=token))
 
-    @app.get("/auth/me", auth_required=True)
+    @app.get("/auth/me", auth_required=True, openapi_name="Current User", openapi_tags=["Authentication"])
     async def me(request: Request) -> Response[TokenInfo]:
         identity: Identity | None = getattr(request, "identity", None)
         if identity is None:

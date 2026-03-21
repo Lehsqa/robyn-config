@@ -9,6 +9,7 @@ from app.operational.authentication import JWTAuthenticationHandler
 from app.presentation import register_routes
 from loguru import logger
 from robyn import Robyn
+from robyn.openapi import Components, OpenAPI, OpenAPIInfo
 
 logger.remove()
 logger.add(
@@ -41,7 +42,23 @@ app: Robyn = create(
     ),
     exception_handler=error_response,
     authentication_handler=JWTAuthenticationHandler(),
+    openapi=OpenAPI(
+        info=OpenAPIInfo(
+            title=settings.public_api.name,
+            version=settings.public_api.version,
+            components=Components(
+                securitySchemes={
+                    "BearerAuth": {
+                        "type": "http",
+                        "scheme": "bearer",
+                        "bearerFormat": "JWT",
+                    }
+                }
+            ),
+        ),
+    ),
 )
+app.openapi.openapi_spec["security"] = [{"BearerAuth": []}]
 
 
 if __name__ == "__main__":

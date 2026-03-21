@@ -11,13 +11,13 @@ from .contracts import LoginRequestBody, TokenInfo, TokenResponse
 
 
 def register(app: Robyn) -> None:
-    @app.post("/auth/login")
+    @app.post("/auth/login", openapi_name="Login", openapi_tags=["Authentication"])
     async def login(body: LoginRequestBody) -> Response[TokenResponse]:
         user = await auth_ops.authenticate_user(body.login, body.password)
         token = auth_ops.create_access_token(user)
         return Response[TokenResponse](result=TokenResponse(access_token=token))
 
-    @app.get("/auth/me", auth_required=True)
+    @app.get("/auth/me", auth_required=True, openapi_name="Current User", openapi_tags=["Authentication"])
     async def me(request: Request) -> Response[TokenInfo]:
         identity: Identity | None = getattr(request, "identity", None)
         if identity is None:
