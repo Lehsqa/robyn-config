@@ -1,16 +1,14 @@
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from robyn import Request, Response, Robyn
+from robyn import Request, Response as RobynResponse, Robyn
 from robyn.authentication import AuthenticationHandler, BearerGetter, Identity
-from starlette import status
-
 from ..authentication import pwd_context
 from ..config import settings
 from ..models import UsersRepository, transaction
+from ..schemas import Response
 from ..utils import AuthenticationError, NotFoundError, json_response
 from .contracts import LoginRequestBody, TokenInfo, TokenResponse
-from .helpers import parse_body
 
 
 def create_access_token(user_id: int, email: str, username: str) -> str:
@@ -93,13 +91,11 @@ class JWTAuthenticationHandler(AuthenticationHandler):
 
 def register(app: Robyn) -> None:
     @app.post("/auth/login")
-    async def login(request: Request) -> Response:
-        payload = await parse_body(request, LoginRequestBody)
-
+    async def login(body: LoginRequestBody) -> Response[TokenResponse]:
         async with transaction():
             repo = UsersRepository()
             try:
-                user = await repo.get_by_login(login=payload.login)
+                user = await repo.get_by_login(login=body.login)
             except NotFoundError:
                 raise AuthenticationError(message="Invalid credentials")
 
@@ -109,19 +105,15 @@ def register(app: Robyn) -> None:
         if not user.password:
             raise AuthenticationError(message="Password not set")
         if not pwd_context.verify(
-            payload.password, user.password, scheme="bcrypt"
+            body.password, user.password, scheme="bcrypt"
         ):
             raise AuthenticationError(message="Invalid credentials")
 
         token = create_access_token(user.id, user.email, user.username)
-        response = TokenResponse(access_token=token)
-        return json_response(
-            payload=response.model_dump(by_alias=True),
-            status_code=status.HTTP_200_OK,
-        )
+        return Response[TokenResponse](result=TokenResponse(access_token=token))
 
     @app.get("/auth/me", auth_required=True)
-    async def me(request: Request) -> Response:
+    async def me(request: Request) -> Response[TokenInfo]:
         identity: Identity | None = getattr(request, "identity", None)
         if identity is None:
             raise AuthenticationError(message="Authentication required")
@@ -133,14 +125,10 @@ def register(app: Robyn) -> None:
         expires_at = datetime.fromtimestamp(
             float(claims.get("exp", "0")), tz=timezone.utc
         )
-        info = TokenInfo(
+        return Response[TokenInfo](result=TokenInfo(
             subject=claims.get("sub", ""),
             email=claims.get("email", ""),
             username=claims.get("username", ""),
             issued_at=issued_at,
             expires_at=expires_at,
-        )
-        return json_response(
-            payload=info.model_dump(by_alias=True),
-            status_code=status.HTTP_200_OK,
-        )
+        ))

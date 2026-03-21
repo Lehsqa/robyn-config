@@ -14,9 +14,8 @@ from ..domain.users import UserFlat
 from ..infrastructure.application import (
     AuthenticationError,
     NotFoundError,
-    json_response,
+    error_response,
 )
-from ..infrastructure.application.entities.response import ErrorResponse
 from ..infrastructure.authentication import pwd_context
 from ..infrastructure.database import transaction
 from ..infrastructure.database.repository import (
@@ -118,7 +117,4 @@ class JWTAuthenticationHandler(AuthenticationHandler):
 
     @property
     def unauthorized_response(self):
-        payload = ErrorResponse(message=self._last_error.message).model_dump(
-            by_alias=True
-        )
-        return json_response(payload, status_code=self._last_error.status_code)
+        return error_response(self._last_error)
