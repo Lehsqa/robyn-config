@@ -18,7 +18,11 @@ AuthenticateUser = Callable[[Any, str, str], Awaitable[tuple[int, str] | None]]
 def register_auth_routes(
     site: Any, *, authenticate_user: AuthenticateUser
 ) -> None:
-    @site.app.get(f"/{site.prefix}/login", openapi_name="Admin Login Page", openapi_tags=["Admin"])
+    @site.app.get(
+        f"/{site.prefix}/login",
+        openapi_name="Admin Login Page",
+        openapi_tags=["Admin"],
+    )
     async def admin_login(request: Request):
         user = await site._get_current_user(request)
         if user:
@@ -41,7 +45,11 @@ def register_auth_routes(
             "admin/login.html", **context
         )
 
-    @site.app.post(f"/{site.prefix}/login", openapi_name="Admin Login", openapi_tags=["Admin"])
+    @site.app.post(
+        f"/{site.prefix}/login",
+        openapi_name="Admin Login",
+        openapi_tags=["Admin"],
+    )
     async def admin_login_post(request: Request):
         try:
             params = parse_qs(body_to_text(request.body))
@@ -93,7 +101,11 @@ def register_auth_routes(
                 status_code=500, description=f"Login failed: {exc}"
             )
 
-    @site.app.get(f"/{site.prefix}/logout", openapi_name="Admin Logout", openapi_tags=["Admin"])
+    @site.app.get(
+        f"/{site.prefix}/logout",
+        openapi_name="Admin Logout",
+        openapi_tags=["Admin"],
+    )
     async def admin_logout(request: Request):
         user = await site._get_current_user(request)
         if user:
@@ -119,7 +131,11 @@ def register_auth_routes(
             },
         )
 
-    @site.app.post(f"/{site.prefix}/set_language", openapi_name="Set Language", openapi_tags=["Admin"])
+    @site.app.post(
+        f"/{site.prefix}/set_language",
+        openapi_name="Set Language",
+        openapi_tags=["Admin"],
+    )
     async def set_language(request: Request):
         try:
             params = parse_qs(body_to_text(request.body))

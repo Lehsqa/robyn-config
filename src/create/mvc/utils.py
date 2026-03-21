@@ -51,5 +51,7 @@ def error_response(exc: Exception) -> Response:
         body = json.dumps({"error": {"message": exc.message}})
         return Response(exc.status_code, JSON_HEADERS, body)
 
-    body = json.dumps({"error": {"message": str(exc) or "Internal Server Error"}})
+    body = json.dumps(
+        {"error": {"message": str(exc) or "Internal Server Error"}}
+    )
     return Response(500, JSON_HEADERS, body)

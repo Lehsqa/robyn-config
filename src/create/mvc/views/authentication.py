@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import jwt
-from robyn import Request, Response as RobynResponse, Robyn
+from robyn import Request, Robyn
 from robyn.authentication import AuthenticationHandler, BearerGetter, Identity
 from ..authentication import pwd_context
 from ..config import settings
@@ -90,7 +90,9 @@ class JWTAuthenticationHandler(AuthenticationHandler):
 
 
 def register(app: Robyn) -> None:
-    @app.post("/auth/login", openapi_name="Login", openapi_tags=["Authentication"])
+    @app.post(
+        "/auth/login", openapi_name="Login", openapi_tags=["Authentication"]
+    )
     async def login(body: LoginRequestBody) -> Response[TokenResponse]:
         async with transaction():
             repo = UsersRepository()
@@ -110,9 +112,16 @@ def register(app: Robyn) -> None:
             raise AuthenticationError(message="Invalid credentials")
 
         token = create_access_token(user.id, user.email, user.username)
-        return Response[TokenResponse](result=TokenResponse(access_token=token))
+        return Response[TokenResponse](
+            result=TokenResponse(access_token=token)
+        )
 
-    @app.get("/auth/me", auth_required=True, openapi_name="Current User", openapi_tags=["Authentication"])
+    @app.get(
+        "/auth/me",
+        auth_required=True,
+        openapi_name="Current User",
+        openapi_tags=["Authentication"],
+    )
     async def me(request: Request) -> Response[TokenInfo]:
         identity: Identity | None = getattr(request, "identity", None)
         if identity is None:
@@ -125,10 +134,12 @@ def register(app: Robyn) -> None:
         expires_at = datetime.fromtimestamp(
             float(claims.get("exp", "0")), tz=timezone.utc
         )
-        return Response[TokenInfo](result=TokenInfo(
-            subject=claims.get("sub", ""),
-            email=claims.get("email", ""),
-            username=claims.get("username", ""),
-            issued_at=issued_at,
-            expires_at=expires_at,
-        ))
+        return Response[TokenInfo](
+            result=TokenInfo(
+                subject=claims.get("sub", ""),
+                email=claims.get("email", ""),
+                username=claims.get("username", ""),
+                issued_at=issued_at,
+                expires_at=expires_at,
+            )
+        )

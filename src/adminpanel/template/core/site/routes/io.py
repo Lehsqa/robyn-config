@@ -15,7 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 def register_io_routes(site: Any) -> None:
-    @site.app.post(f"/{site.prefix}/upload", openapi_name="Admin File Upload", openapi_tags=["Admin"])
+    @site.app.post(
+        f"/{site.prefix}/upload",
+        openapi_name="Admin File Upload",
+        openapi_tags=["Admin"],
+    )
     async def file_upload(request: Request):
         try:
             user = await site._get_current_user(request)
@@ -86,7 +90,11 @@ def register_io_routes(site: Any) -> None:
                 }
             )
 
-    @site.app.post(f"/{site.prefix}/:route_id/import", openapi_name="Admin Import", openapi_tags=["Admin"])
+    @site.app.post(
+        f"/{site.prefix}/:route_id/import",
+        openapi_name="Admin Import",
+        openapi_tags=["Admin"],
+    )
     async def handle_import(request: Request):
         try:
             user = await site._get_current_user(request)

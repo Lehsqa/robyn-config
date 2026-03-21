@@ -9,7 +9,11 @@ from ..helpers import body_to_text, first_value, parse_form_payload, to_int
 
 
 def register_model_mutation_routes(site: Any) -> None:
-    @site.app.post(f"/{site.prefix}/:route_id/add", openapi_name="Admin Create Model", openapi_tags=["Admin"])
+    @site.app.post(
+        f"/{site.prefix}/:route_id/add",
+        openapi_name="Admin Create Model",
+        openapi_tags=["Admin"],
+    )
     async def model_add_post(request: Request):
         route_id: str = request.path_params.get("route_id")
         model_admin = site.get_model_admin(route_id)
@@ -37,7 +41,11 @@ def register_model_mutation_routes(site: Any) -> None:
             headers={"Content-Type": "text/html"},
         )
 
-    @site.app.post(f"/{site.prefix}/:route_id/:id/edit", openapi_name="Admin Edit Model", openapi_tags=["Admin"])
+    @site.app.post(
+        f"/{site.prefix}/:route_id/:id/edit",
+        openapi_name="Admin Edit Model",
+        openapi_tags=["Admin"],
+    )
     async def model_edit_post(request: Request):
         route_id: str = request.path_params.get("route_id")
         object_id: str = request.path_params.get("id")
@@ -73,7 +81,11 @@ def register_model_mutation_routes(site: Any) -> None:
             headers={"Content-Type": "text/html"},
         )
 
-    @site.app.post(f"/{site.prefix}/:route_id/:id/delete", openapi_name="Admin Delete Model", openapi_tags=["Admin"])
+    @site.app.post(
+        f"/{site.prefix}/:route_id/:id/delete",
+        openapi_name="Admin Delete Model",
+        openapi_tags=["Admin"],
+    )
     async def model_delete(request: Request):
         route_id: str = request.path_params.get("route_id")
         object_id: str = request.path_params.get("id")
@@ -102,7 +114,11 @@ def register_model_mutation_routes(site: Any) -> None:
             headers={"Content-Type": "text/html"},
         )
 
-    @site.app.get(f"/{site.prefix}/:route_id/data", openapi_name="Admin Model Data", openapi_tags=["Admin"])
+    @site.app.get(
+        f"/{site.prefix}/:route_id/data",
+        openapi_name="Admin Model Data",
+        openapi_tags=["Admin"],
+    )
     async def model_data(request: Request):
         route_id: str = request.path_params.get("route_id")
         model_admin = site.get_model_admin(route_id)
@@ -129,7 +145,11 @@ def register_model_mutation_routes(site: Any) -> None:
 
         return jsonify({"total": total, "data": data})
 
-    @site.app.post(f"/{site.prefix}/:route_id/batch_delete", openapi_name="Admin Batch Delete", openapi_tags=["Admin"])
+    @site.app.post(
+        f"/{site.prefix}/:route_id/batch_delete",
+        openapi_name="Admin Batch Delete",
+        openapi_tags=["Admin"],
+    )
     async def model_batch_delete(request: Request):
         route_id: str = request.path_params.get("route_id")
         user = await site._get_current_user(request)
@@ -173,7 +193,11 @@ def register_model_mutation_routes(site: Any) -> None:
             }
         )
 
-    @site.app.get(f"/{site.prefix}/:route_id/inline_data", openapi_name="Admin Inline Data", openapi_tags=["Admin"])
+    @site.app.get(
+        f"/{site.prefix}/:route_id/inline_data",
+        openapi_name="Admin Inline Data",
+        openapi_tags=["Admin"],
+    )
     async def get_inline_data(request: Request):
         route_id = request.path_params.get("route_id")
         model_admin = site.get_model_admin(route_id)
