@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import uuid
 from typing import Any, Optional
 
 from robyn import Request
@@ -18,14 +19,28 @@ from .helpers import parse_cookie_header
 
 async def authenticate_credentials(
     site: Any, username: str, password: str
-) -> tuple[int, str] | None:
+) -> tuple[str, str] | None:
     async with site.transaction() as session:
         user = await AdminUser.authenticate(session, username, password)
         if not user:
             return None
 
         user.last_login = datetime.utcnow()
-    return int(user.id), str(user.username)
+    return str(user.id), str(user.username)
+
+
+def _coerce_user_id(raw_user_id: str) -> Any:
+    id_column = AdminUser.__table__.c.id
+    try:
+        python_type = id_column.type.python_type
+    except (AttributeError, NotImplementedError):
+        return raw_user_id
+
+    if python_type is str:
+        return raw_user_id
+    if python_type is uuid.UUID:
+        return uuid.UUID(raw_user_id)
+    return python_type(raw_user_id)
 
 
 async def get_current_user(site: Any, request: Request) -> Optional[AdminUser]:
@@ -43,7 +58,7 @@ async def get_current_user(site: Any, request: Request) -> Optional[AdminUser]:
         return None
 
     async with site.transaction() as session:
-        return await session.get(AdminUser, user_id)
+        return await session.get(AdminUser, _coerce_user_id(user_id))
 
 
 async def check_permission(

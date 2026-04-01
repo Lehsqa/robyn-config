@@ -15,7 +15,7 @@ from .helpers import parse_cookie_header, sign_token
 ADVISORY_LOCK_ID = 193384911
 
 
-def generate_session_token(site: Any, user_id: int) -> str:
+def generate_session_token(site: Any, user_id: str) -> str:
     timestamp = int(datetime.utcnow().timestamp())
     raw_token = f"{user_id}:{timestamp}:{secrets.token_hex(16)}"
     signature = sign_token(raw_token, site.session_secret)
@@ -24,7 +24,7 @@ def generate_session_token(site: Any, user_id: int) -> str:
     ).decode()
 
 
-def verify_session_token(site: Any, token: str) -> tuple[bool, int | None]:
+def verify_session_token(site: Any, token: str) -> tuple[bool, str | None]:
     try:
         decoded = base64.urlsafe_b64decode(token.encode()).decode()
         raw_token, signature = decoded.rsplit(":", 1)
@@ -38,7 +38,7 @@ def verify_session_token(site: Any, token: str) -> tuple[bool, int | None]:
             > site.session_expire
         ):
             return False, None
-        return True, int(user_id)
+        return True, user_id
     except Exception:
         return False, None
 

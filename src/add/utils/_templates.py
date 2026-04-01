@@ -49,6 +49,7 @@ def _add_ddd_templates(
     name: str,
     name_capitalized: str,
     orm: str,
+    uid: str,
 ) -> list[str]:
     """Add DDD templates to the project."""
     from ._injection import (
@@ -66,6 +67,7 @@ def _add_ddd_templates(
         "name": name,
         "Name": name_capitalized,
         "orm": orm,
+        "uid": uid,
     }
 
     # Domain layer
@@ -158,6 +160,7 @@ def _add_mvc_templates(
     name: str,
     name_capitalized: str,
     orm: str,
+    uid: str,
 ) -> list[str]:
     """Add MVC templates to the project."""
     from ._injection import (
@@ -176,6 +179,7 @@ def _add_mvc_templates(
         "name": name,
         "Name": name_capitalized,
         "orm": orm,
+        "uid": uid,
     }
 
     # Models layer

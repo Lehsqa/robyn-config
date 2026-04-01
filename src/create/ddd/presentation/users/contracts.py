@@ -1,7 +1,11 @@
 import uuid
 
 from app.domain.authentication import validators as auth_validators
-from app.infrastructure.application import PublicEntity, UnprocessableError
+from app.infrastructure.application import (
+    PrimaryKey,
+    PublicEntity,
+    UnprocessableError,
+)
 from pydantic import EmailStr, Field, field_validator, model_validator
 
 
@@ -99,7 +103,7 @@ class EmailChangeConfirmBody(PublicEntity):
 class UserPublic(_BaseUser):
     """The public user's data model."""
 
-    id: int = Field(description="User id", examples=[1])
+    id: PrimaryKey = Field(description="User id")
     is_active: bool = Field(
         description="Whether the user activated the account",
         examples=[True],

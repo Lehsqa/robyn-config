@@ -36,6 +36,7 @@ def _stub_create_pipeline(monkeypatch) -> dict[str, object]:
         design: str,
         name: str,
         package_manager: str,
+        uid: str,
     ) -> None:
         calls["copy_template"] = {
             "destination": destination,
@@ -43,6 +44,7 @@ def _stub_create_pipeline(monkeypatch) -> dict[str, object]:
             "design": design,
             "name": name,
             "package_manager": package_manager,
+            "uid": uid,
         }
 
     def fake_apply_package_manager(
@@ -98,6 +100,7 @@ def test_create_interactive_uses_selected_values(monkeypatch, tmp_path) -> None:
             orm="tortoise",
             design="mvc",
             package_manager="poetry",
+            uid="sparkid",
         ),
     )
 
@@ -117,6 +120,7 @@ def test_create_interactive_uses_selected_values(monkeypatch, tmp_path) -> None:
         "design": "mvc",
         "name": "interactive-app",
         "package_manager": "poetry",
+        "uid": "sparkid",
     }
 
 
@@ -153,6 +157,8 @@ def test_create_interactive_prefills_from_cli_inputs(
             "mvc",
             "--package-manager",
             "poetry",
+            "--uid",
+            "sparkid",
             "seed-name",
             str(destination),
         ],
@@ -165,6 +171,7 @@ def test_create_interactive_prefills_from_cli_inputs(
     assert defaults.orm == "tortoise"
     assert defaults.design == "mvc"
     assert defaults.package_manager == "poetry"
+    assert defaults.uid == "sparkid"
     assert calls["prepare_destination"] == {
         "destination": destination,
         "orm": "tortoise",
@@ -211,6 +218,7 @@ def test_create_help_contains_interactive_flag() -> None:
     result = runner.invoke(cli_module.cli, ["create", "--help"])
     assert result.exit_code == 0
     assert "-i, --interactive" in result.output
+    assert "-uid, --uid" in result.output
 
 
 def test_create_interactive_requires_tty(monkeypatch) -> None:
@@ -228,3 +236,18 @@ def test_create_interactive_requires_tty(monkeypatch) -> None:
 
     assert result.exit_code != 0
     assert "Interactive mode requires a TTY terminal." in result.output
+
+
+def test_create_rejects_uuidv7_on_python_older_than_313(monkeypatch) -> None:
+    runner = CliRunner()
+    _stub_create_pipeline(monkeypatch)
+
+    monkeypatch.setattr(cli_module.sys, "version_info", (3, 12, 9))
+
+    result = runner.invoke(
+        cli_module.cli,
+        ["create", "uid-app", "--uid", "uuidv7"],
+    )
+
+    assert result.exit_code != 0
+    assert "uuidv7 requires Python 3.13 or newer" in result.output

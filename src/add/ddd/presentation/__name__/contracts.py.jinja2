@@ -2,7 +2,7 @@
 
 from pydantic import Field
 
-from app.infrastructure.application import PublicEntity
+from app.infrastructure.application import PrimaryKey, PublicEntity
 
 
 class {{ Name }}CreateBody(PublicEntity):
@@ -31,6 +31,6 @@ class {{ Name }}UpdateBody(PublicEntity):
 class {{ Name }}Public(PublicEntity):
     """Public {{ name }} response model."""
 
-    id: int = Field(description="{{ Name }} ID")
+    id: PrimaryKey = Field(description="{{ Name }} ID")
     name: str = Field(description="{{ Name }} name")
     # Add your fields here

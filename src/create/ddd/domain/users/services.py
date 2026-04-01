@@ -4,7 +4,11 @@ from typing import Callable
 from pydantic import EmailStr
 
 from ...config import settings
-from ...infrastructure.application import DatabaseError, UnprocessableError
+from ...infrastructure.application import (
+    DatabaseError,
+    PrimaryKey,
+    UnprocessableError,
+)
 from ...infrastructure.authentication import AuthProvider
 from ...infrastructure.database import transaction
 from .constants import Role
@@ -43,7 +47,7 @@ async def create(
 
 
 async def update_partial(
-    id_: int,
+    id_: PrimaryKey,
     payload: dict,
     repository_factory: Callable[[], UsersRepository],
 ) -> UserFlat:
@@ -53,7 +57,7 @@ async def update_partial(
 
 
 async def activate(
-    id_: int, repository_factory: Callable[[], UsersRepository]
+    id_: PrimaryKey, repository_factory: Callable[[], UsersRepository]
 ) -> UserFlat:
     async with transaction():
         repository = repository_factory()
@@ -63,7 +67,7 @@ async def activate(
 
 
 async def password_update(
-    id_: int,
+    id_: PrimaryKey,
     password_hash: str,
     repository_factory: Callable[[], UsersRepository],
 ) -> UserFlat:

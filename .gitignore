@@ -30,3 +30,6 @@ dist/
 
 # Service
 service_test/
+
+# Superpowers
+docs/superpowers/

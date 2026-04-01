@@ -12,7 +12,7 @@ from ..helpers import body_to_text, first_value
 
 logger = logging.getLogger(__name__)
 
-AuthenticateUser = Callable[[Any, str, str], Awaitable[tuple[int, str] | None]]
+AuthenticateUser = Callable[[Any, str, str], Awaitable[tuple[str, str] | None]]
 
 
 def register_auth_routes(

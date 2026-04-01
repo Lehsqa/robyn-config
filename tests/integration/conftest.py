@@ -49,25 +49,30 @@ def run_cli_create(
     orm: str,
     app_name: str = "test-app",
     bin_dir: Path | None = None,
+    uid: str | None = None,
 ) -> None:
     """Scaffold a project via the CLI create command."""
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT / "src")
     if bin_dir:
         env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+    cmd = [
+        sys.executable,
+        "-m",
+        "cli",
+        "create",
+        app_name,
+        "--orm",
+        orm,
+        "--design",
+        design,
+    ]
+    if uid is not None:
+        cmd.extend(["--uid", uid])
+    cmd.append(str(destination))
+
     subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "cli",
-            "create",
-            app_name,
-            "--orm",
-            orm,
-            "--design",
-            design,
-            str(destination),
-        ],
+        cmd,
         check=True,
         env=env,
     )

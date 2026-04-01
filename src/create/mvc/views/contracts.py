@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from pydantic import EmailStr, Field, field_validator, model_validator
 
-from ..schemas import PublicEntity
+from ..schemas import PrimaryKey, PublicEntity
 from ..utils import UnprocessableError
 
 # Authentication Contracts
@@ -137,7 +137,7 @@ class EmailChangeConfirmBody(PublicEntity):
 
 
 class UserPublic(_BaseUser):
-    id: int = Field(description="User id", examples=[1])
+    id: PrimaryKey = Field(description="User id")
     is_active: bool = Field(
         description="Whether the user activated the account",
         examples=[True],

@@ -144,6 +144,14 @@ def _authentication_table_file(project_dir: Path, design: str) -> Path:
     )
 
 
+def _admin_auth_file(project_dir: Path, design: str) -> Path:
+    return _admin_root(project_dir, design) / "core" / "site" / "auth.py"
+
+
+def _admin_auth_common_file(project_dir: Path, design: str) -> Path:
+    return _admin_root(project_dir, design) / "core" / "site" / "auth_common.py"
+
+
 def _project_tables_dir(project_dir: Path, design: str) -> Path:
     if design == "ddd":
         return (
@@ -435,6 +443,38 @@ def test_adminpanel_auth_tables(tmp_path: Path, design: str, orm: str) -> None:
         "register_model(\n        project_tables.NewsLetterSubscriptionsTable"
         not in init_content
     )
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("design", ("ddd", "mvc"))
+def test_adminpanel_sqlalchemy_uid_supports_string_user_primary_keys(
+    tmp_path: Path, design: str
+) -> None:
+    project_dir = tmp_path / f"{design}-sqlalchemy-sparkid-admin"
+    fake_bin = create_fake_package_managers(tmp_path)
+    run_cli_create(
+        project_dir,
+        design,
+        "sqlalchemy",
+        app_name="admin-app",
+        bin_dir=fake_bin,
+        uid="sparkid",
+    )
+
+    result = run_cli_adminpanel(project_dir)
+    assert result.returncode == 0, result.stderr
+
+    tables_content = _adminpanel_tables_file(project_dir, design).read_text()
+    auth_content = _admin_auth_file(project_dir, design).read_text()
+    auth_common_content = _admin_auth_common_file(
+        project_dir, design
+    ).read_text()
+
+    assert "UsersTable.__table__.c.id.type.copy()" in tables_content
+    assert "user_id: Mapped[int]" not in tables_content
+    assert "return int(user.id), str(user.username)" not in auth_content
+    assert "return str(user.id), str(user.username)" in auth_content
+    assert "return True, int(user_id)" not in auth_common_content
 
 
 @pytest.mark.integration

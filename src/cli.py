@@ -18,6 +18,7 @@ from create import (
     InteractiveCreateConfig,
     ORM_CHOICES,
     PACKAGE_MANAGER_CHOICES,
+    UID_CHOICES,
     apply_package_manager,
     collect_existing_items,
     copy_template,
@@ -142,6 +143,15 @@ def cli() -> None:
     show_default=True,
     help="Select the package manager to use.",
 )
+@click.option(
+    "-uid",
+    "--uid",
+    "uid_type",
+    type=click.Choice(UID_CHOICES, case_sensitive=False),
+    default="none",
+    show_default=True,
+    help="Select the primary key type for generated database tables.",
+)
 @click.argument(
     "destination",
     type=click.Path(
@@ -157,6 +167,7 @@ def create(
     orm_type: str,
     design: str,
     package_manager: str,
+    uid_type: str,
 ) -> None:
     """Copy the template into destination with specific configurations."""
     destination = destination or Path(".")
@@ -177,6 +188,7 @@ def create(
                     orm=orm_type,
                     design=design,
                     package_manager=package_manager,
+                    uid=uid_type,
                 )
             )
         except RuntimeError as exc:
@@ -189,6 +201,7 @@ def create(
         orm_type = selected.orm
         design = selected.design
         package_manager = selected.package_manager
+        uid_type = selected.uid
 
     if not name:
         raise click.UsageError("Missing argument 'NAME'.")
@@ -196,6 +209,11 @@ def create(
     orm_type = orm_type.lower()
     design = design.lower()
     package_manager = package_manager.lower()
+    uid_type = uid_type.lower()
+
+    if uid_type == "uuidv7" and sys.version_info < (3, 13):
+        raise click.ClickException("uuidv7 requires Python 3.13 or newer.")
+
     ensure_package_manager_available(package_manager)
 
     destination_resolved = destination.expanduser().resolve()
@@ -218,7 +236,14 @@ def create(
         )
         created_new_dir = not destination_exists_before and target_dir.exists()
 
-        copy_template(target_dir, orm_type, design, name, package_manager)
+        copy_template(
+            target_dir,
+            orm_type,
+            design,
+            name,
+            package_manager,
+            uid_type,
+        )
 
         click.echo("Installing dependencies...")
         apply_package_manager(target_dir, package_manager)

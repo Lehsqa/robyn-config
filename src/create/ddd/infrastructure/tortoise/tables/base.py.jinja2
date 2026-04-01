@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+from typing import TypeVar
+
+from tortoise import fields
+from tortoise.models import Model
+{% if uid == "uuidv7" %}
+import uuid
+{% elif uid == "nanoid" %}
+from nanoid import generate
+{% elif uid == "ulid" %}
+from ulid import ULID
+{% elif uid == "sparkid" %}
+from sparkid import generate_id
+{% endif %}
+
+__all__ = ("BaseTable", "ConcreteTable")
+
+
+class BaseTable(Model):
+{% if uid == "uuidv4" %}
+    id = fields.UUIDField(pk=True)
+{% elif uid == "uuidv7" %}
+    id = fields.UUIDField(pk=True, default=uuid.uuid7)
+{% elif uid == "nanoid" %}
+    id = fields.CharField(pk=True, max_length=21, default=generate)
+{% elif uid == "ulid" %}
+    id = fields.CharField(pk=True, max_length=26, default=lambda: str(ULID()))
+{% elif uid == "sparkid" %}
+    id = fields.CharField(pk=True, max_length=21, default=generate_id)
+{% else %}
+    id = fields.IntField(pk=True)
+{% endif %}
+    created_at = fields.DatetimeField(auto_now_add=True)
+    updated_at = fields.DatetimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+
+ConcreteTable = TypeVar("ConcreteTable", bound="BaseTable")

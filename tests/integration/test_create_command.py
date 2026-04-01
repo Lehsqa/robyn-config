@@ -18,27 +18,31 @@ def run_create_command(
     orm: str,
     package_manager: str = "uv",
     bin_dir: Path | None = None,
+    uid: str | None = None,
 ) -> subprocess.CompletedProcess:
     """Run the create command via subprocess."""
     env = os.environ.copy()
     env["PYTHONPATH"] = str(ROOT / "src")
     if bin_dir:
         env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+    cmd = [
+        sys.executable,
+        "-m",
+        "cli",
+        "create",
+        "test-project",
+        "--orm",
+        orm,
+        "--design",
+        design,
+        "--package-manager",
+        package_manager,
+    ]
+    if uid is not None:
+        cmd.extend(["--uid", uid])
+    cmd.append(str(destination))
     return subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "cli",
-            "create",
-            "test-project",
-            "--orm",
-            orm,
-            "--design",
-            design,
-            "--package-manager",
-            package_manager,
-            str(destination),
-        ],
+        cmd,
         cwd=ROOT,
         env=env,
         capture_output=True,
@@ -174,3 +178,73 @@ def test_create_generates_rooted_env_loading_and_nonroot_log_dir_setup(tmp_path)
         "COPY --chown=65532:65532 --from=builder /opt/project /app"
         in dockerfile_content
     )
+
+
+@pytest.mark.parametrize(
+    ("uid", "expected_primary_key_type"),
+    [
+        ("none", "int"),
+        ("sparkid", "str"),
+    ],
+)
+@pytest.mark.parametrize("design,orm", COMBINATIONS)
+def test_create_user_templates_adapt_to_uid_type(
+    tmp_path: Path,
+    design: str,
+    orm: str,
+    uid: str,
+    expected_primary_key_type: str,
+) -> None:
+    project_dir = tmp_path / f"{design}-{orm}-{uid}-user-types"
+    fake_bin = create_fake_package_managers(tmp_path)
+    result = run_create_command(
+        project_dir,
+        design,
+        orm,
+        bin_dir=fake_bin,
+        uid=uid,
+    )
+
+    assert result.returncode == 0, f"CLI create failed: {result.stderr}"
+
+    if design == "ddd":
+        base_entities_content = (
+            project_dir
+            / "src"
+            / "app"
+            / "infrastructure"
+            / "application"
+            / "entities"
+            / "base.py"
+        ).read_text()
+        entities_content = (
+            project_dir / "src" / "app" / "domain" / "users" / "entities.py"
+        ).read_text()
+        contracts_content = (
+            project_dir
+            / "src"
+            / "app"
+            / "presentation"
+            / "users"
+            / "contracts.py"
+        ).read_text()
+        auth_content = (
+            project_dir / "src" / "app" / "operational" / "authentication.py"
+        ).read_text()
+    else:
+        base_entities_content = (
+            project_dir / "src" / "app" / "schemas.py"
+        ).read_text()
+        entities_content = base_entities_content
+        contracts_content = (
+            project_dir / "src" / "app" / "views" / "contracts.py"
+        ).read_text()
+        auth_content = (
+            project_dir / "src" / "app" / "views" / "authentication.py"
+        ).read_text()
+
+    assert f"PrimaryKey = {expected_primary_key_type}" in base_entities_content
+    assert "id: PrimaryKey" in entities_content
+    assert "user_id: PrimaryKey" in entities_content
+    assert "id: PrimaryKey = Field(description=\"User id\"" in contracts_content
+    assert "return parse_primary_key(str(sub))" in auth_content

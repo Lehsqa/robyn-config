@@ -1,4 +1,9 @@
+from __future__ import annotations
+
 from datetime import datetime
+{% if uid in ("uuidv4", "uuidv7") %}
+import uuid
+{% endif %}
 from typing import Generic, TypeVar
 
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
@@ -6,6 +11,26 @@ from pydantic.alias_generators import to_camel
 
 from .authentication import AuthProvider
 from .constants import Role
+
+{% if uid == "none" %}
+PrimaryKey = int
+
+
+def parse_primary_key(raw_value: str) -> PrimaryKey:
+    return int(raw_value)
+{% elif uid in ("uuidv4", "uuidv7") %}
+PrimaryKey = uuid.UUID
+
+
+def parse_primary_key(raw_value: str) -> PrimaryKey:
+    return uuid.UUID(raw_value)
+{% else %}
+PrimaryKey = str
+
+
+def parse_primary_key(raw_value: str) -> PrimaryKey:
+    return raw_value
+{% endif %}
 
 
 class InternalEntity(BaseModel):
@@ -71,7 +96,7 @@ class UserUncommitted(InternalEntity):
 
 
 class UserFlat(UserUncommitted, TimeStampMixin):
-    id: int
+    id: PrimaryKey
 
 
 class PasswordForgot(InternalEntity):
@@ -79,5 +104,5 @@ class PasswordForgot(InternalEntity):
 
 
 class EmailChange(InternalEntity):
-    user_id: int
+    user_id: PrimaryKey
     email: EmailStr

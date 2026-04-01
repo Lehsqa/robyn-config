@@ -7,6 +7,14 @@ from typing import Mapping, Sequence
 ORM_CHOICES: Sequence[str] = ("sqlalchemy", "tortoise")
 DESIGN_CHOICES: Sequence[str] = ("ddd", "mvc")
 PACKAGE_MANAGER_CHOICES: Sequence[str] = ("uv", "poetry")
+UID_CHOICES: Sequence[str] = (
+    "none",
+    "uuidv4",
+    "uuidv7",
+    "nanoid",
+    "ulid",
+    "sparkid",
+)
 
 LOCK_FILE_BY_MANAGER: Mapping[str, str] = {
     "uv": "uv.lock",
@@ -45,7 +53,11 @@ TEMPLATE_CONFIGS: Mapping[str, dict[str, str]] = {
 
 
 def _get_template_config(
-    design: str, orm_type: str, project_name: str, package_manager: str
+    design: str,
+    orm_type: str,
+    project_name: str,
+    package_manager: str,
+    uid: str = "none",
 ) -> dict[str, str]:
     """Get the template configuration for the given design and ORM type."""
     key = f"{design}:{orm_type}"
@@ -60,4 +72,5 @@ def _get_template_config(
         **config,
         "name": project_name,
         "package_manager": package_manager,
+        "uid": uid,
     }

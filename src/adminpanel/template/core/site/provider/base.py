@@ -237,12 +237,12 @@ class BaseAdminSite(ABC):
     def init_register_auth_models(self) -> None:
         return None
 
-    def _generate_session_token(self, user_id: int) -> str:
+    def _generate_session_token(self, user_id: str) -> str:
         from ..auth import generate_session_token
 
         return generate_session_token(self, user_id)
 
-    def _verify_session_token(self, token: str) -> tuple[bool, int | None]:
+    def _verify_session_token(self, token: str) -> tuple[bool, str | None]:
         from ..auth import verify_session_token
 
         return verify_session_token(self, token)

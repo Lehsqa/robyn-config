@@ -47,15 +47,181 @@ def test_collect_common_items(tmp_path):
 def test_get_template_config():
     """Test that template config is retrieved correctly."""
     config = create_config._get_template_config(
-        "ddd", "sqlalchemy", "mypro", "uv"
+        "ddd", "sqlalchemy", "mypro", "uv", "none"
     )
     assert config["design"] == "ddd"
     assert config["orm"] == "sqlalchemy"
     assert config["name"] == "mypro"
     assert config["package_manager"] == "uv"
+    assert config["uid"] == "none"
 
     with pytest.raises(SystemExit):
-        create_config._get_template_config("invalid", "orm", "proj", "uv")
+        create_config._get_template_config(
+            "invalid", "orm", "proj", "uv", "none"
+        )
+
+
+def test_uid_choices_constant():
+    """Test that UID choices include the supported options in fallback order."""
+    assert "none" in create_config.UID_CHOICES
+    assert "sparkid" in create_config.UID_CHOICES
+    assert create_config.UID_CHOICES[0] == "none"
+
+
+def test_get_template_config_includes_uid():
+    """Test that the template context preserves the selected UID type."""
+    config = create_config._get_template_config(
+        "ddd", "sqlalchemy", "myproj", "uv", "sparkid"
+    )
+    assert config["uid"] == "sparkid"
+
+
+def test_get_template_config_uid_defaults_to_none():
+    """Test that explicit 'none' flows through the template context unchanged."""
+    config = create_config._get_template_config(
+        "ddd", "sqlalchemy", "myproj", "uv", "none"
+    )
+    assert config["uid"] == "none"
+
+
+def test_render_jinja2_in_tree(tmp_path):
+    """_render_jinja2_in_tree renders .jinja2 files and deletes them."""
+    sub_dir = tmp_path / "sub"
+    sub_dir.mkdir()
+    jinja_file = sub_dir / "base.py.jinja2"
+    jinja_file.write_text("id = {{ uid }}")
+
+    create_filesystem._render_jinja2_in_tree(tmp_path, {"uid": "sparkid"})
+
+    rendered = sub_dir / "base.py"
+    assert rendered.exists()
+    assert rendered.read_text() == "id = sparkid"
+    assert not jinja_file.exists()
+
+
+def test_render_jinja2_in_tree_noop_when_no_templates(tmp_path):
+    """_render_jinja2_in_tree is a no-op when no .jinja2 files exist."""
+    regular_file = tmp_path / "file.py"
+    regular_file.write_text("class Foo: pass")
+
+    create_filesystem._render_jinja2_in_tree(tmp_path, {"uid": "none"})
+
+    assert regular_file.exists()
+    assert regular_file.read_text() == "class Foo: pass"
+
+
+def _generated_base_path(destination: Path, design: str) -> Path:
+    if design == "ddd":
+        return (
+            destination
+            / "src"
+            / "app"
+            / "infrastructure"
+            / "database"
+            / "tables"
+            / "base.py"
+        )
+    return destination / "src" / "app" / "models" / "tables" / "base.py"
+
+
+@pytest.mark.parametrize(
+    ("design", "orm", "uid", "expected_snippets"),
+    [
+        ("ddd", "sqlalchemy", "none", ["id: Mapped[int] = mapped_column(primary_key=True)"]),
+        ("ddd", "sqlalchemy", "uuidv4", ["from sqlalchemy import Uuid", "default=uuid.uuid4"]),
+        ("ddd", "sqlalchemy", "uuidv7", ["from sqlalchemy import Uuid", "default=uuid.uuid7"]),
+        ("ddd", "sqlalchemy", "nanoid", ["from nanoid import generate", "String(21)"]),
+        ("ddd", "sqlalchemy", "ulid", ["from ulid import ULID", "String(26)"]),
+        ("ddd", "sqlalchemy", "sparkid", ["from sparkid import generate_id", "default=generate_id"]),
+        ("ddd", "tortoise", "none", ["id = fields.IntField(pk=True)"]),
+        ("ddd", "tortoise", "uuidv4", ["id = fields.UUIDField(pk=True)"]),
+        ("ddd", "tortoise", "uuidv7", ["import uuid", "default=uuid.uuid7"]),
+        ("ddd", "tortoise", "nanoid", ["from nanoid import generate", "max_length=21"]),
+        ("ddd", "tortoise", "ulid", ["from ulid import ULID", "max_length=26"]),
+        ("ddd", "tortoise", "sparkid", ["from sparkid import generate_id", "default=generate_id"]),
+        ("mvc", "sqlalchemy", "sparkid", ["from sparkid import generate_id", "default=generate_id"]),
+        ("mvc", "tortoise", "nanoid", ["from nanoid import generate", "max_length=21"]),
+    ],
+)
+def test_copy_template_renders_uid_base_templates(
+    tmp_path, design, orm, uid, expected_snippets
+):
+    destination = tmp_path / f"{design}-{orm}-{uid}"
+
+    create_filesystem.copy_template(
+        destination,
+        orm,
+        design,
+        "uid-project",
+        "uv",
+        uid,
+    )
+
+    base_file = _generated_base_path(destination, design)
+    content = base_file.read_text()
+
+    assert base_file.exists()
+    for snippet in expected_snippets:
+        assert snippet in content
+    assert not list(destination.rglob("*.jinja2"))
+
+
+@pytest.mark.parametrize(
+    ("package_manager", "uid", "expected_dependency"),
+    [
+        ("uv", "nanoid", 'python-nanoid>=2.0.0'),
+        ("uv", "ulid", 'python-ulid>=3.0.0'),
+        ("uv", "sparkid", 'sparkid>=1.0.0'),
+        ("poetry", "nanoid", 'python-nanoid = ">=2.0.0"'),
+        ("poetry", "ulid", 'python-ulid = ">=3.0.0"'),
+        ("poetry", "sparkid", 'sparkid = ">=1.0.0"'),
+    ],
+)
+def test_copy_template_adds_uid_metadata_and_dependencies(
+    tmp_path, package_manager, uid, expected_dependency
+):
+    destination = tmp_path / f"{package_manager}-{uid}"
+
+    create_filesystem.copy_template(
+        destination,
+        "sqlalchemy",
+        "ddd",
+        "uid-project",
+        package_manager,
+        uid,
+    )
+
+    pyproject_content = (destination / "pyproject.toml").read_text()
+
+    assert f'uid = "{uid}"' in pyproject_content
+    assert expected_dependency in pyproject_content
+
+
+@pytest.mark.parametrize(
+    ("package_manager", "expected_python_floor"),
+    [
+        ("uv", 'requires-python = ">=3.13,<4.0"'),
+        ("poetry", 'python = ">=3.13,<4.0"'),
+    ],
+)
+def test_copy_template_raises_python_floor_for_uuidv7(
+    tmp_path, package_manager, expected_python_floor
+):
+    destination = tmp_path / f"{package_manager}-uuidv7"
+
+    create_filesystem.copy_template(
+        destination,
+        "sqlalchemy",
+        "ddd",
+        "uid-project",
+        package_manager,
+        "uuidv7",
+    )
+
+    pyproject_content = (destination / "pyproject.toml").read_text()
+
+    assert 'uid = "uuidv7"' in pyproject_content
+    assert expected_python_floor in pyproject_content
 
 
 # --- Tests for src/add/utils.py ---
@@ -134,3 +300,54 @@ def test_add_to_all_list(tmp_path):
     assert '"User",' in content
     assert '"Product",' in content
     assert content.count("__all__") == 1
+
+
+@pytest.mark.parametrize(
+    ("design", "uid_line", "expected_uid"),
+    [
+        ("ddd", "uid = 'sparkid'\n", "sparkid"),
+        ("mvc", "", "none"),
+    ],
+)
+def test_add_business_logic_passes_uid_to_template_helpers(
+    monkeypatch, tmp_path, design, uid_line, expected_uid
+):
+    config_lines = [
+        "[tool.robyn-config]",
+        f"design = '{design}'",
+        "orm = 'sqlalchemy'",
+    ]
+    if uid_line:
+        config_lines.append(uid_line.strip())
+    (tmp_path / "pyproject.toml").write_text("\n".join(config_lines) + "\n")
+
+    fake_paths = object()
+    captured: dict[str, str] = {}
+
+    monkeypatch.setattr(
+        add_utils, "_load_add_paths", lambda *_args, **_kwargs: fake_paths
+    )
+    monkeypatch.setattr(
+        add_utils, "_normalize_entity_name", lambda _name: ("product", "Product")
+    )
+
+    def fake_add_templates(
+        _project_path,
+        _paths,
+        _name,
+        _name_capitalized,
+        _orm,
+        uid,
+    ):
+        captured["uid"] = uid
+        return ["created.py"]
+
+    if design == "ddd":
+        monkeypatch.setattr(add_utils, "_add_ddd_templates", fake_add_templates)
+    else:
+        monkeypatch.setattr(add_utils, "_add_mvc_templates", fake_add_templates)
+
+    created_files = add_utils.add_business_logic(tmp_path, "product")
+
+    assert created_files == ["created.py"]
+    assert captured["uid"] == expected_uid

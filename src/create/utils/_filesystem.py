@@ -128,6 +128,16 @@ def _render_template(
     target.write_text(rendered)
 
 
+def _render_jinja2_in_tree(
+    target_dir: Path, context: Mapping[str, str]
+) -> None:
+    """Render and delete all *.jinja2 files found under target_dir."""
+    for jinja_file in list(target_dir.rglob("*.jinja2")):
+        output_file = jinja_file.with_suffix("")
+        _render_template(jinja_file, output_file, context)
+        jinja_file.unlink()
+
+
 def _copy_common_files(
     destination: Path,
     orm_type: str,
@@ -162,7 +172,12 @@ def _copy_common_files(
             shutil.copy2(source, target)
 
 
-def _copy_src_app(destination: Path, orm_type: str, design: str) -> None:
+def _copy_src_app(
+    destination: Path,
+    orm_type: str,
+    design: str,
+    context: Mapping[str, str],
+) -> None:
     """Copy the application source directory to the destination."""
     target_dir = destination / "src" / "app"
     target_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -186,18 +201,22 @@ def _copy_src_app(destination: Path, orm_type: str, design: str) -> None:
     if design == "ddd":
         skip = {infra_dir: set(ORM_CHOICES)}
         copy_tree_with_skip(source_app_dir, target_dir, skip)
+        _render_jinja2_in_tree(target_dir, context)
 
         source_database = infra_dir / orm_type
         target_database = target_dir / "infrastructure" / "database"
         shutil.copytree(source_database, target_database, dirs_exist_ok=True)
+        _render_jinja2_in_tree(target_database, context)
 
     elif design == "mvc":
         skip = {source_app_dir.resolve(): {"models"}}
         copy_tree_with_skip(source_app_dir, target_dir, skip)
+        _render_jinja2_in_tree(target_dir, context)
 
         source_models = models_dir / orm_type
         target_models = target_dir / "models"
         shutil.copytree(source_models, target_models, dirs_exist_ok=True)
+        _render_jinja2_in_tree(target_models, context)
 
 
 def _resolve_compose_file(base: str, extension: str, orm_type: str) -> Path:
@@ -252,12 +271,13 @@ def copy_template(
     design: str,
     project_name: str,
     package_manager: str,
+    uid: str = "none",
 ) -> None:
     """Copy the complete template to the destination directory."""
     context = _get_template_config(
-        design, orm_type, project_name, package_manager
+        design, orm_type, project_name, package_manager, uid
     )
-    _copy_src_app(destination, orm_type, design)
+    _copy_src_app(destination, orm_type, design, context)
     _copy_compose_app(destination, orm_type, context)
     _copy_common_files(destination, orm_type, package_manager, context)
 
