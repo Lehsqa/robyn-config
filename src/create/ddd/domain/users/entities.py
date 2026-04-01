@@ -1,6 +1,10 @@
 from pydantic import EmailStr, field_validator
 
-from ...infrastructure.application import InternalEntity, TimeStampMixin
+from ...infrastructure.application import (
+    InternalEntity,
+    PrimaryKey,
+    TimeStampMixin,
+)
 from ...infrastructure.authentication import AuthProvider
 from .constants import Role
 
@@ -22,7 +26,7 @@ class UserUncommitted(InternalEntity):
 
 
 class UserFlat(UserUncommitted, TimeStampMixin):
-    id: int
+    id: PrimaryKey
 
 
 class PasswordForgot(InternalEntity):
@@ -30,5 +34,5 @@ class PasswordForgot(InternalEntity):
 
 
 class EmailChange(InternalEntity):
-    user_id: int
+    user_id: PrimaryKey
     email: EmailStr

@@ -1,6 +1,10 @@
 """{{ Name }} domain entities."""
 
-from ...infrastructure.application import InternalEntity, TimeStampMixin
+from ...infrastructure.application import (
+    InternalEntity,
+    PrimaryKey,
+    TimeStampMixin,
+)
 
 
 class {{ Name }}Uncommitted(InternalEntity):
@@ -13,4 +17,4 @@ class {{ Name }}Uncommitted(InternalEntity):
 class {{ Name }}Flat({{ Name }}Uncommitted, TimeStampMixin):
     """Full {{ name }} entity with database fields."""
 
-    id: int
+    id: PrimaryKey

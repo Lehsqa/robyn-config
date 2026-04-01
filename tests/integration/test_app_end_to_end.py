@@ -10,43 +10,24 @@ from pathlib import Path
 
 import httpx
 import pytest
+from tests.integration.conftest import ROOT, run_cli_create
 
-ROOT = Path(__file__).resolve().parents[2]
 ACTIVATION_PATTERN = re.compile(r"http://[^/]+/activate/([0-9a-fA-F-]+)")
 APP_BASE_URL = "http://127.0.0.1:8000"
 MAILHOG_API = "http://127.0.0.1:8025/api/v2/messages"
 
 COMBINATIONS = [
-    ("ddd", "sqlalchemy"),
-    ("ddd", "tortoise"),
-    ("mvc", "sqlalchemy"),
-    ("mvc", "tortoise"),
+    pytest.param("ddd", "sqlalchemy", "none", id="ddd-sqlalchemy-none"),
+    pytest.param("ddd", "sqlalchemy", "sparkid", id="ddd-sqlalchemy-sparkid"),
+    pytest.param("ddd", "tortoise", "none", id="ddd-tortoise-none"),
+    pytest.param("ddd", "tortoise", "sparkid", id="ddd-tortoise-sparkid"),
+    pytest.param("mvc", "sqlalchemy", "none", id="mvc-sqlalchemy-none"),
+    pytest.param("mvc", "tortoise", "none", id="mvc-tortoise-none"),
 ]
 ADMIN_USER_ROUTE = "UsersTableAdmin"
 ROLE_ROUTE = "RoleAdmin"
 USER_ROLE_ROUTE = "UserRoleAdmin"
 PRODUCT_ROUTE = "ProductTableAdmin"
-
-
-def run_cli_create(destination: Path, design: str, orm: str) -> None:
-    env = os.environ.copy()
-    env["PYTHONPATH"] = str(ROOT / "src")
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "cli",
-            "create",
-            "integration-app",
-            "--orm",
-            orm,
-            "--design",
-            design,
-            str(destination),
-        ],
-        check=True,
-        env=env,
-    )
 
 
 def run_cli_add(project_path: Path, name: str) -> None:
@@ -268,16 +249,22 @@ def test_wait_for_health_includes_app_logs_on_failure(
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("design,orm", COMBINATIONS)
+@pytest.mark.parametrize("design,orm,uid", COMBINATIONS)
 def test_generate_app_and_run_endpoints(
-    tmp_path: Path, design: str, orm: str
+    tmp_path: Path, design: str, orm: str, uid: str
 ) -> None:
     if shutil.which("docker") is None:
         pytest.skip("Docker is required for this integration test")
 
-    project_dir = tmp_path / "robyn-app"
+    project_dir = tmp_path / f"robyn-app-{design}-{orm}-{uid}"
     shutil.rmtree(project_dir, ignore_errors=True)
-    run_cli_create(project_dir, design=design, orm=orm)
+    run_cli_create(
+        project_dir,
+        design=design,
+        orm=orm,
+        app_name="integration-app",
+        uid=uid,
+    )
     run_cli_add(project_dir, "product")
     run_adminpanel(project_dir)
     run_make_migration(project_dir, design, orm)

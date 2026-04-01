@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator
 
+from ...infrastructure.application import PrimaryKey
 from .entities import UserFlat, UserUncommitted
 
 
@@ -14,7 +15,7 @@ class UsersRepository(ABC):
         """Return every user instance."""
 
     @abstractmethod
-    async def get(self, id_: int) -> UserFlat:
+    async def get(self, id_: PrimaryKey) -> UserFlat:
         """Return a specific user by identifier."""
 
     @abstractmethod

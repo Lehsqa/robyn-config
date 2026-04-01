@@ -5,6 +5,19 @@ from typing import TypeVar
 
 from sqlalchemy import MetaData, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+{% if uid in ("uuidv4", "uuidv7") %}
+import uuid
+from sqlalchemy import Uuid
+{% elif uid == "nanoid" %}
+from sqlalchemy import String
+from nanoid import generate
+{% elif uid == "ulid" %}
+from sqlalchemy import String
+from ulid import ULID
+{% elif uid == "sparkid" %}
+from sqlalchemy import String
+from sparkid import generate_id
+{% endif %}
 
 __all__ = ("Base", "BaseTable", "ConcreteTable")
 
@@ -24,7 +37,19 @@ class Base(DeclarativeBase):
 
 
 class TimestampMixin:
+{% if uid == "uuidv4" %}
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+{% elif uid == "uuidv7" %}
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid7)
+{% elif uid == "nanoid" %}
+    id: Mapped[str] = mapped_column(String(21), primary_key=True, default=generate)
+{% elif uid == "ulid" %}
+    id: Mapped[str] = mapped_column(String(26), primary_key=True, default=lambda: str(ULID()))
+{% elif uid == "sparkid" %}
+    id: Mapped[str] = mapped_column(String(21), primary_key=True, default=generate_id)
+{% else %}
     id: Mapped[int] = mapped_column(primary_key=True)
+{% endif %}
     created_at: Mapped[datetime] = mapped_column(
         default=datetime.utcnow,
         server_default=func.CURRENT_TIMESTAMP(),

@@ -216,6 +216,59 @@ def test_add_command_multiple_entities(tmp_path: Path, design: str, orm: str) ->
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize("design,orm", COMBINATIONS)
+def test_add_command_uid_templates_follow_project_primary_key_type(
+    tmp_path: Path, design: str, orm: str
+) -> None:
+    project_dir = tmp_path / f"{design}-{orm}-sparkid-add"
+    fake_bin = create_fake_package_managers(tmp_path)
+    run_cli_create(
+        project_dir,
+        design=design,
+        orm=orm,
+        bin_dir=fake_bin,
+        uid="sparkid",
+    )
+    run_cli_add(project_dir, "product")
+
+    if design == "ddd":
+        entity_content = (
+            project_dir
+            / "src"
+            / "app"
+            / "domain"
+            / "product"
+            / "entities.py"
+        ).read_text()
+        contracts_content = (
+            project_dir
+            / "src"
+            / "app"
+            / "presentation"
+            / "product"
+            / "contracts.py"
+        ).read_text()
+        rest_content = (
+            project_dir
+            / "src"
+            / "app"
+            / "presentation"
+            / "product"
+            / "rest.py"
+        ).read_text()
+    else:
+        entity_content = (
+            project_dir / "src" / "app" / "views" / "product.py"
+        ).read_text()
+        contracts_content = entity_content
+        rest_content = entity_content
+
+    assert "id: PrimaryKey" in entity_content
+    assert "id: PrimaryKey = Field(description=\"Product ID\")" in contracts_content
+    assert "id_ = parse_primary_key(request.path_params[\"id\"])" in rest_content
+
+
+@pytest.mark.integration
 def test_add_command_fails_without_robyn_config(tmp_path: Path) -> None:
     """Test that add command fails if pyproject.toml doesn't have robyn-config section."""
     project_dir = tmp_path / "non-robyn-project"

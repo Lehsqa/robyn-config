@@ -8,7 +8,11 @@ from pydantic import EmailStr
 from ..config import settings
 from ..domain.users import EmailChange, UserFlat
 from ..domain.users import services as users_services
-from ..infrastructure.application import NotFoundError, UnprocessableError
+from ..infrastructure.application import (
+    NotFoundError,
+    PrimaryKey,
+    UnprocessableError,
+)
 from ..infrastructure.authentication import AuthProvider, pwd_context
 from ..infrastructure.cache import CacheRepository
 from ..infrastructure.database import transaction
@@ -80,7 +84,7 @@ async def get_by_login(login: str) -> UserFlat:
         return await InfrastructureUsersRepository().get_by_login(login=login)
 
 
-async def get(user_id: int) -> UserFlat:
+async def get(user_id: PrimaryKey) -> UserFlat:
     async with transaction():
         return await InfrastructureUsersRepository().get(id_=user_id)
 

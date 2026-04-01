@@ -9,6 +9,7 @@ from ._config import (
     PACKAGE_MANAGER_CHOICES,
     PACKAGE_MANAGER_DOWNLOAD_URLS,
     TEMPLATE_CONFIGS,
+    UID_CHOICES,
 )
 from ._filesystem import (
     collect_existing_items,
@@ -29,6 +30,7 @@ __all__ = [
     "PACKAGE_MANAGER_CHOICES",
     "PACKAGE_MANAGER_DOWNLOAD_URLS",
     "TEMPLATE_CONFIGS",
+    "UID_CHOICES",
     "apply_package_manager",
     "collect_existing_items",
     "copy_template",

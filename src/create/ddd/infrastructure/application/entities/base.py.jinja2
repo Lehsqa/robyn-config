@@ -1,9 +1,34 @@
 """Base entities used across the Robyn app."""
 
+from __future__ import annotations
+
+{% if uid in ("uuidv4", "uuidv7") %}
+import uuid
+{% endif %}
 from typing import TypeVar
 
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel, to_snake
+
+{% if uid == "none" %}
+PrimaryKey = int
+
+
+def parse_primary_key(raw_value: str) -> PrimaryKey:
+    return int(raw_value)
+{% elif uid in ("uuidv4", "uuidv7") %}
+PrimaryKey = uuid.UUID
+
+
+def parse_primary_key(raw_value: str) -> PrimaryKey:
+    return uuid.UUID(raw_value)
+{% else %}
+PrimaryKey = str
+
+
+def parse_primary_key(raw_value: str) -> PrimaryKey:
+    return raw_value
+{% endif %}
 
 
 class InternalEntity(BaseModel):

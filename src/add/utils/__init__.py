@@ -75,16 +75,27 @@ def add_business_logic(project_path: Path, name: str) -> list[str]:
     """Add business logic templates to an existing project."""
     config = read_project_config(project_path)
     design, orm = _extract_design_orm(config)
+    uid = config.get("uid", "none")
     add_paths = _load_add_paths(project_path, design, config)
     name_lower, name_capitalized = _normalize_entity_name(name)
 
     if design == "ddd":
         return _add_ddd_templates(
-            project_path, add_paths, name_lower, name_capitalized, orm
+            project_path,
+            add_paths,
+            name_lower,
+            name_capitalized,
+            orm,
+            uid,
         )
     elif design == "mvc":
         return _add_mvc_templates(
-            project_path, add_paths, name_lower, name_capitalized, orm
+            project_path,
+            add_paths,
+            name_lower,
+            name_capitalized,
+            orm,
+            uid,
         )
     else:
         raise ValueError(f"Unsupported design pattern: {design}")

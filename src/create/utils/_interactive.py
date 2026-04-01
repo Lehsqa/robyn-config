@@ -5,7 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Sequence
 
-from ._config import DESIGN_CHOICES, ORM_CHOICES, PACKAGE_MANAGER_CHOICES
+from ._config import (
+    DESIGN_CHOICES,
+    ORM_CHOICES,
+    PACKAGE_MANAGER_CHOICES,
+    UID_CHOICES,
+)
 
 TEXTUAL_IMPORT_ERROR: ModuleNotFoundError | None = None
 
@@ -37,6 +42,7 @@ class InteractiveCreateConfig:
     orm: str
     design: str
     package_manager: str
+    uid: str
 
 
 if TEXTUAL_AVAILABLE:
@@ -156,6 +162,7 @@ if TEXTUAL_AVAILABLE:
                 package_manager=_pick_choice(
                     defaults.package_manager, PACKAGE_MANAGER_CHOICES
                 ),
+                uid=_pick_choice(defaults.uid, UID_CHOICES),
             )
 
         def compose(self) -> ComposeResult:
@@ -211,6 +218,16 @@ if TEXTUAL_AVAILABLE:
                                     allow_blank=False,
                                     id="design",
                                 ),
+                                Label("UID primary key"),
+                                Select(
+                                    [
+                                        (choice, choice)
+                                        for choice in UID_CHOICES
+                                    ],
+                                    value=self.defaults.uid,
+                                    allow_blank=False,
+                                    id="uid",
+                                ),
                                 classes="column",
                             ),
                             id="form-grid",
@@ -246,7 +263,12 @@ if TEXTUAL_AVAILABLE:
                 self._clear_error()
 
         def on_select_changed(self, event: Select.Changed) -> None:
-            if event.select.id in {"orm", "design", "package_manager"}:
+            if event.select.id in {
+                "orm",
+                "design",
+                "package_manager",
+                "uid",
+            }:
                 self._clear_error()
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -274,12 +296,14 @@ if TEXTUAL_AVAILABLE:
             package_manager = str(
                 self.query_one("#package_manager", Select).value
             )
+            uid = str(self.query_one("#uid", Select).value)
             return InteractiveCreateConfig(
                 name=name,
                 destination=destination,
                 orm=orm,
                 design=design,
                 package_manager=package_manager,
+                uid=uid,
             )
 
         def _show_error(self, message: str) -> None:

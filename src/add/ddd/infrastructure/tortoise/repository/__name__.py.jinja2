@@ -4,6 +4,7 @@ from typing import Any, AsyncGenerator
 
 from ....domain.{{ name }} import {{ Name }}Repository as {{ Name }}RepositoryInterface
 from ....domain.{{ name }}.entities import {{ Name }}Flat, {{ Name }}Uncommitted
+from ....infrastructure.application import PrimaryKey
 from .base import BaseRepository
 from ..tables import {{ Name }}Table
 
@@ -15,7 +16,7 @@ class {{ Name }}Repository(BaseRepository[{{ Name }}Table], {{ Name }}Repository
         async for instance in self._all():
             yield {{ Name }}Flat.model_validate(instance)
 
-    async def get(self, id_: int) -> {{ Name }}Flat:
+    async def get(self, id_: PrimaryKey) -> {{ Name }}Flat:
         instance = await self._get(key="id", value=id_)
         return {{ Name }}Flat.model_validate(instance)
 
@@ -29,5 +30,5 @@ class {{ Name }}Repository(BaseRepository[{{ Name }}Table], {{ Name }}Repository
         schema = await self._update(attr, value, payload)
         return {{ Name }}Flat.model_validate(schema)
 
-    async def delete(self, id_: int) -> None:
+    async def delete(self, id_: PrimaryKey) -> None:
         await super().delete(id_=id_)

@@ -14,7 +14,9 @@ from ..domain.users import UserFlat
 from ..infrastructure.application import (
     AuthenticationError,
     NotFoundError,
+    PrimaryKey,
     error_response,
+    parse_primary_key,
 )
 from ..infrastructure.authentication import pwd_context
 from ..infrastructure.database import transaction
@@ -76,7 +78,7 @@ def decode_access_token(token: str) -> Dict[str, Any]:
     return payload
 
 
-def require_user_id(request: Request) -> int:
+def require_user_id(request: Request) -> PrimaryKey:
     identity: Identity | None = getattr(request, "identity", None)
     if identity is None:
         raise AuthenticationError(message="Authentication required")
@@ -86,7 +88,7 @@ def require_user_id(request: Request) -> int:
         raise AuthenticationError(message="Subject claim missing")
 
     try:
-        return int(sub)
+        return parse_primary_key(str(sub))
     except (TypeError, ValueError) as exc:
         raise AuthenticationError(message="Subject claim invalid") from exc
 

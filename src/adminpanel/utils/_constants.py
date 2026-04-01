@@ -72,8 +72,8 @@ class UserRole(Base):
     __tablename__ = "robyn_admin_user_roles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer,
+    user_id: Mapped[object] = mapped_column(
+        UsersTable.__table__.c.id.type.copy(),
         ForeignKey(f"{UsersTable.__tablename__}.id", ondelete="CASCADE"),
         index=True,
     )
@@ -141,9 +141,9 @@ class UserRole(Base):
     __tablename__ = "robyn_admin_user_roles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("users.id", ondelete="CASCADE"),
+    user_id: Mapped[object] = mapped_column(
+        UsersTable.__table__.c.id.type.copy(),
+        ForeignKey(f"{UsersTable.__tablename__}.id", ondelete="CASCADE"),
         index=True,
     )
     role_id: Mapped[int] = mapped_column(

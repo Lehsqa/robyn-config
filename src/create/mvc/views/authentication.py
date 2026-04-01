@@ -6,12 +6,12 @@ from robyn.authentication import AuthenticationHandler, BearerGetter, Identity
 from ..authentication import pwd_context
 from ..config import settings
 from ..models import UsersRepository, transaction
-from ..schemas import Response
+from ..schemas import PrimaryKey, Response, parse_primary_key
 from ..utils import AuthenticationError, NotFoundError, json_response
 from .contracts import LoginRequestBody, TokenInfo, TokenResponse
 
 
-def create_access_token(user_id: int, email: str, username: str) -> str:
+def create_access_token(user_id: PrimaryKey, email: str, username: str) -> str:
     now = datetime.now(timezone.utc)
     ttl = settings.authentication.access_token.ttl
     exp = now + timedelta(seconds=ttl)
@@ -43,7 +43,7 @@ def decode_access_token(token: str) -> dict:
     return payload
 
 
-def require_user_id(request: Request) -> int:
+def require_user_id(request: Request) -> PrimaryKey:
     identity: Identity | None = getattr(request, "identity", None)
     if identity is None:
         raise AuthenticationError(message="Authentication required")
@@ -53,7 +53,7 @@ def require_user_id(request: Request) -> int:
         raise AuthenticationError(message="Subject claim missing")
 
     try:
-        return int(sub)
+        return parse_primary_key(str(sub))
     except (TypeError, ValueError) as exc:
         raise AuthenticationError(message="Subject claim invalid") from exc
 

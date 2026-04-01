@@ -5,6 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Any, AsyncGenerator
 
+from ...infrastructure.application import PrimaryKey
 from .entities import {{ Name }}Flat, {{ Name }}Uncommitted
 
 
@@ -16,7 +17,7 @@ class {{ Name }}Repository(ABC):
         """Return all {{ name }} instances."""
 
     @abstractmethod
-    async def get(self, id_: int) -> {{ Name }}Flat:
+    async def get(self, id_: PrimaryKey) -> {{ Name }}Flat:
         """Return a specific {{ name }} by identifier."""
 
     @abstractmethod
@@ -30,5 +31,5 @@ class {{ Name }}Repository(ABC):
         """Update an existing {{ name }}."""
 
     @abstractmethod
-    async def delete(self, id_: int) -> None:
+    async def delete(self, id_: PrimaryKey) -> None:
         """Delete a {{ name }} by identifier."""
