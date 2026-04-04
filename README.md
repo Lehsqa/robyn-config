@@ -94,6 +94,33 @@ This will:
 - Enable CRUD operations for discovered model tables.
 - Bootstrap admin authentication with a default superadmin user (configurable via `-u/--username` and `-p/--password`).
 
+### 📊 Add Monitoring
+
+Set up a full observability stack for an existing project:
+
+```bash
+cd my-service
+robyn-config monitoring
+```
+
+This will:
+- Add a `/metrics` endpoint to your Robyn app exposing Prometheus metrics.
+- Install `prometheus-client` into your project dependencies.
+- Generate a `docker-compose.monitoring.yml` that starts **Grafana Alloy**, **Loki**, **Prometheus**, and **Grafana**.
+- Configure Alloy to collect container logs from the `app` service and scrape the `/metrics` endpoint every 15 seconds.
+- Provision two Grafana dashboards out of the box:
+  - **Logs** — live log stream with search bar and stdout/stderr filter.
+  - **Metrics** — CPU, memory, open file descriptors, GC activity, and process info.
+
+Start the monitoring stack alongside your app:
+
+```bash
+docker compose up -d
+docker compose -f docker-compose.monitoring.yml up -d
+```
+
+Grafana is available at [http://localhost:3000](http://localhost:3000) (anonymous admin access enabled by default).
+
 ### 🏃 CLI Options
 
 ```
@@ -103,9 +130,10 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  add     Add new business logic to an existing robyn-config project.
+  add         Add new business logic to an existing robyn-config project.
   adminpanel  Add admin panel scaffolding to an existing robyn-config project.
-  create  Copy the template into destination with specific configurations.
+  create      Copy the template into destination with specific configurations.
+  monitoring  Add observability stack to an existing robyn-config project.
 ```
 
 **`create` command options:**
@@ -131,6 +159,10 @@ Commands:
 - `-p`, `--password`: Default superadmin password injected into generated bootstrap code. Defaults to `admin`.
 - `project_path`: Path to the project root. Defaults to current directory.
 
+**`monitoring` command options:**
+
+- `project_path`: Path to the project root. Defaults to current directory.
+
 ## 🐍 Python Version Support
 
 `robyn-config` is compatible with the following Python versions:
@@ -147,7 +179,8 @@ Please make sure you have the correct version of Python installed before startin
 - **ORM Choice**: Seamless integration with **SQLAlchemy** or **Tortoise ORM**.
 - **Package Manager choice**: Lock/install via **uv** (default) or **poetry**, with fresh lock files generated in quiet mode.
 - **Admin Panel Scaffolding**: `adminpanel` builds an ORM-aware admin module, auto-wires routes, and supports custom superadmin credentials.
-- **Resilient operations**: `create` cleans up generated files if it fails; `add` and `adminpanel` roll back with a temporary project backup on errors.
+- **Observability Stack**: `monitoring` injects a `/metrics` endpoint and provisions Alloy + Loki + Prometheus + Grafana with pre-built dashboards for logs and metrics.
+- **Resilient operations**: `create` cleans up generated files if it fails; `add`, `adminpanel`, and `monitoring` roll back with a temporary project backup on errors.
 - **Production Ready**: Includes Docker, Docker Compose, and optimized configurations out of the box.
 - **DevEx**: Pre-configured with `ruff`, `pytest`, `black`, and `mypy` for a superior development experience.
 - **AI Agent Skills**: Installable skills support for AI agents to streamline specialized workflows.
