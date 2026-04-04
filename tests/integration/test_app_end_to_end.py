@@ -1,6 +1,5 @@
 import os
 import quopri
-import re
 import shutil
 import subprocess
 import sys
@@ -12,22 +11,16 @@ import httpx
 import pytest
 from tests.integration.conftest import ROOT, run_cli_create
 
-ACTIVATION_PATTERN = re.compile(r"http://[^/]+/activate/([0-9a-fA-F-]+)")
-APP_BASE_URL = "http://127.0.0.1:8000"
-MAILHOG_API = "http://127.0.0.1:8025/api/v2/messages"
-
-COMBINATIONS = [
-    pytest.param("ddd", "sqlalchemy", "none", id="ddd-sqlalchemy-none"),
-    pytest.param("ddd", "sqlalchemy", "sparkid", id="ddd-sqlalchemy-sparkid"),
-    pytest.param("ddd", "tortoise", "none", id="ddd-tortoise-none"),
-    pytest.param("ddd", "tortoise", "sparkid", id="ddd-tortoise-sparkid"),
-    pytest.param("mvc", "sqlalchemy", "none", id="mvc-sqlalchemy-none"),
-    pytest.param("mvc", "tortoise", "none", id="mvc-tortoise-none"),
-]
-ADMIN_USER_ROUTE = "UsersTableAdmin"
-ROLE_ROUTE = "RoleAdmin"
-USER_ROLE_ROUTE = "UserRoleAdmin"
-PRODUCT_ROUTE = "ProductTableAdmin"
+from tests.integration.conftest import (
+    APP_COMBINATIONS,
+    APP_BASE_URL,
+    MAILHOG_API,
+    ACTIVATION_PATTERN,
+    ADMIN_USER_ROUTE,
+    ROLE_ROUTE,
+    USER_ROLE_ROUTE,
+    PRODUCT_ROUTE,
+)
 
 
 def run_cli_add(project_path: Path, name: str) -> None:
@@ -249,7 +242,7 @@ def test_wait_for_health_includes_app_logs_on_failure(
 
 
 @pytest.mark.integration
-@pytest.mark.parametrize("design,orm,uid", COMBINATIONS)
+@pytest.mark.parametrize("design,orm,uid", APP_COMBINATIONS)
 def test_generate_app_and_run_endpoints(
     tmp_path: Path, design: str, orm: str, uid: str
 ) -> None:

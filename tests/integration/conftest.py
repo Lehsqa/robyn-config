@@ -3,17 +3,35 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-COMBINATIONS = [
+COMBINATIONS = (
     ("ddd", "sqlalchemy"),
     ("ddd", "tortoise"),
     ("mvc", "sqlalchemy"),
     ("mvc", "tortoise"),
-]
+)
+
+ACTIVATION_PATTERN = re.compile(r"http://[^/]+/activate/([0-9a-fA-F-]+)")
+APP_BASE_URL = "http://127.0.0.1:8000"
+MAILHOG_API = "http://127.0.0.1:8025/api/v2/messages"
+
+APP_COMBINATIONS = (
+    ("ddd", "sqlalchemy", "none"),
+    ("ddd", "sqlalchemy", "sparkid"),
+    ("ddd", "tortoise", "none"),
+    ("ddd", "tortoise", "sparkid"),
+    ("mvc", "sqlalchemy", "none"),
+    ("mvc", "tortoise", "none"),
+)
+ADMIN_USER_ROUTE = "UsersTableAdmin"
+ROLE_ROUTE = "RoleAdmin"
+USER_ROLE_ROUTE = "UserRoleAdmin"
+PRODUCT_ROUTE = "ProductTableAdmin"
 
 
 def _write_fake_manager(bin_dir: Path, name: str, lock_name: str) -> None:

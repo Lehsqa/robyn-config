@@ -1,0 +1,146 @@
+{
+  "id": null,
+  "uid": "robyn-app-logs",
+  "title": "Application Logs",
+  "tags": [
+    "logs",
+    "loki",
+    "robyn"
+  ],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "search",
+        "type": "textbox",
+        "label": "Search logs",
+        "description": "Filter log lines by text (supports regex)",
+        "current": {
+          "value": ""
+        },
+        "hide": 0
+      },
+      {
+        "name": "stream",
+        "type": "custom",
+        "label": "Stream",
+        "hide": 0,
+        "options": [
+          {
+            "text": "All",
+            "value": ".*",
+            "selected": true
+          },
+          {
+            "text": "stdout",
+            "value": "stdout",
+            "selected": false
+          },
+          {
+            "text": "stderr",
+            "value": "stderr",
+            "selected": false
+          }
+        ],
+        "current": {
+          "text": "All",
+          "value": ".*"
+        },
+        "query": "All,stdout,stderr"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Log Rate",
+      "description": "Number of log lines per second emitted by the app container",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "logs/s",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 10,
+            "gradientMode": "none"
+          }
+        }
+      },
+      "options": {
+        "tooltip": {
+          "mode": "multi"
+        },
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "sum(rate({job=\"app\"}[$__interval]))",
+          "legendFormat": "logs/s"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Logs",
+      "description": "Use the Search variable above to filter by text or regex",
+      "type": "logs",
+      "gridPos": {
+        "h": 18,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "expr": "{job=\"app\"} |~ \"${search}\"",
+          "legendFormat": ""
+        }
+      ]
+    }
+  ]
+}

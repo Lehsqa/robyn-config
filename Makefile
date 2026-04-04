@@ -35,13 +35,16 @@ tests.create:
 	robyn-config create service_test --orm sqlalchemy --design ddd ./service_test --uid sparkid
 	robyn-config add product ./service_test
 	robyn-config adminpanel ./service_test
+	robyn-config monitoring ./service_test
 	cd service_test && make makemigration
 	cd service_test && cp .env.example .env
 	cd service_test && docker compose up -d
+	cd service_test && docker compose -f docker-compose.monitoring.yml up -d
 
 .PHONY: tests.delete  # delete service
 tests.delete:
 	cd service_test && docker compose down -v
+	cd service_test && docker compose -f docker-compose.monitoring.yml down -v
 	rm -rf service_test
 
 # *************************************************
