@@ -1,0 +1,78 @@
+version: "3.9"
+
+services:
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - loki-data:/loki
+
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-remote-write-receiver
+    healthcheck:
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - ./compose/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    restart: unless-stopped
+    ports:
+      - "12345:12345"
+    volumes:
+      - ./compose/monitoring/alloy/config.alloy:/etc/alloy/config.alloy
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
+    depends_on:
+      loki:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./compose/monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+      - ./compose/monitoring/grafana/provisioning:/etc/grafana/provisioning/dashboards
+      - ./compose/monitoring/grafana/dashboards:/var/lib/grafana/dashboards
+    depends_on:
+      loki:
+        condition: service_healthy
+      prometheus:
+        condition: service_healthy
+
+volumes:
+  loki-data:
+  prometheus-data:
+  grafana-data:

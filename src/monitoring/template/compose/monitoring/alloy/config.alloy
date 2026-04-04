@@ -1,0 +1,57 @@
+// Collect logs from the 'app' Docker container and forward to Loki.
+
+discovery.docker "app_container" {
+  host = "unix:///var/run/docker.sock"
+
+  filter {
+    name   = "name"
+    values = ["app"]
+  }
+}
+
+discovery.relabel "app_container" {
+  targets = discovery.docker.app_container.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/?(.*)"
+    target_label  = "container"
+  }
+
+  rule {
+    source_labels = ["__meta_docker_container_log_stream"]
+    target_label  = "stream"
+  }
+}
+
+loki.source.docker "app_logs" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.app_container.output
+  labels     = { job = "app" }
+  forward_to = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+// Scrape Prometheus metrics from the 'app' container and forward via remote_write.
+
+prometheus.scrape "app_metrics" {
+  targets = [{
+    __address__ = "app:8000",
+  }]
+
+  job_name        = "app"
+  metrics_path    = "/metrics"
+  scrape_interval = "15s"
+  forward_to      = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+  endpoint {
+    url = "http://prometheus:9090/api/v1/write"
+  }
+}

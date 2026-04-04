@@ -13,6 +13,7 @@ import click
 from add import add_business_logic
 from add import read_project_config
 from adminpanel import add_adminpanel
+from monitoring import add_monitoring
 from create import (
     DESIGN_CHOICES,
     InteractiveCreateConfig,
@@ -345,6 +346,27 @@ def adminpanel(
                 "Successfully added admin panel scaffolding!",
                 fg="green",
             )
+        )
+    except Exception as e:
+        raise click.ClickException(click.style(str(e), fg="red")) from e
+
+
+@cli.command("monitoring")
+@click.argument(
+    "project_path",
+    type=click.Path(
+        exists=True, file_okay=False, dir_okay=True, path_type=Path
+    ),
+    default=".",
+)
+def monitoring(project_path: Path) -> None:
+    """Add Alloy + Loki + Grafana monitoring pipeline to an existing robyn-config project."""
+    project_path = project_path.resolve()
+    try:
+        with project_backup(project_path):
+            add_monitoring(project_path)
+        click.echo(
+            click.style("Successfully added monitoring pipeline!", fg="green")
         )
     except Exception as e:
         raise click.ClickException(click.style(str(e), fg="red")) from e
