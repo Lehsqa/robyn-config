@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Annotated, Generic, TypeVar
 
 from pydantic import Field
 
@@ -10,4 +10,4 @@ _CacheEntryInstance = TypeVar("_CacheEntryInstance", bound=InternalEntity)
 
 class CacheEntry(InternalEntity, Generic[_CacheEntryInstance]):
     instance: _CacheEntryInstance
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: Annotated[datetime, Field(default_factory=datetime.utcnow)]

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -53,9 +53,10 @@ class SiteRuntimeConfig(BaseModel):
     generate_schemas: bool = False
     orm: str = ""
     max_recent_actions: int = 100
-    default_settings: AdminSettingsConfig = Field(
-        default_factory=AdminSettingsConfig
-    )
+    default_settings: Annotated[
+        AdminSettingsConfig,
+        Field(default_factory=AdminSettingsConfig),
+    ]
 
 
 _MODEL_ATTR_PATHS: dict[str, tuple[tuple[str, ...], ...]] = {

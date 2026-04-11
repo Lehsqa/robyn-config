@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Generic, TypeVar, get_args
+from typing import Annotated, Any, Generic, TypeVar, get_args
 
 from pydantic import Field
 from redis.asyncio import Redis
@@ -25,7 +25,7 @@ _CacheEntryInstance = TypeVar("_CacheEntryInstance", bound=InternalEntity)
 
 class CacheEntry(InternalEntity, Generic[_CacheEntryInstance]):
     instance: _CacheEntryInstance
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: Annotated[datetime, Field(default_factory=datetime.utcnow)]
 
 
 class CacheRepository(Generic[_CacheEntryInstance]):

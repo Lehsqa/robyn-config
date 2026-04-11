@@ -246,5 +246,8 @@ def test_create_user_templates_adapt_to_uid_type(
     assert f"PrimaryKey = {expected_primary_key_type}" in base_entities_content
     assert "id: PrimaryKey" in entities_content
     assert "user_id: PrimaryKey" in entities_content
-    assert "id: PrimaryKey = Field(description=\"User id\"" in contracts_content
+    assert (
+        'id: Annotated[PrimaryKey, Field(description="User id")]'
+        in contracts_content
+    )
     assert "return parse_primary_key(str(sub))" in auth_content

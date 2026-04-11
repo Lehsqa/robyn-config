@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -21,15 +21,15 @@ class _AdminPanelConfig(BaseModel):
     allow_export: bool = True
     allow_import: bool = False
     per_page: int = 10
-    default_ordering: list[str] = Field(default_factory=list)
-    import_fields: list[str] = Field(default_factory=list)
+    default_ordering: Annotated[list[str], Field(default_factory=list)]
+    import_fields: Annotated[list[str], Field(default_factory=list)]
     add_form_title: str | None = None
     edit_form_title: str | None = None
-    table_fields: list[TableField] = Field(default_factory=list)
-    form_fields: list[FormField] = Field(default_factory=list)
-    add_form_fields: list[FormField] = Field(default_factory=list)
-    search_fields: list[SearchField] = Field(default_factory=list)
-    filter_fields: list[FilterField] = Field(default_factory=list)
+    table_fields: Annotated[list[TableField], Field(default_factory=list)]
+    form_fields: Annotated[list[FormField], Field(default_factory=list)]
+    add_form_fields: Annotated[list[FormField], Field(default_factory=list)]
+    search_fields: Annotated[list[SearchField], Field(default_factory=list)]
+    filter_fields: Annotated[list[FilterField], Field(default_factory=list)]
     menu_group: str = "System Management"
 
     @classmethod
