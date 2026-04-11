@@ -263,8 +263,14 @@ def test_add_command_uid_templates_follow_project_primary_key_type(
         contracts_content = entity_content
         rest_content = entity_content
 
-    assert "id: PrimaryKey" in entity_content
-    assert "id: PrimaryKey = Field(description=\"Product ID\")" in contracts_content
+    if design == "ddd":
+        assert "id: PrimaryKey" in entity_content
+    else:
+        assert "id: Annotated[PrimaryKey" in entity_content
+    assert (
+        'id: Annotated[PrimaryKey, Field(description="Product ID")]'
+        in contracts_content
+    )
     assert "id_ = parse_primary_key(request.path_params[\"id\"])" in rest_content
 
 

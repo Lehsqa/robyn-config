@@ -1,4 +1,5 @@
 import uuid
+from typing import Annotated
 
 from app.domain.authentication import validators as auth_validators
 from app.infrastructure.application import (
@@ -10,23 +11,32 @@ from pydantic import EmailStr, Field, field_validator, model_validator
 
 
 class _BaseUser(PublicEntity):
-    username: str = Field(
-        description="User username",
-        examples=["john"],
-        min_length=1,
-        max_length=255,
-    )
-    email: EmailStr = Field(
-        description="User email",
-        examples=["john@email.com"],
-    )
+    username: Annotated[
+        str,
+        Field(
+            description="User username",
+            examples=["john"],
+            min_length=1,
+            max_length=255,
+        ),
+    ]
+    email: Annotated[
+        EmailStr,
+        Field(
+            description="User email",
+            examples=["john@email.com"],
+        ),
+    ]
 
 
 class UserCreateBody(_BaseUser):
-    password: str = Field(
-        description="User password",
-        examples=["@Dm1n#LKJ"],
-    )
+    password: Annotated[
+        str,
+        Field(
+            description="User password",
+            examples=["@Dm1n#LKJ"],
+        ),
+    ]
 
     @field_validator("password", mode="before")
     @classmethod
@@ -47,24 +57,30 @@ class UserCreateBody(_BaseUser):
 
 
 class UserExternalBody(_BaseUser):
-    role: int = Field(
-        description="User role",
-        examples=[1],
-        default=1,
-    )
-    auth_provider: str | None = Field(
-        default=None,
-        description="External auth provider identifier",
-    )
+    role: Annotated[
+        int,
+        Field(
+            description="User role",
+            examples=[1],
+            default=1,
+        ),
+    ]
+    auth_provider: Annotated[
+        str | None,
+        Field(
+            default=None,
+            description="External auth provider identifier",
+        ),
+    ]
 
 
 class ActivationBody(PublicEntity):
-    key: uuid.UUID = Field(description="Activation key from email")
+    key: Annotated[uuid.UUID, Field(description="Activation key from email")]
 
 
 class PasswordChangeBody(PublicEntity):
-    old_password: str = Field(description="User's current password")
-    new_password: str = Field(description="A new user's password")
+    old_password: Annotated[str, Field(description="User's current password")]
+    new_password: Annotated[str, Field(description="A new user's password")]
 
     @field_validator("new_password", mode="before")
     @classmethod
@@ -73,16 +89,18 @@ class PasswordChangeBody(PublicEntity):
 
 
 class PasswordResetRequestBody(PublicEntity):
-    email: EmailStr = Field(
-        description="User email", examples=["john@email.com"]
-    )
+    email: Annotated[
+        EmailStr,
+        Field(description="User email", examples=["john@email.com"]),
+    ]
 
 
 class PasswordResetConfirmBody(PublicEntity):
-    key: uuid.UUID = Field(
-        description="Password reset key that is taken from the email"
-    )
-    password: str = Field(description="A new user's password")
+    key: Annotated[
+        uuid.UUID,
+        Field(description="Password reset key that is taken from the email"),
+    ]
+    password: Annotated[str, Field(description="A new user's password")]
 
     @field_validator("password", mode="before")
     @classmethod
@@ -91,23 +109,33 @@ class PasswordResetConfirmBody(PublicEntity):
 
 
 class EmailChangeRequestBody(PublicEntity):
-    email: EmailStr = Field(description="A new email you want to change to")
+    email: Annotated[
+        EmailStr, Field(description="A new email you want to change to")
+    ]
 
 
 class EmailChangeConfirmBody(PublicEntity):
-    key: uuid.UUID = Field(
-        description="Email change key that is taken from the email"
-    )
+    key: Annotated[
+        uuid.UUID,
+        Field(description="Email change key that is taken from the email"),
+    ]
 
 
 class UserPublic(_BaseUser):
     """The public user's data model."""
 
-    id: PrimaryKey = Field(description="User id")
-    is_active: bool = Field(
-        description="Whether the user activated the account",
-        examples=[True],
-    )
-    role: int = Field(
-        description="User role. Possible values: [1,2,3]", examples=[2]
-    )
+    id: Annotated[PrimaryKey, Field(description="User id")]
+    is_active: Annotated[
+        bool,
+        Field(
+            description="Whether the user activated the account",
+            examples=[True],
+        ),
+    ]
+    role: Annotated[
+        int,
+        Field(
+            description="User role. Possible values: [1,2,3]",
+            examples=[2],
+        ),
+    ]

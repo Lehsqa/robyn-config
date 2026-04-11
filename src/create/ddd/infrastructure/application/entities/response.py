@@ -1,6 +1,6 @@
 from collections.abc import Mapping
 from enum import StrEnum
-from typing import Any, Generic
+from typing import Annotated, Any, Generic
 
 from pydantic import Field, conlist, field_validator
 
@@ -47,13 +47,17 @@ class ErrorType(StrEnum):
 class ErrorDetail(PublicEntity):
     """Error detail model."""
 
-    path: list[str] = Field(
-        description="The path to the field that raised the error",
-        default_factory=list,
-    )
-    type: ErrorType = Field(
-        description="The error type", default=ErrorType.INTERNAL
-    )
+    path: Annotated[
+        list[str],
+        Field(
+            description="The path to the field that raised the error",
+            default_factory=list,
+        ),
+    ]
+    type: Annotated[
+        ErrorType,
+        Field(description="The error type", default=ErrorType.INTERNAL),
+    ]
 
     @field_validator("type", mode="before")
     def type_validator(cls, value: str) -> str:
@@ -68,11 +72,16 @@ class ErrorDetail(PublicEntity):
 class ErrorResponse(PublicEntity):
     """Error response model."""
 
-    message: str = Field(description="This field represent the message")
-    detail: ErrorDetail = Field(
-        description="This field represents error details",
-        default_factory=ErrorDetail,
-    )
+    message: Annotated[
+        str, Field(description="This field represent the message")
+    ]
+    detail: Annotated[
+        ErrorDetail,
+        Field(
+            description="This field represents error details",
+            default_factory=ErrorDetail,
+        ),
+    ]
 
 
 class ErrorResponseMulti(PublicEntity):
