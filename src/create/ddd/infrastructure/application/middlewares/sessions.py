@@ -8,7 +8,7 @@ import json
 from base64 import urlsafe_b64decode, urlsafe_b64encode
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Mapping, MutableMapping, cast
+from typing import Any, MutableMapping
 
 from robyn import Request, Response, Robyn
 
@@ -131,7 +131,10 @@ def register(app: Robyn) -> None:
         elif headers_source is None:
             headers = {}
         else:
-            headers = dict(cast(Mapping[str, Any], headers_source).items())
+            try:
+                headers = dict(headers_source)
+            except (TypeError, ValueError):
+                headers = {}
         session_data = state.data
         serialized = state.serialized
 

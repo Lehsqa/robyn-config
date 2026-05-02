@@ -33,3 +33,4 @@ service_test/
 
 # Superpowers
 docs/superpowers/
+.superpowers/

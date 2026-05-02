@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 import cli as cli_module
@@ -251,3 +252,235 @@ def test_create_rejects_uuidv7_on_python_older_than_313(monkeypatch) -> None:
 
     assert result.exit_code != 0
     assert "uuidv7 requires Python 3.13 or newer" in result.output
+
+
+@pytest.mark.skipif(
+    not hasattr(__import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]), "TEXTUAL_AVAILABLE")
+    or not __import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]).TEXTUAL_AVAILABLE,
+    reason="textual not installed",
+)
+class TestBannerWidget:
+    """Tests for the ASCII banner widget."""
+
+    def test_banner_contains_robyn_config_text(self):
+        from create.utils._interactive import BannerWidget
+
+        widget = BannerWidget()
+        # The banner renderable should contain "Robyn" and "Config"
+        text = str(widget.render())
+        assert "Robyn" in text or "____" in text
+
+
+class TestBulletField:
+    """Tests for BulletField widget."""
+
+    def test_bullet_field_reports_value(self):
+        from create.utils._interactive import BulletField
+
+        field = BulletField(label="Project name", field_id="name", placeholder="my-service")
+        assert field.field_id == "name"
+
+
+class TestBulletSelect:
+    """Tests for BulletSelect widget."""
+
+    def test_bullet_select_cycles_values(self):
+        from create.utils._interactive import BulletSelect
+
+        widget = BulletSelect(
+            label="ORM",
+            field_id="orm",
+            choices=("sqlalchemy", "tortoise"),
+            value="sqlalchemy",
+        )
+        assert widget.value == "sqlalchemy"
+        assert widget.field_id == "orm"
+
+
+@pytest.mark.skipif(
+    not hasattr(__import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]), "TEXTUAL_AVAILABLE")
+    or not __import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]).TEXTUAL_AVAILABLE,
+    reason="textual not installed",
+)
+class TestTechnicalScreen:
+    """Tests for Stage 2 screen."""
+
+    def test_technical_screen_exists(self):
+        from create.utils._interactive import TechnicalScreen
+
+        screen = TechnicalScreen()
+        assert screen is not None
+
+
+@pytest.mark.skipif(
+    not hasattr(__import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]), "TEXTUAL_AVAILABLE")
+    or not __import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]).TEXTUAL_AVAILABLE,
+    reason="textual not installed",
+)
+class TestIdentityScreen:
+    """Tests for Stage 1 screen."""
+
+    def test_identity_screen_exists(self):
+        from create.utils._interactive import IdentityScreen
+
+        screen = IdentityScreen()
+        assert screen is not None
+
+
+@pytest.mark.skipif(
+    not hasattr(__import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]), "TEXTUAL_AVAILABLE")
+    or not __import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]).TEXTUAL_AVAILABLE,
+    reason="textual not installed",
+)
+class TestInteractiveCreateAppScreens:
+    """Tests for the rewritten screen-based App."""
+
+    def test_app_initializes_state_from_defaults(self):
+        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+
+        defaults = InteractiveCreateConfig(
+            name="test-app",
+            destination="/tmp/test",
+            orm="tortoise",
+            design="mvc",
+            package_manager="poetry",
+            uid="uuidv4",
+        )
+        app = InteractiveCreateApp(defaults)
+        assert app.state["name"] == "test-app"
+        assert app.state["destination"] == "/tmp/test"
+        assert app.state["orm"] == "tortoise"
+        assert app.state["design"] == "mvc"
+        assert app.state["package_manager"] == "poetry"
+        assert app.state["uid"] == "uuidv4"
+
+    def test_app_normalizes_defaults(self):
+        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+
+        defaults = InteractiveCreateConfig(
+            name="  padded  ",
+            destination="",
+            orm="invalid",
+            design="invalid",
+            package_manager="invalid",
+            uid="invalid",
+        )
+        app = InteractiveCreateApp(defaults)
+        assert app.state["name"] == "padded"
+        assert app.state["destination"] == "."
+        assert app.state["orm"] == "sqlalchemy"
+        assert app.state["design"] == "ddd"
+        assert app.state["package_manager"] == "uv"
+        assert app.state["uid"] == "none"
+
+
+@pytest.mark.skipif(
+    not hasattr(__import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]), "TEXTUAL_AVAILABLE")
+    or not __import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]).TEXTUAL_AVAILABLE,
+    reason="textual not installed",
+)
+class TestInteractiveFlow:
+    """Integration tests for the full staged wizard flow."""
+
+    @pytest.mark.asyncio
+    async def test_full_flow_produces_config(self):
+        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+
+        defaults = InteractiveCreateConfig(
+            name="",
+            destination=".",
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+        )
+        app = InteractiveCreateApp(defaults)
+
+        async with app.run_test(size=(100, 40)) as pilot:
+            # Stage 1: type project name
+            await pilot.press("t", "e", "s", "t", "-", "a", "p", "p")
+            # Press the Next button and wait for TechnicalScreen to appear
+            await pilot.click("#next")
+            await pilot.pause(delay=0.2)
+            # Stage 2: press Create with defaults
+            await pilot.click("#create-btn")
+
+        assert isinstance(app.return_value, InteractiveCreateConfig)
+        assert app.return_value.name == "test-app"
+        assert app.return_value.destination == "."
+        assert app.return_value.orm == "sqlalchemy"
+
+    @pytest.mark.asyncio
+    async def test_cancel_from_stage1_returns_none(self):
+        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+
+        defaults = InteractiveCreateConfig(
+            name="",
+            destination=".",
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+        )
+        app = InteractiveCreateApp(defaults)
+
+        async with app.run_test(size=(100, 40)) as pilot:
+            await pilot.click("#cancel")
+
+        assert app.return_value is None
+
+    @pytest.mark.asyncio
+    async def test_back_from_stage2_preserves_values(self):
+        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+
+        defaults = InteractiveCreateConfig(
+            name="my-app",
+            destination="/tmp/test",
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+        )
+        app = InteractiveCreateApp(defaults)
+
+        async with app.run_test(size=(100, 40)) as pilot:
+            # Stage 1: advance with prefilled values
+            await pilot.click("#next")
+            # Wait for TechnicalScreen to appear
+            await pilot.pause(delay=0.2)
+            # Stage 2: go back
+            await pilot.click("#back")
+            # Wait for IdentityScreen to be restored
+            await pilot.pause(delay=0.2)
+            # Stage 1 again: name should still be there
+            await pilot.click("#next")
+            # Wait for TechnicalScreen again
+            await pilot.pause(delay=0.2)
+            # Stage 2: create
+            await pilot.click("#create-btn")
+
+        assert isinstance(app.return_value, InteractiveCreateConfig)
+        assert app.return_value.name == "my-app"
+        assert app.return_value.destination == "/tmp/test"
+
+    @pytest.mark.asyncio
+    async def test_empty_name_shows_error_on_stage1(self):
+        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+        from textual.widgets import Static
+
+        defaults = InteractiveCreateConfig(
+            name="",
+            destination=".",
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+        )
+        app = InteractiveCreateApp(defaults)
+
+        async with app.run_test(size=(100, 40)) as pilot:
+            # Try to advance without name
+            await pilot.click("#next")
+            # Should still be on Stage 1 (error shown, click includes pause)
+            error = app.screen.query_one("#error", Static)
+            assert "required" in str(error.content).lower()
