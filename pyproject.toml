@@ -7,23 +7,31 @@ name = "robyn-config"
 version = "0.6.0"
 description = "A powerful CLI tool to bootstrap and manage production-ready Robyn applications with best practices built-in."
 readme = "README.md"
-license = {text = "MIT"}
+license = { text = "MIT" }
 requires-python = ">=3.11,<4.0"
-authors = [
-  {name = "Leshqa", email = "slav4ik77777@gmail.com"}
+authors = [{ name = "Leshqa", email = "slav4ik77777@gmail.com" }]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Code Generators",
+  "Topic :: Software Development :: Libraries :: Application Frameworks",
+  "Framework :: Robyn",
 ]
-dependencies = [
-  "click>=8.1.7",
-  "Jinja2>=3.1",
-  "textual>=0.85.0",
-]
+dependencies = ["click>=8.1.7", "Jinja2>=3.1", "textual>=0.85.0"]
 
 [project.optional-dependencies]
 dev = [
   "ruff>=0.6.0",
   "black>=24.10.0",
+  "mypy>=1.17.0",
   "pytest>=7.4.0",
   "pytest-cov>=4.0.0",
+  "pytest-asyncio>=0.23.0",
   "httpx>=0.27.0",
   "build>=1.2.1",
   "twine>=1.6.0",
@@ -36,7 +44,7 @@ dev = [
 robyn-config = "cli:cli"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 py-modules = ["cli"]
 include-package-data = true
 
@@ -49,27 +57,27 @@ extend-ignore = "E203, E501"
 
 [tool.ruff]
 exclude = [
-    ".bzr",
-    ".direnv",
-    ".eggs",
-    ".git",
-    ".hg",
-    ".mypy_cache",
-    ".nox",
-    ".pants.d",
-    ".pytype",
-    ".ruff_cache",
-    ".svn",
-    ".tox",
-    ".venv",
-    "__pypackages__",
-    "__pycache__",
-    "_build",
-    "buck-out",
-    "build",
-    "dist",
-    "venv",
-    "migrations",
+  ".bzr",
+  ".direnv",
+  ".eggs",
+  ".git",
+  ".hg",
+  ".mypy_cache",
+  ".nox",
+  ".pants.d",
+  ".pytype",
+  ".ruff_cache",
+  ".svn",
+  ".tox",
+  ".venv",
+  "__pypackages__",
+  "__pycache__",
+  "_build",
+  "buck-out",
+  "build",
+  "dist",
+  "venv",
+  "migrations",
 ]
 line-length = 79
 src = ["src"]
@@ -78,50 +86,50 @@ src = ["src"]
 select = ["E", "F"]
 ignore = ["E501", "F403", "F811"]
 fixable = [
-    "A",
-    "B",
-    "C",
-    "D",
-    "E",
-    "F",
-    "G",
-    "I",
-    "N",
-    "Q",
-    "S",
-    "T",
-    "W",
-    "ANN",
-    "ARG",
-    "BLE",
-    "COM",
-    "DJ",
-    "DTZ",
-    "EM",
-    "ERA",
-    "EXE",
-    "FBT",
-    "ICN",
-    "INP",
-    "ISC",
-    "NPY",
-    "PD",
-    "PGH",
-    "PIE",
-    "PL",
-    "PT",
-    "PTH",
-    "PYI",
-    "RET",
-    "RSE",
-    "RUF",
-    "SIM",
-    "SLF",
-    "TCH",
-    "TID",
-    "TRY",
-    "UP",
-    "YTT",
+  "A",
+  "B",
+  "C",
+  "D",
+  "E",
+  "F",
+  "G",
+  "I",
+  "N",
+  "Q",
+  "S",
+  "T",
+  "W",
+  "ANN",
+  "ARG",
+  "BLE",
+  "COM",
+  "DJ",
+  "DTZ",
+  "EM",
+  "ERA",
+  "EXE",
+  "FBT",
+  "ICN",
+  "INP",
+  "ISC",
+  "NPY",
+  "PD",
+  "PGH",
+  "PIE",
+  "PL",
+  "PT",
+  "PTH",
+  "PYI",
+  "RET",
+  "RSE",
+  "RUF",
+  "SIM",
+  "SLF",
+  "TCH",
+  "TID",
+  "TRY",
+  "UP",
+  "YTT",
 ]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
@@ -174,9 +182,8 @@ filterwarnings = [
   "ignore::UserWarning",
   "ignore::DeprecationWarning",
 ]
-markers = [
-    "integration: marks tests as integration tests",
-]
+markers = ["integration: marks tests as integration tests"]
+asyncio_mode = "auto"
 
 [tool.pyright]
 exclude = ["**/__pycache__", "**/venv/*", "**/.tox/*"]
@@ -186,7 +193,7 @@ useLibraryCodeForTypes = true
 [tool.mypy]
 ignore_missing_imports = true
 explicit_package_bases = true
-exclude = "(^|/)(migrations)(/|$)"
+exclude = "(^|/)(migrations|create|adminpanel/template)(/|$)"
 disable_error_code = ["no-redef"]
 
 [tool.coverage.report]

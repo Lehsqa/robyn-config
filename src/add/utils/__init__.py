@@ -82,7 +82,7 @@ def add_business_logic(project_path: Path, name: str) -> list[str]:
     if design == "ddd":
         return _add_ddd_templates(
             project_path,
-            add_paths,
+            add_paths,  # type: ignore[arg-type]
             name_lower,
             name_capitalized,
             orm,
@@ -91,7 +91,7 @@ def add_business_logic(project_path: Path, name: str) -> list[str]:
     elif design == "mvc":
         return _add_mvc_templates(
             project_path,
-            add_paths,
+            add_paths,  # type: ignore[arg-type]
             name_lower,
             name_capitalized,
             orm,
