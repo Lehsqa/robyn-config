@@ -61,7 +61,7 @@ def _add_ddd_templates(
     )
 
     templates_path = ADD_MODULE_ROOT / "ddd"
-    created_files = []
+    created_files: list[str] = []
 
     context = {
         "name": name,

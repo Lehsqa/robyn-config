@@ -93,10 +93,13 @@ def _ensure_route_registrar(file_path: Path, registrar: str) -> bool:
         indent = None
         for j in range(start_idx + 1, end_idx):
             if lines[j].strip():
-                indent = re.match(r"(\s*)", lines[j]).group(1)
+                match = re.match(r"(\s*)", lines[j])
+                if match is not None:
+                    indent = match.group(1)
                 break
         if indent is None:
-            indent = re.match(r"(\s*)", lines[start_idx]).group(1) + "    "
+            match = re.match(r"(\s*)", lines[start_idx])
+            indent = (match.group(1) if match is not None else "    ") + "    "
 
         lines.insert(end_idx, f"{indent}{registrar},")
         file_path.write_text("\n".join(lines))

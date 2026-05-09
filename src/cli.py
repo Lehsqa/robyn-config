@@ -156,7 +156,10 @@ def cli() -> None:
 @click.argument(
     "destination",
     type=click.Path(
-        exists=False, file_okay=False, dir_okay=True, path_type=Path
+        exists=False,
+        file_okay=False,
+        dir_okay=True,
+        path_type=Path,  # type: ignore[type-var]
     ),
     required=False,
     default=Path("."),
@@ -223,7 +226,7 @@ def create(
     if destination_exists_before:
         existing_items = collect_existing_items(destination_resolved)
 
-    target_dir: Path | None = None
+    target_dir: Path | None = None  # type: ignore[assignment]
     generated_items: set[Path] = set()
     created_new_dir = False
 
@@ -235,7 +238,11 @@ def create(
         generated_items = get_generated_items(
             orm_type, design, package_manager
         )
-        created_new_dir = not destination_exists_before and target_dir.exists()
+        created_new_dir = (
+            not destination_exists_before
+            and target_dir is not None
+            and target_dir.exists()
+        )
 
         copy_template(
             target_dir,
@@ -253,7 +260,7 @@ def create(
             click.style("Successfully created Robyn template", fg="green")
         )
     except Exception as e:
-        if target_dir:
+        if target_dir is not None:
             _cleanup_create_failure(
                 target_dir, generated_items, existing_items, created_new_dir
             )
@@ -265,7 +272,10 @@ def create(
 @click.argument(
     "project_path",
     type=click.Path(
-        exists=True, file_okay=False, dir_okay=True, path_type=Path
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        path_type=Path,  # type: ignore[type-var]
     ),
     default=".",
 )
@@ -304,7 +314,10 @@ def add(name: str, project_path: Path) -> None:
 @click.argument(
     "project_path",
     type=click.Path(
-        exists=True, file_okay=False, dir_okay=True, path_type=Path
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        path_type=Path,  # type: ignore[type-var]
     ),
     default=".",
 )
@@ -355,7 +368,10 @@ def adminpanel(
 @click.argument(
     "project_path",
     type=click.Path(
-        exists=True, file_okay=False, dir_okay=True, path_type=Path
+        exists=True,
+        file_okay=False,
+        dir_okay=True,
+        path_type=Path,  # type: ignore[type-var]
     ),
     default=".",
 )
