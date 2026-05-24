@@ -35,3 +35,6 @@ service_test/
 docs/superpowers/
 .superpowers/
 docs/plans/
+
+# Images
+images/

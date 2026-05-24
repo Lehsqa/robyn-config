@@ -61,6 +61,14 @@ services:
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      ALL_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      all_proxy: ""
+      NO_PROXY: loki,prometheus,localhost,127.0.0.1
+      no_proxy: loki,prometheus,localhost,127.0.0.1
     volumes:
       - grafana-data:/var/lib/grafana
       - ./compose/monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
