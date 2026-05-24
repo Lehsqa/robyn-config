@@ -115,6 +115,24 @@ def test_monitoring_compose_file_content(
 
 @pytest.mark.integration
 @pytest.mark.parametrize("design,orm", COMBINATIONS)
+def test_monitoring_grafana_bypasses_proxy_for_internal_datasources(
+    tmp_path: Path, design: str, orm: str
+) -> None:
+    project_dir = _scaffold_monitoring(tmp_path, design, orm)
+    compose = (project_dir / "docker-compose.monitoring.yml").read_text()
+
+    assert 'HTTP_PROXY: ""' in compose
+    assert 'HTTPS_PROXY: ""' in compose
+    assert 'ALL_PROXY: ""' in compose
+    assert 'http_proxy: ""' in compose
+    assert 'https_proxy: ""' in compose
+    assert 'all_proxy: ""' in compose
+    assert "NO_PROXY: loki,prometheus,localhost,127.0.0.1" in compose
+    assert "no_proxy: loki,prometheus,localhost,127.0.0.1" in compose
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("design,orm", COMBINATIONS)
 def test_monitoring_alloy_config_content(
     tmp_path: Path, design: str, orm: str
 ) -> None:
