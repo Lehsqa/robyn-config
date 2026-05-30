@@ -7,6 +7,13 @@ from typing import Mapping, Sequence
 ORM_CHOICES: Sequence[str] = ("sqlalchemy", "tortoise")
 DESIGN_CHOICES: Sequence[str] = ("ddd", "mvc")
 PACKAGE_MANAGER_CHOICES: Sequence[str] = ("uv", "poetry")
+BROKER_CHOICES: Sequence[str] = (
+    "none",
+    "redis",
+    "rabbitmq",
+    "kafka",
+)
+INTERACTIVE_BROKER_CHOICES: Sequence[str] = BROKER_CHOICES
 UID_CHOICES: Sequence[str] = (
     "none",
     "uuidv4",
@@ -58,6 +65,7 @@ def _get_template_config(
     project_name: str,
     package_manager: str,
     uid: str = "none",
+    broker: str | None = None,
 ) -> dict[str, str]:
     """Get the template configuration for the given design and ORM type."""
     key = f"{design}:{orm_type}"
@@ -73,4 +81,5 @@ def _get_template_config(
         "name": project_name,
         "package_manager": package_manager,
         "uid": uid,
+        "broker": broker or "none",
     }

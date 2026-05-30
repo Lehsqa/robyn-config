@@ -2,15 +2,14 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.create import utils as create_utils
 from src.create.utils import _config as create_config
 from src.create.utils import _filesystem as create_filesystem
 from src.add import utils as add_utils
 from src.add.utils import _injection as add_injection
 from src.add.utils import _paths as add_paths
 
-
 # --- Tests for src/create/utils.py ---
+
 
 def test_collect_common_items(tmp_path):
     """Test that finding common items correctly filters based on ORM."""
@@ -66,6 +65,17 @@ def test_uid_choices_constant():
     assert "none" in create_config.UID_CHOICES
     assert "sparkid" in create_config.UID_CHOICES
     assert create_config.UID_CHOICES[0] == "none"
+
+
+def test_broker_choices_include_none_and_canonical_values():
+    """Broker choices should mirror UID defaults without alias normalization."""
+    assert create_config.BROKER_CHOICES == (
+        "none",
+        "redis",
+        "rabbitmq",
+        "kafka",
+    )
+    assert "rabytmq" not in create_config.BROKER_CHOICES
 
 
 def test_get_template_config_includes_uid():
@@ -127,20 +137,70 @@ def _generated_base_path(destination: Path, design: str) -> Path:
 @pytest.mark.parametrize(
     ("design", "orm", "uid", "expected_snippets"),
     [
-        ("ddd", "sqlalchemy", "none", ["id: Mapped[int] = mapped_column(primary_key=True)"]),
-        ("ddd", "sqlalchemy", "uuidv4", ["from sqlalchemy import Uuid", "default=uuid.uuid4"]),
-        ("ddd", "sqlalchemy", "uuidv7", ["from sqlalchemy import Uuid", "default=uuid.uuid7"]),
-        ("ddd", "sqlalchemy", "nanoid", ["from nanoid import generate", "String(21)"]),
+        (
+            "ddd",
+            "sqlalchemy",
+            "none",
+            ["id: Mapped[int] = mapped_column(primary_key=True)"],
+        ),
+        (
+            "ddd",
+            "sqlalchemy",
+            "uuidv4",
+            ["from sqlalchemy import Uuid", "default=uuid.uuid4"],
+        ),
+        (
+            "ddd",
+            "sqlalchemy",
+            "uuidv7",
+            ["from sqlalchemy import Uuid", "default=uuid.uuid7"],
+        ),
+        (
+            "ddd",
+            "sqlalchemy",
+            "nanoid",
+            ["from nanoid import generate", "String(21)"],
+        ),
         ("ddd", "sqlalchemy", "ulid", ["from ulid import ULID", "String(26)"]),
-        ("ddd", "sqlalchemy", "sparkid", ["from sparkid import generate_id", "default=generate_id"]),
+        (
+            "ddd",
+            "sqlalchemy",
+            "sparkid",
+            ["from sparkid import generate_id", "default=generate_id"],
+        ),
         ("ddd", "tortoise", "none", ["id = fields.IntField(pk=True)"]),
         ("ddd", "tortoise", "uuidv4", ["id = fields.UUIDField(pk=True)"]),
         ("ddd", "tortoise", "uuidv7", ["import uuid", "default=uuid.uuid7"]),
-        ("ddd", "tortoise", "nanoid", ["from nanoid import generate", "max_length=21"]),
-        ("ddd", "tortoise", "ulid", ["from ulid import ULID", "max_length=26"]),
-        ("ddd", "tortoise", "sparkid", ["from sparkid import generate_id", "default=generate_id"]),
-        ("mvc", "sqlalchemy", "sparkid", ["from sparkid import generate_id", "default=generate_id"]),
-        ("mvc", "tortoise", "nanoid", ["from nanoid import generate", "max_length=21"]),
+        (
+            "ddd",
+            "tortoise",
+            "nanoid",
+            ["from nanoid import generate", "max_length=21"],
+        ),
+        (
+            "ddd",
+            "tortoise",
+            "ulid",
+            ["from ulid import ULID", "max_length=26"],
+        ),
+        (
+            "ddd",
+            "tortoise",
+            "sparkid",
+            ["from sparkid import generate_id", "default=generate_id"],
+        ),
+        (
+            "mvc",
+            "sqlalchemy",
+            "sparkid",
+            ["from sparkid import generate_id", "default=generate_id"],
+        ),
+        (
+            "mvc",
+            "tortoise",
+            "nanoid",
+            ["from nanoid import generate", "max_length=21"],
+        ),
     ],
 )
 def test_copy_template_renders_uid_base_templates(
@@ -169,9 +229,9 @@ def test_copy_template_renders_uid_base_templates(
 @pytest.mark.parametrize(
     ("package_manager", "uid", "expected_dependency"),
     [
-        ("uv", "nanoid", 'python-nanoid>=2.0.0'),
-        ("uv", "ulid", 'python-ulid>=3.0.0'),
-        ("uv", "sparkid", 'sparkid>=1.0.0'),
+        ("uv", "nanoid", "python-nanoid>=2.0.0"),
+        ("uv", "ulid", "python-ulid>=3.0.0"),
+        ("uv", "sparkid", "sparkid>=1.0.0"),
         ("poetry", "nanoid", 'python-nanoid = ">=2.0.0"'),
         ("poetry", "ulid", 'python-ulid = ">=3.0.0"'),
         ("poetry", "sparkid", 'sparkid = ">=1.0.0"'),
@@ -226,12 +286,16 @@ def test_copy_template_raises_python_floor_for_uuidv7(
 
 # --- Tests for src/add/utils.py ---
 
-@pytest.mark.parametrize("input_name, expected_lower, expected_cap", [
-    ("product", "product", "Product"),
-    ("user_profile", "user_profile", "UserProfile"),
-    ("My-Service", "my_service", "MyService"),
-    ("api response", "api_response", "ApiResponse"),
-])
+
+@pytest.mark.parametrize(
+    "input_name, expected_lower, expected_cap",
+    [
+        ("product", "product", "Product"),
+        ("user_profile", "user_profile", "UserProfile"),
+        ("My-Service", "my_service", "MyService"),
+        ("api response", "api_response", "ApiResponse"),
+    ],
+)
 def test_normalize_entity_name(input_name, expected_lower, expected_cap):
     lower, cap = add_utils._normalize_entity_name(input_name)
     assert lower == expected_lower
@@ -328,7 +392,9 @@ def test_add_business_logic_passes_uid_to_template_helpers(
         add_utils, "_load_add_paths", lambda *_args, **_kwargs: fake_paths
     )
     monkeypatch.setattr(
-        add_utils, "_normalize_entity_name", lambda _name: ("product", "Product")
+        add_utils,
+        "_normalize_entity_name",
+        lambda _name: ("product", "Product"),
     )
 
     def fake_add_templates(
@@ -343,9 +409,13 @@ def test_add_business_logic_passes_uid_to_template_helpers(
         return ["created.py"]
 
     if design == "ddd":
-        monkeypatch.setattr(add_utils, "_add_ddd_templates", fake_add_templates)
+        monkeypatch.setattr(
+            add_utils, "_add_ddd_templates", fake_add_templates
+        )
     else:
-        monkeypatch.setattr(add_utils, "_add_mvc_templates", fake_add_templates)
+        monkeypatch.setattr(
+            add_utils, "_add_mvc_templates", fake_add_templates
+        )
 
     created_files = add_utils.add_business_logic(tmp_path, "product")
 

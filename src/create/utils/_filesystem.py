@@ -20,8 +20,9 @@ PACKAGE_ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = PACKAGE_ROOT.resolve()
 COMMON_DIR = (SRC_DIR / "common").resolve()
 COMPOSE_APP_DIR = (COMMON_DIR / "compose" / "app").resolve()
+BROKERS_DIR = (SRC_DIR / "brokers").resolve()
 
-JINJA_ENV = Environment(undefined=StrictUndefined)
+JINJA_ENV = Environment(undefined=StrictUndefined, keep_trailing_newline=True)
 
 
 def _collect_existing_items(destination: Path) -> set[Path]:
@@ -219,6 +220,27 @@ def _copy_src_app(
         _render_jinja2_in_tree(target_models, context)
 
 
+def _copy_broker_files(
+    destination: Path,
+    design: str,
+    broker: str,
+    context: Mapping[str, str],
+) -> None:
+    """Copy optional broker infrastructure into the generated app."""
+    if broker == "none":
+        return
+
+    source = BROKERS_DIR / design / broker
+    if not source.exists():
+        raise FileNotFoundError(
+            f"Could not find broker template for '{design}/{broker}'."
+        )
+
+    target = destination / "src" / "app"
+    shutil.copytree(source, target, dirs_exist_ok=True)
+    _render_jinja2_in_tree(target, context)
+
+
 def _resolve_compose_file(base: str, extension: str, orm_type: str) -> Path:
     """Resolve the compose file path for the given ORM type."""
     candidates = (
@@ -272,12 +294,14 @@ def copy_template(
     project_name: str,
     package_manager: str,
     uid: str = "none",
+    broker: str | None = None,
 ) -> None:
     """Copy the complete template to the destination directory."""
     context = _get_template_config(
-        design, orm_type, project_name, package_manager, uid
+        design, orm_type, project_name, package_manager, uid, broker
     )
     _copy_src_app(destination, orm_type, design, context)
+    _copy_broker_files(destination, design, context["broker"], context)
     _copy_compose_app(destination, orm_type, context)
     _copy_common_files(destination, orm_type, package_manager, context)
 

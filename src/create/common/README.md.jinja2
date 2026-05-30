@@ -6,7 +6,7 @@ It follows a DDD layering (config ➜ infrastructure ➜ domain ➜ operational 
 {%- else %}
 It follows an MVC-style layout (config ➜ models ➜ views/controllers) while using `msgspec` for fast JSON, async database sessions, Valkey (Redis-compatible) caching, Loguru logging, and Passlib password hashing.
 {%- endif %}
-The code lives under `src/app` and ships with a Docker Compose stack for PostgreSQL, Redis, a local SMTP sink, and the app container.
+The code lives under `src/app` and ships with a Docker Compose stack for PostgreSQL, Redis, a local SMTP sink{% if broker != "none" %}, {{ "RabbitMQ" if broker == "rabbitmq" else "Kafka" if broker == "kafka" else "Redis broker" }}{% endif %}, and the app container.
 
 ## Project layout
 
@@ -81,6 +81,24 @@ export SETTINGS__CACHE__HOST=localhost  # Valkey/Redis host
 export SETTINGS__CACHE__PORT=6379
 export SETTINGS__CACHE__DB=0
 export SETTINGS__CACHE__USE_FAKE=true  # use fakeredis from the [dev] extras
+{%- if broker == "redis" %}
+export SETTINGS__BROKER__HOST=localhost
+export SETTINGS__BROKER__PORT=6380
+export SETTINGS__BROKER__DB=1
+export SETTINGS__BROKER__TOPIC_PREFIX=app
+{%- elif broker == "rabbitmq" %}
+export SETTINGS__BROKER__HOST=localhost
+export SETTINGS__BROKER__PORT=5672
+export SETTINGS__BROKER__USER=guest
+export SETTINGS__BROKER__PASSWORD=guest
+export SETTINGS__BROKER__VIRTUAL_HOST=/
+export SETTINGS__BROKER__EXCHANGE=app.events
+{%- elif broker == "kafka" %}
+export SETTINGS__BROKER__BOOTSTRAP_SERVERS=localhost:29092
+export SETTINGS__BROKER__CLIENT_ID=robyn-app
+export SETTINGS__BROKER__GROUP_ID=robyn-app
+export SETTINGS__BROKER__TOPIC_PREFIX=app
+{%- endif %}
 export SETTINGS__MAILING__HOST=localhost
 export SETTINGS__MAILING__PORT=1025
 export SETTINGS__MAILING__SENDER_EMAIL=no-reply@example.com
@@ -173,7 +191,14 @@ Services:
 - `postgres` – PostgreSQL 16 with database `robyn_users` (user/pass `app`).
 - `cache` – Valkey (Redis-compatible) cache used by `CacheRepository`.
 - `mailhog` – SMTP sink (`1025`) with web UI at <http://localhost:8025> for captured mail.
-- `app` – Robyn service (`python -m app.server`) exposed on <http://localhost:8000>. The `environment` block in `docker-compose.yml` overrides only the infrastructure host entries (database/cache/mail) for container networking; the rest load from `.env` so the same file works for both Docker and local runs.
+{%- if broker == "redis" %}
+- `redis-broker` – Redis pub/sub broker exposed on `localhost:6380`.
+{%- elif broker == "rabbitmq" %}
+- `rabbitmq` – RabbitMQ broker exposed on `localhost:5672` with management UI at <http://localhost:15672>.
+{%- elif broker == "kafka" %}
+- `kafka` – Kafka broker exposed to local clients on `localhost:29092`.
+{%- endif %}
+- `app` – Robyn service (`python -m app.server`) exposed on <http://localhost:8000>. The `environment` block in `docker-compose.yml` overrides only the infrastructure host entries (database/cache/mail{% if broker != "none" %}/broker{% endif %}) for container networking; the rest load from `.env` so the same file works for both Docker and local runs.
 
 The `app` service builds from `compose/app/Dockerfile`, copies the `dev.sh` helper into the image, and runs it so {{ "Alembic" if orm == "sqlalchemy" else "Aerich" }} upgrades happen before `python -m app.server --reload` executes.
 

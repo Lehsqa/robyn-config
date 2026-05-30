@@ -19,6 +19,7 @@ def run_create_command(
     package_manager: str = "uv",
     bin_dir: Path | None = None,
     uid: str | None = None,
+    broker: str | None = None,
 ) -> subprocess.CompletedProcess:
     """Run the create command via subprocess."""
     env = os.environ.copy()
@@ -40,6 +41,8 @@ def run_create_command(
     ]
     if uid is not None:
         cmd.extend(["--uid", uid])
+    if broker is not None:
+        cmd.extend(["--broker", broker])
     cmd.append(str(destination))
     return subprocess.run(
         cmd,
@@ -83,7 +86,7 @@ def test_create_project_structure(tmp_path, design, orm):
     assert "logger.add(" in server_content
     assert "sys.stderr" in server_content
     assert "if settings.logging.file:" in server_content
-    assert "file: str | None = \"app\"" in logging_content
+    assert 'file: str | None = "app"' in logging_content
 
     if design == "ddd":
         assert (app_dir / "domain").is_dir()
@@ -139,7 +142,9 @@ def test_create_generates_reliable_compose_and_env_defaults(tmp_path):
     """Scaffold should work without manual compose/logs/env edits."""
     project_dir = tmp_path / "reliable_defaults_project"
     fake_bin = create_fake_package_managers(tmp_path)
-    result = run_create_command(project_dir, "ddd", "sqlalchemy", bin_dir=fake_bin)
+    result = run_create_command(
+        project_dir, "ddd", "sqlalchemy", bin_dir=fake_bin
+    )
 
     assert result.returncode == 0, f"CLI create failed: {result.stderr}"
 
@@ -159,15 +164,21 @@ def test_create_generates_reliable_compose_and_env_defaults(tmp_path):
     assert "SETTINGS__MAILING__HOST=localhost" in env_example_content
 
 
-def test_create_generates_rooted_env_loading_and_nonroot_log_dir_setup(tmp_path):
+def test_create_generates_rooted_env_loading_and_nonroot_log_dir_setup(
+    tmp_path,
+):
     """Generated config and Dockerfile should support cwd-independent env loading."""
     project_dir = tmp_path / "rooted_env_project"
     fake_bin = create_fake_package_managers(tmp_path)
-    result = run_create_command(project_dir, "mvc", "sqlalchemy", bin_dir=fake_bin)
+    result = run_create_command(
+        project_dir, "mvc", "sqlalchemy", bin_dir=fake_bin
+    )
 
     assert result.returncode == 0, f"CLI create failed: {result.stderr}"
 
-    config_content = (project_dir / "src" / "app" / "config" / "__init__.py").read_text()
+    config_content = (
+        project_dir / "src" / "app" / "config" / "__init__.py"
+    ).read_text()
     dockerfile_content = (
         project_dir / "compose" / "app" / "Dockerfile"
     ).read_text()
@@ -251,3 +262,66 @@ def test_create_user_templates_adapt_to_uid_type(
         in contracts_content
     )
     assert "return parse_primary_key(str(sub))" in auth_content
+
+
+@pytest.mark.parametrize("design", ("ddd", "mvc"))
+@pytest.mark.parametrize("broker", ("redis", "rabbitmq", "kafka"))
+def test_create_generates_selected_broker_template(
+    tmp_path: Path,
+    design: str,
+    broker: str,
+) -> None:
+    project_dir = tmp_path / f"{design}-{broker}-broker"
+    fake_bin = create_fake_package_managers(tmp_path)
+    result = run_create_command(
+        project_dir,
+        design,
+        "sqlalchemy",
+        bin_dir=fake_bin,
+        broker=broker,
+    )
+
+    assert result.returncode == 0, f"CLI create failed: {result.stderr}"
+
+    app_dir = project_dir / "src" / "app"
+    pyproject_content = (project_dir / "pyproject.toml").read_text()
+    compose_content = (project_dir / "docker-compose.yml").read_text()
+    env_example_content = (project_dir / ".env.example").read_text()
+    settings_content = (app_dir / "config" / "__init__.py").read_text()
+
+    assert f'broker = "{broker}"' in pyproject_content
+    assert "from . import broker as _broker" in settings_content
+    assert "broker: _broker.Settings = _broker.Settings()" in settings_content
+    assert (app_dir / "config" / "broker.py").exists()
+
+    if design == "ddd":
+        assert (app_dir / "infrastructure" / "broker" / "__init__.py").exists()
+        assert (app_dir / "infrastructure" / "broker" / "services.py").exists()
+        assert not (app_dir / "broker.py").exists()
+    else:
+        assert (app_dir / "broker.py").exists()
+        assert not (app_dir / "infrastructure").exists()
+
+    if broker == "redis":
+        assert "redis-broker:" in compose_content
+        assert "SETTINGS__BROKER__HOST: redis-broker" in compose_content
+        assert "SETTINGS__BROKER__HOST=localhost" in env_example_content
+        assert "SETTINGS__BROKER__PORT=6380" in env_example_content
+        assert "SETTINGS__BROKER__DB=1" in env_example_content
+        assert "db: int = 1" in (app_dir / "config" / "broker.py").read_text()
+    elif broker == "rabbitmq":
+        assert "aio-pika>=" in pyproject_content
+        assert "rabbitmq:" in compose_content
+        assert "SETTINGS__BROKER__HOST: rabbitmq" in compose_content
+        assert "SETTINGS__BROKER__PORT=5672" in env_example_content
+    else:
+        assert "aiokafka>=" in pyproject_content
+        assert "kafka:" in compose_content
+        assert (
+            "SETTINGS__BROKER__BOOTSTRAP_SERVERS: kafka:9092"
+            in compose_content
+        )
+        assert (
+            "SETTINGS__BROKER__BOOTSTRAP_SERVERS=localhost:29092"
+            in env_example_content
+        )
