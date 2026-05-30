@@ -38,6 +38,7 @@ def _stub_create_pipeline(monkeypatch) -> dict[str, object]:
         name: str,
         package_manager: str,
         uid: str,
+        broker: str,
     ) -> None:
         calls["copy_template"] = {
             "destination": destination,
@@ -46,6 +47,7 @@ def _stub_create_pipeline(monkeypatch) -> dict[str, object]:
             "name": name,
             "package_manager": package_manager,
             "uid": uid,
+            "broker": broker,
         }
 
     def fake_apply_package_manager(
@@ -84,7 +86,9 @@ def _stub_create_pipeline(monkeypatch) -> dict[str, object]:
     return calls
 
 
-def test_create_interactive_uses_selected_values(monkeypatch, tmp_path) -> None:
+def test_create_interactive_uses_selected_values(
+    monkeypatch, tmp_path
+) -> None:
     runner = CliRunner()
     calls = _stub_create_pipeline(monkeypatch)
     interactive_destination = tmp_path / "interactive-project"
@@ -102,6 +106,7 @@ def test_create_interactive_uses_selected_values(monkeypatch, tmp_path) -> None:
             design="mvc",
             package_manager="poetry",
             uid="sparkid",
+            broker="kafka",
         ),
     )
 
@@ -122,6 +127,7 @@ def test_create_interactive_uses_selected_values(monkeypatch, tmp_path) -> None:
         "name": "interactive-app",
         "package_manager": "poetry",
         "uid": "sparkid",
+        "broker": "kafka",
     }
 
 
@@ -160,6 +166,8 @@ def test_create_interactive_prefills_from_cli_inputs(
             "poetry",
             "--uid",
             "sparkid",
+            "--broker",
+            "rabbitmq",
             "seed-name",
             str(destination),
         ],
@@ -173,6 +181,7 @@ def test_create_interactive_prefills_from_cli_inputs(
     assert defaults.design == "mvc"
     assert defaults.package_manager == "poetry"
     assert defaults.uid == "sparkid"
+    assert defaults.broker == "rabbitmq"
     assert calls["prepare_destination"] == {
         "destination": destination,
         "orm": "tortoise",
@@ -214,12 +223,29 @@ def test_create_without_name_non_interactive_fails() -> None:
     assert "Missing argument 'NAME'." in result.output
 
 
+def test_create_accepts_explicit_no_broker_like_uid(
+    monkeypatch, tmp_path
+) -> None:
+    runner = CliRunner()
+    calls = _stub_create_pipeline(monkeypatch)
+    destination = tmp_path / "no-broker-project"
+
+    result = runner.invoke(
+        cli_module.cli,
+        ["create", "no-broker-app", "--broker", "none", str(destination)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls["copy_template"]["broker"] == "none"  # type: ignore[index]
+
+
 def test_create_help_contains_interactive_flag() -> None:
     runner = CliRunner()
     result = runner.invoke(cli_module.cli, ["create", "--help"])
     assert result.exit_code == 0
     assert "-i, --interactive" in result.output
     assert "-uid, --uid" in result.output
+    assert "-broker, --broker" in result.output
 
 
 def test_create_interactive_requires_tty(monkeypatch) -> None:
@@ -255,8 +281,15 @@ def test_create_rejects_uuidv7_on_python_older_than_313(monkeypatch) -> None:
 
 
 @pytest.mark.skipif(
-    not hasattr(__import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]), "TEXTUAL_AVAILABLE")
-    or not __import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]).TEXTUAL_AVAILABLE,
+    not hasattr(
+        __import__(
+            "create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]
+        ),
+        "TEXTUAL_AVAILABLE",
+    )
+    or not __import__(
+        "create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]
+    ).TEXTUAL_AVAILABLE,
     reason="textual not installed",
 )
 class TestBannerWidget:
@@ -277,7 +310,9 @@ class TestBulletField:
     def test_bullet_field_reports_value(self):
         from create.utils._interactive import BulletField
 
-        field = BulletField(label="Project name", field_id="name", placeholder="my-service")
+        field = BulletField(
+            label="Project name", field_id="name", placeholder="my-service"
+        )
         assert field.field_id == "name"
 
 
@@ -298,8 +333,15 @@ class TestBulletSelect:
 
 
 @pytest.mark.skipif(
-    not hasattr(__import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]), "TEXTUAL_AVAILABLE")
-    or not __import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]).TEXTUAL_AVAILABLE,
+    not hasattr(
+        __import__(
+            "create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]
+        ),
+        "TEXTUAL_AVAILABLE",
+    )
+    or not __import__(
+        "create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]
+    ).TEXTUAL_AVAILABLE,
     reason="textual not installed",
 )
 class TestTechnicalScreen:
@@ -313,8 +355,15 @@ class TestTechnicalScreen:
 
 
 @pytest.mark.skipif(
-    not hasattr(__import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]), "TEXTUAL_AVAILABLE")
-    or not __import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]).TEXTUAL_AVAILABLE,
+    not hasattr(
+        __import__(
+            "create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]
+        ),
+        "TEXTUAL_AVAILABLE",
+    )
+    or not __import__(
+        "create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]
+    ).TEXTUAL_AVAILABLE,
     reason="textual not installed",
 )
 class TestIdentityScreen:
@@ -328,15 +377,25 @@ class TestIdentityScreen:
 
 
 @pytest.mark.skipif(
-    not hasattr(__import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]), "TEXTUAL_AVAILABLE")
-    or not __import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]).TEXTUAL_AVAILABLE,
+    not hasattr(
+        __import__(
+            "create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]
+        ),
+        "TEXTUAL_AVAILABLE",
+    )
+    or not __import__(
+        "create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]
+    ).TEXTUAL_AVAILABLE,
     reason="textual not installed",
 )
 class TestInteractiveCreateAppScreens:
     """Tests for the rewritten screen-based App."""
 
     def test_app_initializes_state_from_defaults(self):
-        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+        from create.utils._interactive import (
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
 
         defaults = InteractiveCreateConfig(
             name="test-app",
@@ -345,6 +404,7 @@ class TestInteractiveCreateAppScreens:
             design="mvc",
             package_manager="poetry",
             uid="uuidv4",
+            broker="rabbitmq",
         )
         app = InteractiveCreateApp(defaults)
         assert app.state["name"] == "test-app"
@@ -353,9 +413,13 @@ class TestInteractiveCreateAppScreens:
         assert app.state["design"] == "mvc"
         assert app.state["package_manager"] == "poetry"
         assert app.state["uid"] == "uuidv4"
+        assert app.state["broker"] == "rabbitmq"
 
     def test_app_normalizes_defaults(self):
-        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+        from create.utils._interactive import (
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
 
         defaults = InteractiveCreateConfig(
             name="  padded  ",
@@ -364,6 +428,7 @@ class TestInteractiveCreateAppScreens:
             design="invalid",
             package_manager="invalid",
             uid="invalid",
+            broker="invalid",
         )
         app = InteractiveCreateApp(defaults)
         assert app.state["name"] == "padded"
@@ -372,11 +437,19 @@ class TestInteractiveCreateAppScreens:
         assert app.state["design"] == "ddd"
         assert app.state["package_manager"] == "uv"
         assert app.state["uid"] == "none"
+        assert app.state["broker"] == "none"
 
 
 @pytest.mark.skipif(
-    not hasattr(__import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]), "TEXTUAL_AVAILABLE")
-    or not __import__("create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]).TEXTUAL_AVAILABLE,
+    not hasattr(
+        __import__(
+            "create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]
+        ),
+        "TEXTUAL_AVAILABLE",
+    )
+    or not __import__(
+        "create.utils._interactive", fromlist=["TEXTUAL_AVAILABLE"]
+    ).TEXTUAL_AVAILABLE,
     reason="textual not installed",
 )
 class TestInteractiveFlow:
@@ -384,7 +457,10 @@ class TestInteractiveFlow:
 
     @pytest.mark.asyncio
     async def test_full_flow_produces_config(self):
-        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+        from create.utils._interactive import (
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
 
         defaults = InteractiveCreateConfig(
             name="",
@@ -393,6 +469,7 @@ class TestInteractiveFlow:
             design="ddd",
             package_manager="uv",
             uid="none",
+            broker="none",
         )
         app = InteractiveCreateApp(defaults)
 
@@ -409,10 +486,14 @@ class TestInteractiveFlow:
         assert app.return_value.name == "test-app"
         assert app.return_value.destination == "."
         assert app.return_value.orm == "sqlalchemy"
+        assert app.return_value.broker == "none"
 
     @pytest.mark.asyncio
     async def test_cancel_from_stage1_returns_none(self):
-        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+        from create.utils._interactive import (
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
 
         defaults = InteractiveCreateConfig(
             name="",
@@ -421,6 +502,7 @@ class TestInteractiveFlow:
             design="ddd",
             package_manager="uv",
             uid="none",
+            broker="none",
         )
         app = InteractiveCreateApp(defaults)
 
@@ -431,7 +513,10 @@ class TestInteractiveFlow:
 
     @pytest.mark.asyncio
     async def test_back_from_stage2_preserves_values(self):
-        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+        from create.utils._interactive import (
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
 
         defaults = InteractiveCreateConfig(
             name="my-app",
@@ -440,6 +525,7 @@ class TestInteractiveFlow:
             design="ddd",
             package_manager="uv",
             uid="none",
+            broker="redis",
         )
         app = InteractiveCreateApp(defaults)
 
@@ -462,10 +548,14 @@ class TestInteractiveFlow:
         assert isinstance(app.return_value, InteractiveCreateConfig)
         assert app.return_value.name == "my-app"
         assert app.return_value.destination == "/tmp/test"
+        assert app.return_value.broker == "redis"
 
     @pytest.mark.asyncio
     async def test_empty_name_shows_error_on_stage1(self):
-        from create.utils._interactive import InteractiveCreateApp, InteractiveCreateConfig
+        from create.utils._interactive import (
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
         from textual.widgets import Static
 
         defaults = InteractiveCreateConfig(
@@ -475,6 +565,7 @@ class TestInteractiveFlow:
             design="ddd",
             package_manager="uv",
             uid="none",
+            broker="none",
         )
         app = InteractiveCreateApp(defaults)
 

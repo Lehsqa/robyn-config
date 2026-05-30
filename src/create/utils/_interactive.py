@@ -7,6 +7,7 @@ from typing import Sequence
 
 from ._config import (
     DESIGN_CHOICES,
+    INTERACTIVE_BROKER_CHOICES,
     ORM_CHOICES,
     PACKAGE_MANAGER_CHOICES,
     UID_CHOICES,
@@ -44,6 +45,7 @@ class InteractiveCreateConfig:
     design: str
     package_manager: str
     uid: str
+    broker: str
 
 
 if TEXTUAL_AVAILABLE:
@@ -220,7 +222,7 @@ if TEXTUAL_AVAILABLE:
                 event.stop()
 
     class TechnicalScreen(Screen):
-        """Stage 2: ORM, design pattern, package manager, UID."""
+        """Stage 2: ORM, design pattern, package manager, UID, broker."""
 
         BINDINGS = [
             ("escape", "go_back", "Back"),
@@ -299,6 +301,12 @@ if TEXTUAL_AVAILABLE:
                     choices=UID_CHOICES,
                     value=app.state["uid"],
                 ),
+                BulletSelect(
+                    label="Broker",
+                    field_id="broker",
+                    choices=INTERACTIVE_BROKER_CHOICES,
+                    value=app.state["broker"],
+                ),
                 Horizontal(
                     Button("← Back", id="back"),
                     Button("Create", id="create-btn"),
@@ -347,6 +355,7 @@ if TEXTUAL_AVAILABLE:
                     design=app.state["design"],
                     package_manager=app.state["package_manager"],
                     uid=app.state["uid"],
+                    broker=app.state["broker"],
                 )
             )
 
@@ -489,6 +498,10 @@ if TEXTUAL_AVAILABLE:
                     defaults.package_manager, PACKAGE_MANAGER_CHOICES
                 ),
                 "uid": _pick_choice(defaults.uid, UID_CHOICES),
+                "broker": _pick_choice(
+                    defaults.broker,
+                    INTERACTIVE_BROKER_CHOICES,
+                ),
             }
 
         def on_mount(self) -> None:

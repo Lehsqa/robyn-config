@@ -5,6 +5,9 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from . import authentication as _authentication
+{% if broker != "none" -%}
+from . import broker as _broker
+{% endif -%}
 from . import cache as _cache
 from . import core
 from . import cors as _cors
@@ -28,6 +31,9 @@ class Settings(BaseSettings):
     # infrastructure
     database: _database.Settings = _database.Settings()
     cache: _cache.Settings = _cache.Settings()
+{% if broker != "none" %}
+    broker: _broker.Settings = _broker.Settings()
+{% endif %}
 
     # platform
     root_dir: Path

@@ -10,16 +10,15 @@ from pathlib import Path
 
 import click
 
-from add import add_business_logic
-from add import read_project_config
+from add import add_business_logic, read_project_config
 from adminpanel import add_adminpanel
-from monitoring import add_monitoring
 from create import (
+    BROKER_CHOICES,
     DESIGN_CHOICES,
-    InteractiveCreateConfig,
     ORM_CHOICES,
     PACKAGE_MANAGER_CHOICES,
     UID_CHOICES,
+    InteractiveCreateConfig,
     apply_package_manager,
     collect_existing_items,
     copy_template,
@@ -28,6 +27,7 @@ from create import (
     prepare_destination,
     run_create_interactive,
 )
+from monitoring import add_monitoring
 
 
 def _remove_path(path: Path) -> None:
@@ -153,6 +153,15 @@ def cli() -> None:
     show_default=True,
     help="Select the primary key type for generated database tables.",
 )
+@click.option(
+    "-broker",
+    "--broker",
+    "broker",
+    type=click.Choice(BROKER_CHOICES, case_sensitive=False),
+    default="none",
+    show_default=True,
+    help="Select the message queue.",
+)
 @click.argument(
     "destination",
     type=click.Path(
@@ -172,6 +181,7 @@ def create(
     design: str,
     package_manager: str,
     uid_type: str,
+    broker: str,
 ) -> None:
     """Copy the template into destination with specific configurations."""
     destination = destination or Path(".")
@@ -193,6 +203,7 @@ def create(
                     design=design,
                     package_manager=package_manager,
                     uid=uid_type,
+                    broker=(broker or "none").lower(),
                 )
             )
         except RuntimeError as exc:
@@ -206,6 +217,7 @@ def create(
         design = selected.design
         package_manager = selected.package_manager
         uid_type = selected.uid
+        broker = selected.broker
 
     if not name:
         raise click.UsageError("Missing argument 'NAME'.")
@@ -214,6 +226,7 @@ def create(
     design = design.lower()
     package_manager = package_manager.lower()
     uid_type = uid_type.lower()
+    broker = (broker or "none").lower()
 
     if uid_type == "uuidv7" and sys.version_info < (3, 13):
         raise click.ClickException("uuidv7 requires Python 3.13 or newer.")
@@ -251,6 +264,7 @@ def create(
             name,
             package_manager,
             uid_type,
+            broker,
         )
 
         click.echo("Installing dependencies...")

@@ -15,6 +15,11 @@ python = "{% if uid == 'uuidv7' %}>=3.13,<4.0{% else %}>=3.11,<4.0{% endif %}"
 robyn = { version = ">=0.81.0", extras = ["pydantic"] }
 asyncpg = ">=0.29.0"
 redis = { version = ">=5.0.4", extras = ["hiredis"] }
+{% if broker == "rabbitmq" %}
+aio-pika = ">=9.4.3"
+{% elif broker == "kafka" %}
+aiokafka = ">=0.10.0"
+{% endif %}
 pydantic = { version = ">=2.6.4", extras = ["email"] }
 pydantic-settings = ">=2.2.1"
 PyJWT = ">=2.8.0"
@@ -61,6 +66,11 @@ dependencies = [
   "robyn[pydantic]>=0.81.0",
   "asyncpg>=0.29.0",
   "redis[hiredis]>=5.0.4",
+{% if broker == "rabbitmq" %}
+  "aio-pika>=9.4.3",
+{% elif broker == "kafka" %}
+  "aiokafka>=0.10.0",
+{% endif %}
   "pydantic[email]>=2.6.4",
   "pydantic-settings>=2.2.1",
   "PyJWT>=2.8.0",
@@ -273,6 +283,7 @@ design = "{{ design }}"
 orm = "{{ orm }}"
 package_manager = "{{ package_manager }}"
 uid = "{{ uid }}"
+broker = "{{ broker }}"
 
 {%- if design == "ddd" %}
 [tool.robyn-config.add]

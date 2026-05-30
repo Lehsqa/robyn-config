@@ -1,0 +1,137 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: database
+    restart: unless-stopped
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d database"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  valkey:
+    image: valkey/valkey:7.2-alpine
+    container_name: cache
+    restart: unless-stopped
+    command: ["valkey-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+{% if broker == "redis" %}
+
+  redis-broker:
+    image: redis:7.2-alpine
+    container_name: broker
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+{% elif broker == "rabbitmq" %}
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: broker
+    restart: unless-stopped
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+{% elif broker == "kafka" %}
+
+  kafka:
+    image: bitnami/kafka:3.7
+    container_name: broker
+    restart: unless-stopped
+    environment:
+      ALLOW_PLAINTEXT_LISTENER: "yes"
+      KAFKA_CFG_NODE_ID: "1"
+      KAFKA_CFG_PROCESS_ROLES: controller,broker
+      KAFKA_CFG_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CFG_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CFG_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CFG_CONTROLLER_LISTENER_NAMES: CONTROLLER
+    ports:
+      - "29092:29092"
+{% endif %}
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    container_name: mailing
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+  app:
+    build:
+      context: .
+      dockerfile: compose/app/Dockerfile
+      target: prod
+      platforms:
+        - linux/amd64
+    container_name: app
+    env_file:
+      - .env
+    environment:
+      SETTINGS__DATABASE__HOST: postgres
+      SETTINGS__CACHE__HOST: valkey
+      SETTINGS__MAILING__HOST: mailhog
+{% if broker == "redis" %}
+      SETTINGS__BROKER__HOST: redis-broker
+      SETTINGS__BROKER__PORT: 6379
+{% elif broker == "rabbitmq" %}
+      SETTINGS__BROKER__HOST: rabbitmq
+      SETTINGS__BROKER__PORT: 5672
+{% elif broker == "kafka" %}
+      SETTINGS__BROKER__BOOTSTRAP_SERVERS: kafka:9092
+{% endif %}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+{% if broker == "redis" %}
+      redis-broker:
+        condition: service_healthy
+{% elif broker == "rabbitmq" %}
+      rabbitmq:
+        condition: service_healthy
+{% elif broker == "kafka" %}
+      kafka:
+        condition: service_started
+{% endif %}
+    ports:
+      - "8000:8000"
+    volumes:
+      - app-logs:/app/logs
+      - ./src/app:/app/src/app
+
+volumes:
+  postgres-data:
+  app-logs:
