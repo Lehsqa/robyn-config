@@ -32,7 +32,7 @@ tests.coverage:
 
 .PHONY: tests.create  # create new service
 tests.create:
-	robyn-config create service_test --orm sqlalchemy --design ddd ./service_test --uid sparkid
+	robyn-config create service_test --orm sqlalchemy --design ddd ./service_test --uid sparkid --broker kafka --nosql mongodb,neo4j
 	robyn-config add product ./service_test
 	robyn-config adminpanel ./service_test
 	robyn-config monitoring ./service_test

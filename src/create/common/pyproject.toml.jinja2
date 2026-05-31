@@ -20,6 +20,12 @@ aio-pika = ">=9.4.3"
 {% elif broker == "kafka" %}
 aiokafka = ">=0.10.0"
 {% endif %}
+{% if "mongodb" in nosql %}
+pymongo = ">=4.11.0"
+{% endif %}
+{% if "neo4j" in nosql %}
+neo4j = ">=6.2.0"
+{% endif %}
 pydantic = { version = ">=2.6.4", extras = ["email"] }
 pydantic-settings = ">=2.2.1"
 PyJWT = ">=2.8.0"
@@ -70,6 +76,12 @@ dependencies = [
   "aio-pika>=9.4.3",
 {% elif broker == "kafka" %}
   "aiokafka>=0.10.0",
+{% endif %}
+{% if "mongodb" in nosql %}
+  "pymongo>=4.11.0",
+{% endif %}
+{% if "neo4j" in nosql %}
+  "neo4j>=6.2.0",
 {% endif %}
   "pydantic[email]>=2.6.4",
   "pydantic-settings>=2.2.1",
@@ -284,6 +296,7 @@ orm = "{{ orm }}"
 package_manager = "{{ package_manager }}"
 uid = "{{ uid }}"
 broker = "{{ broker }}"
+nosql = [{% for provider in nosql %}"{{ provider }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 
 {%- if design == "ddd" %}
 [tool.robyn-config.add]

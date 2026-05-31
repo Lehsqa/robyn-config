@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Mapping, Sequence
 
 ORM_CHOICES: Sequence[str] = ("sqlalchemy", "tortoise")
@@ -14,6 +15,9 @@ BROKER_CHOICES: Sequence[str] = (
     "kafka",
 )
 INTERACTIVE_BROKER_CHOICES: Sequence[str] = BROKER_CHOICES
+NOSQL_PROVIDERS: Sequence[str] = ("mongodb", "neo4j")
+NOSQL_CHOICES: Sequence[str] = ("none", *NOSQL_PROVIDERS)
+INTERACTIVE_NOSQL_CHOICES: Sequence[str] = NOSQL_PROVIDERS
 UID_CHOICES: Sequence[str] = (
     "none",
     "uuidv4",
@@ -59,6 +63,40 @@ TEMPLATE_CONFIGS: Mapping[str, dict[str, str]] = {
 }
 
 
+def _normalize_nosql(
+    values: str | Iterable[str] | None,
+) -> tuple[str, ...]:
+    """Normalize NoSQL input into an ordered provider tuple."""
+    if values is None:
+        return ()
+
+    raw_values = (values,) if isinstance(values, str) else values
+    selected = {
+        provider.strip().lower()
+        for value in raw_values
+        for provider in value.split(",")
+        if provider.strip()
+    }
+
+    if "none" in selected:
+        if len(selected) > 1:
+            raise ValueError(
+                "NoSQL provider 'none' cannot be combined with other providers."
+            )
+        return ()
+
+    for provider in selected:
+        if provider not in NOSQL_PROVIDERS:
+            raise ValueError(
+                f"Unsupported NoSQL provider '{provider}'. "
+                f"Valid options: {', '.join(NOSQL_CHOICES)}."
+            )
+
+    return tuple(
+        provider for provider in NOSQL_PROVIDERS if provider in selected
+    )
+
+
 def _get_template_config(
     design: str,
     orm_type: str,
@@ -66,7 +104,8 @@ def _get_template_config(
     package_manager: str,
     uid: str = "none",
     broker: str | None = None,
-) -> dict[str, str]:
+    nosql: str | Iterable[str] | None = None,
+) -> dict[str, object]:
     """Get the template configuration for the given design and ORM type."""
     key = f"{design}:{orm_type}"
     config = TEMPLATE_CONFIGS.get(key)
@@ -82,4 +121,5 @@ def _get_template_config(
         "package_manager": package_manager,
         "uid": uid,
         "broker": broker or "none",
+        "nosql": _normalize_nosql(nosql),
     }

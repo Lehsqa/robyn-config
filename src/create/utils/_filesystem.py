@@ -21,6 +21,7 @@ SRC_DIR = PACKAGE_ROOT.resolve()
 COMMON_DIR = (SRC_DIR / "common").resolve()
 COMPOSE_APP_DIR = (COMMON_DIR / "compose" / "app").resolve()
 BROKERS_DIR = (SRC_DIR / "brokers").resolve()
+NOSQL_DIR = (SRC_DIR / "nosql").resolve()
 
 JINJA_ENV = Environment(undefined=StrictUndefined, keep_trailing_newline=True)
 
@@ -120,7 +121,7 @@ def prepare_destination(
 
 
 def _render_template(
-    source: Path, target: Path, context: Mapping[str, str]
+    source: Path, target: Path, context: Mapping[str, object]
 ) -> None:
     """Render a Jinja2 template from source to target."""
     template = JINJA_ENV.from_string(source.read_text())
@@ -130,7 +131,7 @@ def _render_template(
 
 
 def _render_jinja2_in_tree(
-    target_dir: Path, context: Mapping[str, str]
+    target_dir: Path, context: Mapping[str, object]
 ) -> None:
     """Render and delete all *.jinja2 files found under target_dir."""
     for jinja_file in list(target_dir.rglob("*.jinja2")):
@@ -143,7 +144,7 @@ def _copy_common_files(
     destination: Path,
     orm_type: str,
     package_manager: str,
-    context: Mapping[str, str],
+    context: Mapping[str, object],
 ) -> None:
     """Copy common files to the destination directory."""
     lock_files = set(LOCK_FILE_BY_MANAGER.values())
@@ -177,7 +178,7 @@ def _copy_src_app(
     destination: Path,
     orm_type: str,
     design: str,
-    context: Mapping[str, str],
+    context: Mapping[str, object],
 ) -> None:
     """Copy the application source directory to the destination."""
     target_dir = destination / "src" / "app"
@@ -224,7 +225,7 @@ def _copy_broker_files(
     destination: Path,
     design: str,
     broker: str,
-    context: Mapping[str, str],
+    context: Mapping[str, object],
 ) -> None:
     """Copy optional broker infrastructure into the generated app."""
     if broker == "none":
@@ -238,6 +239,32 @@ def _copy_broker_files(
 
     target = destination / "src" / "app"
     shutil.copytree(source, target, dirs_exist_ok=True)
+    _render_jinja2_in_tree(target, context)
+
+
+def _copy_nosql_files(
+    destination: Path,
+    design: str,
+    nosql: Iterable[str],
+    context: Mapping[str, object],
+) -> None:
+    """Copy optional NoSQL infrastructure into the generated app."""
+    providers = tuple(nosql)
+    if not providers:
+        return
+
+    target = destination / "src" / "app"
+    sources = (NOSQL_DIR / "common", NOSQL_DIR / design / "common")
+    for provider in providers:
+        source = NOSQL_DIR / design / provider
+        if not source.exists():
+            raise FileNotFoundError(
+                f"Could not find NoSQL template for '{design}/{provider}'."
+            )
+        sources += (source,)
+
+    for source in sources:
+        shutil.copytree(source, target, dirs_exist_ok=True)
     _render_jinja2_in_tree(target, context)
 
 
@@ -256,7 +283,7 @@ def _resolve_compose_file(base: str, extension: str, orm_type: str) -> Path:
 
 
 def _copy_compose_app(
-    destination: Path, orm_type: str, context: Mapping[str, str]
+    destination: Path, orm_type: str, context: Mapping[str, object]
 ) -> None:
     """Copy the compose app files to the destination directory."""
     target_dir = destination / "compose" / "app"
@@ -295,13 +322,15 @@ def copy_template(
     package_manager: str,
     uid: str = "none",
     broker: str | None = None,
+    nosql: str | Iterable[str] = "none",
 ) -> None:
     """Copy the complete template to the destination directory."""
     context = _get_template_config(
-        design, orm_type, project_name, package_manager, uid, broker
+        design, orm_type, project_name, package_manager, uid, broker, nosql
     )
     _copy_src_app(destination, orm_type, design, context)
     _copy_broker_files(destination, design, context["broker"], context)
+    _copy_nosql_files(destination, design, context["nosql"], context)
     _copy_compose_app(destination, orm_type, context)
     _copy_common_files(destination, orm_type, package_manager, context)
 
