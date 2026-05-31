@@ -39,6 +39,7 @@ def _stub_create_pipeline(monkeypatch) -> dict[str, object]:
         package_manager: str,
         uid: str,
         broker: str,
+        nosql: tuple[str, ...],
     ) -> None:
         calls["copy_template"] = {
             "destination": destination,
@@ -48,6 +49,7 @@ def _stub_create_pipeline(monkeypatch) -> dict[str, object]:
             "package_manager": package_manager,
             "uid": uid,
             "broker": broker,
+            "nosql": nosql,
         }
 
     def fake_apply_package_manager(
@@ -107,6 +109,7 @@ def test_create_interactive_uses_selected_values(
             package_manager="poetry",
             uid="sparkid",
             broker="kafka",
+            nosql=("mongodb", "neo4j"),
         ),
     )
 
@@ -128,6 +131,7 @@ def test_create_interactive_uses_selected_values(
         "package_manager": "poetry",
         "uid": "sparkid",
         "broker": "kafka",
+        "nosql": ("mongodb", "neo4j"),
     }
 
 
@@ -168,6 +172,8 @@ def test_create_interactive_prefills_from_cli_inputs(
             "sparkid",
             "--broker",
             "rabbitmq",
+            "--nosql",
+            "mongodb",
             "seed-name",
             str(destination),
         ],
@@ -182,6 +188,7 @@ def test_create_interactive_prefills_from_cli_inputs(
     assert defaults.package_manager == "poetry"
     assert defaults.uid == "sparkid"
     assert defaults.broker == "rabbitmq"
+    assert defaults.nosql == ("mongodb",)
     assert calls["prepare_destination"] == {
         "destination": destination,
         "orm": "tortoise",
@@ -239,6 +246,71 @@ def test_create_accepts_explicit_no_broker_like_uid(
     assert calls["copy_template"]["broker"] == "none"  # type: ignore[index]
 
 
+def test_create_accepts_explicit_no_nosql_like_uid(
+    monkeypatch, tmp_path
+) -> None:
+    runner = CliRunner()
+    calls = _stub_create_pipeline(monkeypatch)
+    destination = tmp_path / "no-nosql-project"
+
+    result = runner.invoke(
+        cli_module.cli,
+        ["create", "no-nosql-app", "--nosql", "none", str(destination)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls["copy_template"]["nosql"] == ()  # type: ignore[index]
+
+
+@pytest.mark.parametrize(
+    "nosql_args",
+    [
+        ["--nosql", "mongodb,neo4j"],
+        ["--nosql", "mongodb", "--nosql", "neo4j"],
+        ["--nosql", "neo4j", "--nosql", "mongodb", "--nosql", "neo4j"],
+    ],
+)
+def test_create_accepts_multiple_nosql_providers(
+    monkeypatch, tmp_path, nosql_args
+) -> None:
+    runner = CliRunner()
+    calls = _stub_create_pipeline(monkeypatch)
+    destination = tmp_path / "multi-nosql-project"
+
+    result = runner.invoke(
+        cli_module.cli,
+        ["create", "multi-nosql-app", *nosql_args, str(destination)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls["copy_template"]["nosql"] == (  # type: ignore[index]
+        "mongodb",
+        "neo4j",
+    )
+
+
+@pytest.mark.parametrize(
+    ("nosql_value", "message"),
+    [
+        ("none,mongodb", "'none' cannot be combined"),
+        ("redis", "Unsupported NoSQL provider 'redis'"),
+    ],
+)
+def test_create_rejects_invalid_nosql_selection(
+    monkeypatch, nosql_value, message
+) -> None:
+    runner = CliRunner()
+    _stub_create_pipeline(monkeypatch)
+
+    result = runner.invoke(
+        cli_module.cli,
+        ["create", "invalid-nosql-app", "--nosql", nosql_value],
+    )
+
+    assert result.exit_code != 0
+    assert message in result.output
+
+
 def test_create_help_contains_interactive_flag() -> None:
     runner = CliRunner()
     result = runner.invoke(cli_module.cli, ["create", "--help"])
@@ -246,6 +318,7 @@ def test_create_help_contains_interactive_flag() -> None:
     assert "-i, --interactive" in result.output
     assert "-uid, --uid" in result.output
     assert "-broker, --broker" in result.output
+    assert "-nosql, --nosql" in result.output
 
 
 def test_create_interactive_requires_tty(monkeypatch) -> None:
@@ -332,6 +405,41 @@ class TestBulletSelect:
         assert widget.field_id == "orm"
 
 
+class TestBulletToggleList:
+    """Tests for the NoSQL multi-select widget."""
+
+    def test_toggle_list_reports_selected_values_in_choice_order(self):
+        from create.utils._interactive import BulletToggleList
+
+        widget = BulletToggleList(
+            label="NoSQL",
+            field_id="nosql",
+            choices=("mongodb", "neo4j"),
+            value=("neo4j", "mongodb"),
+        )
+
+        assert widget.value == ("mongodb", "neo4j")
+        assert widget.field_id == "nosql"
+
+    def test_toggle_list_enables_and_disables_providers_independently(self):
+        from create.utils._interactive import BulletToggleList
+
+        widget = BulletToggleList(
+            label="NoSQL",
+            field_id="nosql",
+            choices=("mongodb", "neo4j"),
+            value=(),
+        )
+
+        widget.toggle()
+        widget.move(1)
+        widget.toggle()
+        widget.move(-1)
+        widget.toggle()
+
+        assert widget.value == ("neo4j",)
+
+
 @pytest.mark.skipif(
     not hasattr(
         __import__(
@@ -405,6 +513,7 @@ class TestInteractiveCreateAppScreens:
             package_manager="poetry",
             uid="uuidv4",
             broker="rabbitmq",
+            nosql=("neo4j",),
         )
         app = InteractiveCreateApp(defaults)
         assert app.state["name"] == "test-app"
@@ -414,6 +523,7 @@ class TestInteractiveCreateAppScreens:
         assert app.state["package_manager"] == "poetry"
         assert app.state["uid"] == "uuidv4"
         assert app.state["broker"] == "rabbitmq"
+        assert app.state["nosql"] == ("neo4j",)
 
     def test_app_normalizes_defaults(self):
         from create.utils._interactive import (
@@ -429,6 +539,7 @@ class TestInteractiveCreateAppScreens:
             package_manager="invalid",
             uid="invalid",
             broker="invalid",
+            nosql=("invalid",),
         )
         app = InteractiveCreateApp(defaults)
         assert app.state["name"] == "padded"
@@ -438,6 +549,7 @@ class TestInteractiveCreateAppScreens:
         assert app.state["package_manager"] == "uv"
         assert app.state["uid"] == "none"
         assert app.state["broker"] == "none"
+        assert app.state["nosql"] == ()
 
 
 @pytest.mark.skipif(
@@ -470,6 +582,7 @@ class TestInteractiveFlow:
             package_manager="uv",
             uid="none",
             broker="none",
+            nosql=(),
         )
         app = InteractiveCreateApp(defaults)
 
@@ -487,6 +600,7 @@ class TestInteractiveFlow:
         assert app.return_value.destination == "."
         assert app.return_value.orm == "sqlalchemy"
         assert app.return_value.broker == "none"
+        assert app.return_value.nosql == ()
 
     @pytest.mark.asyncio
     async def test_cancel_from_stage1_returns_none(self):
@@ -503,6 +617,7 @@ class TestInteractiveFlow:
             package_manager="uv",
             uid="none",
             broker="none",
+            nosql=(),
         )
         app = InteractiveCreateApp(defaults)
 
@@ -526,6 +641,7 @@ class TestInteractiveFlow:
             package_manager="uv",
             uid="none",
             broker="redis",
+            nosql=("mongodb",),
         )
         app = InteractiveCreateApp(defaults)
 
@@ -549,6 +665,7 @@ class TestInteractiveFlow:
         assert app.return_value.name == "my-app"
         assert app.return_value.destination == "/tmp/test"
         assert app.return_value.broker == "redis"
+        assert app.return_value.nosql == ("mongodb",)
 
     @pytest.mark.asyncio
     async def test_empty_name_shows_error_on_stage1(self):
@@ -566,6 +683,7 @@ class TestInteractiveFlow:
             package_manager="uv",
             uid="none",
             broker="none",
+            nosql=(),
         )
         app = InteractiveCreateApp(defaults)
 

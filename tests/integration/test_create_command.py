@@ -20,6 +20,7 @@ def run_create_command(
     bin_dir: Path | None = None,
     uid: str | None = None,
     broker: str | None = None,
+    nosql: str | None = None,
 ) -> subprocess.CompletedProcess:
     """Run the create command via subprocess."""
     env = os.environ.copy()
@@ -43,6 +44,8 @@ def run_create_command(
         cmd.extend(["--uid", uid])
     if broker is not None:
         cmd.extend(["--broker", broker])
+    if nosql is not None:
+        cmd.extend(["--nosql", nosql])
     cmd.append(str(destination))
     return subprocess.run(
         cmd,
@@ -317,6 +320,9 @@ def test_create_generates_selected_broker_template(
     else:
         assert "aiokafka>=" in pyproject_content
         assert "kafka:" in compose_content
+        assert "image: apache/kafka:4.3.0" in compose_content
+        assert "KAFKA_PROCESS_ROLES: broker,controller" in compose_content
+        assert "KAFKA_CFG_PROCESS_ROLES" not in compose_content
         assert (
             "SETTINGS__BROKER__BOOTSTRAP_SERVERS: kafka:9092"
             in compose_content
@@ -325,3 +331,172 @@ def test_create_generates_selected_broker_template(
             "SETTINGS__BROKER__BOOTSTRAP_SERVERS=localhost:29092"
             in env_example_content
         )
+
+
+@pytest.mark.parametrize("design", ("ddd", "mvc"))
+@pytest.mark.parametrize("nosql", ("mongodb", "neo4j"))
+def test_create_generates_selected_nosql_template(
+    tmp_path: Path,
+    design: str,
+    nosql: str,
+) -> None:
+    project_dir = tmp_path / f"{design}-{nosql}-nosql"
+    fake_bin = create_fake_package_managers(tmp_path)
+    result = run_create_command(
+        project_dir,
+        design,
+        "sqlalchemy",
+        bin_dir=fake_bin,
+        nosql=nosql,
+    )
+
+    assert result.returncode == 0, f"CLI create failed: {result.stderr}"
+
+    app_dir = project_dir / "src" / "app"
+    pyproject_content = (project_dir / "pyproject.toml").read_text()
+    compose_content = (project_dir / "docker-compose.yml").read_text()
+    env_example_content = (project_dir / ".env.example").read_text()
+    settings_content = (app_dir / "config" / "__init__.py").read_text()
+    nosql_settings_dir = app_dir / "config" / "nosql"
+    nosql_settings_content = (nosql_settings_dir / f"{nosql}.py").read_text()
+    nosql_init_content = (nosql_settings_dir / "__init__.py").read_text()
+
+    assert "from . import nosql as _nosql" in settings_content
+    assert "nosql: _nosql.Settings = _nosql.Settings()" in settings_content
+    assert f'nosql = ["{nosql}"]' in pyproject_content
+    assert f"{nosql}: _{nosql}.Settings = _{nosql}.Settings()" in (
+        nosql_init_content
+    )
+
+    if design == "ddd":
+        nosql_dir = app_dir / "infrastructure" / "nosql"
+        provider_dir = nosql_dir / nosql
+        service_path = provider_dir / "services" / "engine.py"
+        assert (nosql_dir / "__init__.py").exists()
+        assert (provider_dir / "__init__.py").exists()
+        assert (provider_dir / "services" / "__init__.py").exists()
+    else:
+        nosql_dir = app_dir / "nosql"
+        provider_dir = nosql_dir / nosql
+        service_path = provider_dir / "services.py"
+        assert not (app_dir / "infrastructure").exists()
+        assert (nosql_dir / "__init__.py").exists()
+        assert (provider_dir / "__init__.py").exists()
+
+    service_content = service_path.read_text()
+    if design == "ddd":
+        assert "from .....config import settings" in service_content
+    else:
+        assert "from ...config import settings" in service_content
+
+    if nosql == "mongodb":
+        assert "from pymongo import AsyncMongoClient" in service_content
+        assert 'await self.client.admin.command("ping")' in service_content
+        assert "await self.client.close()" in service_content
+        assert "settings.nosql.mongodb.dsn" in service_content
+        assert 'host: str = "mongodb"' in nosql_settings_content
+        assert "def dsn(self) -> str:" in nosql_settings_content
+        assert "pymongo>=4.11.0" in pyproject_content
+        assert "mongodb:" in compose_content
+        assert "SETTINGS__NOSQL__MONGODB__HOST: mongodb" in compose_content
+        assert "SETTINGS__NOSQL__MONGODB__HOST=localhost" in (
+            env_example_content
+        )
+    else:
+        assert (
+            "from neo4j import AsyncDriver, AsyncGraphDatabase"
+            in service_content
+        )
+        assert "await self.driver.verify_connectivity()" in service_content
+        assert "await self.driver.close()" in service_content
+        assert "settings.nosql.neo4j.uri" in service_content
+        assert 'uri: str = "neo4j://neo4j:7687"' in nosql_settings_content
+        assert "neo4j>=6.2.0" in pyproject_content
+        assert "neo4j:" in compose_content
+        assert (
+            "SETTINGS__NOSQL__NEO4J__URI: neo4j://neo4j:7687"
+            in compose_content
+        )
+        assert "SETTINGS__NOSQL__NEO4J__URI=neo4j://localhost:7687" in (
+            env_example_content
+        )
+
+
+@pytest.mark.parametrize("design", ("ddd", "mvc"))
+def test_create_generates_multiple_nosql_templates(
+    tmp_path: Path,
+    design: str,
+) -> None:
+    project_dir = tmp_path / f"{design}-multi-nosql"
+    fake_bin = create_fake_package_managers(tmp_path)
+    result = run_create_command(
+        project_dir,
+        design,
+        "sqlalchemy",
+        bin_dir=fake_bin,
+        nosql="mongodb,neo4j",
+    )
+
+    assert result.returncode == 0, f"CLI create failed: {result.stderr}"
+
+    app_dir = project_dir / "src" / "app"
+    pyproject_content = (project_dir / "pyproject.toml").read_text()
+    compose_content = (project_dir / "docker-compose.yml").read_text()
+    nosql_settings = app_dir / "config" / "nosql"
+    nosql_init_content = (nosql_settings / "__init__.py").read_text()
+
+    assert (nosql_settings / "mongodb.py").exists()
+    assert (nosql_settings / "neo4j.py").exists()
+    assert 'nosql = ["mongodb", "neo4j"]' in pyproject_content
+    assert "pymongo>=4.11.0" in pyproject_content
+    assert "neo4j>=6.2.0" in pyproject_content
+    assert "mongodb:" in compose_content
+    assert "neo4j:" in compose_content
+    assert "SETTINGS__NOSQL__MONGODB__HOST: mongodb" in compose_content
+    assert "SETTINGS__NOSQL__NEO4J__URI: neo4j://neo4j:7687" in (
+        compose_content
+    )
+    assert "mongodb: _mongodb.Settings = _mongodb.Settings()" in (
+        nosql_init_content
+    )
+    assert "neo4j: _neo4j.Settings = _neo4j.Settings()" in nosql_init_content
+
+    if design == "ddd":
+        nosql_dir = app_dir / "infrastructure" / "nosql"
+        assert (nosql_dir / "mongodb" / "services" / "engine.py").exists()
+        assert (nosql_dir / "neo4j" / "services" / "engine.py").exists()
+    else:
+        nosql_dir = app_dir / "nosql"
+        assert (nosql_dir / "mongodb" / "services.py").exists()
+        assert (nosql_dir / "neo4j" / "services.py").exists()
+
+
+def test_create_composes_broker_and_multiple_nosql_templates(
+    tmp_path: Path,
+) -> None:
+    project_dir = tmp_path / "broker-and-multi-nosql"
+    fake_bin = create_fake_package_managers(tmp_path)
+    result = run_create_command(
+        project_dir,
+        "ddd",
+        "sqlalchemy",
+        bin_dir=fake_bin,
+        broker="kafka",
+        nosql="mongodb,neo4j",
+    )
+
+    assert result.returncode == 0, f"CLI create failed: {result.stderr}"
+
+    app_dir = project_dir / "src" / "app"
+    compose_content = (project_dir / "docker-compose.yml").read_text()
+
+    assert (app_dir / "infrastructure" / "broker" / "services.py").exists()
+    assert (
+        app_dir / "infrastructure" / "nosql" / "mongodb" / "services"
+    ).exists()
+    assert (
+        app_dir / "infrastructure" / "nosql" / "neo4j" / "services"
+    ).exists()
+    assert "kafka:" in compose_content
+    assert "mongodb:" in compose_content
+    assert "neo4j:" in compose_content

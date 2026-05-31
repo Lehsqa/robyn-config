@@ -6,7 +6,7 @@ It follows a DDD layering (config ➜ infrastructure ➜ domain ➜ operational 
 {%- else %}
 It follows an MVC-style layout (config ➜ models ➜ views/controllers) while using `msgspec` for fast JSON, async database sessions, Valkey (Redis-compatible) caching, Loguru logging, and Passlib password hashing.
 {%- endif %}
-The code lives under `src/app` and ships with a Docker Compose stack for PostgreSQL, Redis, a local SMTP sink{% if broker != "none" %}, {{ "RabbitMQ" if broker == "rabbitmq" else "Kafka" if broker == "kafka" else "Redis broker" }}{% endif %}, and the app container.
+The code lives under `src/app` and ships with a Docker Compose stack for PostgreSQL, Redis, a local SMTP sink{% if broker != "none" %}, {{ "RabbitMQ" if broker == "rabbitmq" else "Kafka" if broker == "kafka" else "Redis broker" }}{% endif %}{% if "mongodb" in nosql %}, MongoDB{% endif %}{% if "neo4j" in nosql %}, Neo4j{% endif %}, and the app container.
 
 ## Project layout
 
@@ -47,7 +47,7 @@ uv pip install -e .[dev]
 
 The `[dev]` extra adds the linting, formatting, testing, typing, and coverage helpers (`ruff`, `flake8`, `black`, `isort`, `pytest`/`pytest-cov`, `coverage`, `mypy`, and `pyright`) that are configured via `pyproject.toml`.
 
-Copy `.env.example` to `.env` before running the app locally or via Compose; `.env.example` uses host-friendly (`localhost`) infrastructure defaults, and Compose overrides the database/cache/mail hosts to point at its internal PostgreSQL/Valkey/MailHog containers.
+Copy `.env.example` to `.env` before running the app locally or via Compose; `.env.example` uses host-friendly (`localhost`) infrastructure defaults, and Compose overrides infrastructure hosts to point at its internal containers.
 
 ## Makefile shortcuts
 
@@ -98,6 +98,20 @@ export SETTINGS__BROKER__BOOTSTRAP_SERVERS=localhost:29092
 export SETTINGS__BROKER__CLIENT_ID=robyn-app
 export SETTINGS__BROKER__GROUP_ID=robyn-app
 export SETTINGS__BROKER__TOPIC_PREFIX=app
+{%- endif %}
+{%- if "mongodb" in nosql %}
+export SETTINGS__NOSQL__MONGODB__HOST=localhost
+export SETTINGS__NOSQL__MONGODB__PORT=27017
+export SETTINGS__NOSQL__MONGODB__USER=app
+export SETTINGS__NOSQL__MONGODB__PASSWORD=app
+export SETTINGS__NOSQL__MONGODB__DATABASE=app
+export SETTINGS__NOSQL__MONGODB__AUTH_SOURCE=admin
+{%- endif %}
+{%- if "neo4j" in nosql %}
+export SETTINGS__NOSQL__NEO4J__URI=neo4j://localhost:7687
+export SETTINGS__NOSQL__NEO4J__USER=neo4j
+export SETTINGS__NOSQL__NEO4J__PASSWORD=app-password
+export SETTINGS__NOSQL__NEO4J__DATABASE=neo4j
 {%- endif %}
 export SETTINGS__MAILING__HOST=localhost
 export SETTINGS__MAILING__PORT=1025
@@ -198,7 +212,13 @@ Services:
 {%- elif broker == "kafka" %}
 - `kafka` – Kafka broker exposed to local clients on `localhost:29092`.
 {%- endif %}
-- `app` – Robyn service (`python -m app.server`) exposed on <http://localhost:8000>. The `environment` block in `docker-compose.yml` overrides only the infrastructure host entries (database/cache/mail{% if broker != "none" %}/broker{% endif %}) for container networking; the rest load from `.env` so the same file works for both Docker and local runs.
+{%- if "mongodb" in nosql %}
+- `mongodb` – MongoDB exposed on `localhost:27017`.
+{%- endif %}
+{%- if "neo4j" in nosql %}
+- `neo4j` – Neo4j exposed on `localhost:7687` with Browser at <http://localhost:7474>.
+{%- endif %}
+- `app` – Robyn service (`python -m app.server`) exposed on <http://localhost:8000>. The `environment` block in `docker-compose.yml` overrides only the infrastructure host entries for container networking; the rest load from `.env` so the same file works for both Docker and local runs.
 
 The `app` service builds from `compose/app/Dockerfile`, copies the `dev.sh` helper into the image, and runs it so {{ "Alembic" if orm == "sqlalchemy" else "Aerich" }} upgrades happen before `python -m app.server --reload` executes.
 

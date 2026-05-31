@@ -1,0 +1,13 @@
+from pydantic import BaseModel
+
+{% for provider in nosql -%}
+from . import {{ provider }} as _{{ provider }}
+{% endfor %}
+
+__all__ = ("Settings",)
+
+
+class Settings(BaseModel):
+{% for provider in nosql %}
+    {{ provider }}: _{{ provider }}.Settings = _{{ provider }}.Settings()
+{% endfor %}

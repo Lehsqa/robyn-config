@@ -8,9 +8,11 @@ from typing import Sequence
 from ._config import (
     DESIGN_CHOICES,
     INTERACTIVE_BROKER_CHOICES,
+    INTERACTIVE_NOSQL_CHOICES,
     ORM_CHOICES,
     PACKAGE_MANAGER_CHOICES,
     UID_CHOICES,
+    _normalize_nosql,
 )
 
 TEXTUAL_IMPORT_ERROR: ModuleNotFoundError | None = None
@@ -35,6 +37,13 @@ def _pick_choice(value: str, choices: Sequence[str]) -> str:
     return normalized if normalized in choices else choices[0]
 
 
+def _pick_nosql(values: Sequence[str]) -> tuple[str, ...]:
+    try:
+        return _normalize_nosql(values)
+    except ValueError:
+        return ()
+
+
 @dataclass(frozen=True, slots=True)
 class InteractiveCreateConfig:
     """Collected values from interactive create mode."""
@@ -46,6 +55,7 @@ class InteractiveCreateConfig:
     package_manager: str
     uid: str
     broker: str
+    nosql: tuple[str, ...]
 
 
 if TEXTUAL_AVAILABLE:
@@ -221,6 +231,96 @@ if TEXTUAL_AVAILABLE:
                 event.prevent_default()
                 event.stop()
 
+    class BulletToggleList(Vertical):
+        """A label and independently toggled list of infrastructure options."""
+
+        can_focus = True
+
+        DEFAULT_CSS = """
+        BulletToggleList {
+            height: auto;
+            margin-bottom: 1;
+            padding: 0 1;
+        }
+        BulletToggleList:focus {
+            background: #161d27;
+        }
+        BulletToggleList .field-label {
+            color: #a6b3c7;
+        }
+        BulletToggleList .field-values {
+            color: #f5f8ff;
+        }
+        BulletToggleList:focus .field-values {
+            color: #2b7f5a;
+            text-style: bold;
+        }
+        """
+
+        def __init__(
+            self,
+            label: str,
+            field_id: str,
+            choices: Sequence[str],
+            value: Sequence[str],
+        ) -> None:
+            super().__init__()
+            self.field_id = field_id
+            self._label_text = label
+            self._choices = tuple(choices)
+            self._selected = set(value) & set(self._choices)
+            self._index = 0
+
+        def compose(self) -> ComposeResult:
+            yield Static(
+                f"{self._label_text}  ↑↓ move  ↵ toggle",
+                classes="field-label",
+            )
+            yield Static(self._render_values(), classes="field-values")
+
+        @property
+        def value(self) -> tuple[str, ...]:
+            return tuple(
+                choice for choice in self._choices if choice in self._selected
+            )
+
+        def _render_values(self) -> str:
+            rows = []
+            for index, choice in enumerate(self._choices):
+                cursor = "›" if index == self._index else " "
+                marker = "x" if choice in self._selected else " "
+                rows.append(f"{cursor} [{marker}] {choice}")
+            return "\n".join(rows)
+
+        def _refresh(self) -> None:
+            values = self.query(".field-values")
+            if values:
+                values.first(Static).update(self._render_values())
+
+        def move(self, offset: int) -> None:
+            self._index = (self._index + offset) % len(self._choices)
+            self._refresh()
+
+        def toggle(self) -> None:
+            choice = self._choices[self._index]
+            if choice in self._selected:
+                self._selected.remove(choice)
+            else:
+                self._selected.add(choice)
+            self._refresh()
+
+        def on_key(self, event: events.Key) -> None:
+            if event.key == "up":
+                self.move(-1)
+            elif event.key == "down":
+                self.move(1)
+            elif event.key in {"enter", "space"}:
+                self.toggle()
+            else:
+                return
+            event.prevent_default()
+            event.stop()
+
     class TechnicalScreen(Screen):
         """Stage 2: ORM, design pattern, package manager, UID, broker."""
 
@@ -307,6 +407,12 @@ if TEXTUAL_AVAILABLE:
                     choices=INTERACTIVE_BROKER_CHOICES,
                     value=app.state["broker"],
                 ),
+                BulletToggleList(
+                    label="NoSQL",
+                    field_id="nosql",
+                    choices=INTERACTIVE_NOSQL_CHOICES,
+                    value=app.state["nosql"],
+                ),
                 Horizontal(
                     Button("← Back", id="back"),
                     Button("Create", id="create-btn"),
@@ -342,6 +448,8 @@ if TEXTUAL_AVAILABLE:
             for select in self.query("BulletSelect"):
                 assert isinstance(select, BulletSelect)
                 app.state[select.field_id] = select.value
+            nosql = self.query_one("BulletToggleList", BulletToggleList)
+            app.state[nosql.field_id] = nosql.value
 
         def _submit(self) -> None:
             self._save_state()
@@ -356,6 +464,7 @@ if TEXTUAL_AVAILABLE:
                     package_manager=app.state["package_manager"],
                     uid=app.state["uid"],
                     broker=app.state["broker"],
+                    nosql=app.state["nosql"],
                 )
             )
 
@@ -489,7 +598,7 @@ if TEXTUAL_AVAILABLE:
 
         def __init__(self, defaults: InteractiveCreateConfig) -> None:
             super().__init__()
-            self.state: dict[str, str] = {
+            self.state: dict[str, str | tuple[str, ...]] = {
                 "name": defaults.name.strip(),
                 "destination": defaults.destination.strip() or ".",
                 "orm": _pick_choice(defaults.orm, ORM_CHOICES),
@@ -501,6 +610,9 @@ if TEXTUAL_AVAILABLE:
                 "broker": _pick_choice(
                     defaults.broker,
                     INTERACTIVE_BROKER_CHOICES,
+                ),
+                "nosql": _pick_nosql(
+                    defaults.nosql,
                 ),
             }
 

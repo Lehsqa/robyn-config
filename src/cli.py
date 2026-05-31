@@ -27,6 +27,7 @@ from create import (
     prepare_destination,
     run_create_interactive,
 )
+from create.utils._config import _normalize_nosql
 from monitoring import add_monitoring
 
 
@@ -162,6 +163,19 @@ def cli() -> None:
     show_default=True,
     help="Select the message queue.",
 )
+@click.option(
+    "-nosql",
+    "--nosql",
+    "nosql",
+    type=str,
+    multiple=True,
+    default=("none",),
+    show_default=True,
+    help=(
+        "Select optional NoSQL datastores. Repeat the flag or use "
+        "comma-separated values."
+    ),
+)
 @click.argument(
     "destination",
     type=click.Path(
@@ -182,9 +196,14 @@ def create(
     package_manager: str,
     uid_type: str,
     broker: str,
+    nosql: tuple[str, ...],
 ) -> None:
     """Copy the template into destination with specific configurations."""
     destination = destination or Path(".")
+    try:
+        normalized_nosql = _normalize_nosql(nosql)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     if interactive:
         if not _interactive_terminal_available():
@@ -204,6 +223,7 @@ def create(
                     package_manager=package_manager,
                     uid=uid_type,
                     broker=(broker or "none").lower(),
+                    nosql=normalized_nosql,
                 )
             )
         except RuntimeError as exc:
@@ -218,6 +238,10 @@ def create(
         package_manager = selected.package_manager
         uid_type = selected.uid
         broker = selected.broker
+        try:
+            normalized_nosql = _normalize_nosql(selected.nosql)
+        except ValueError as exc:
+            raise click.ClickException(str(exc)) from exc
 
     if not name:
         raise click.UsageError("Missing argument 'NAME'.")
@@ -265,6 +289,7 @@ def create(
             package_manager,
             uid_type,
             broker,
+            normalized_nosql,
         )
 
         click.echo("Installing dependencies...")

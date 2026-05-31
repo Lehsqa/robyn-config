@@ -78,6 +78,40 @@ def test_broker_choices_include_none_and_canonical_values():
     assert "rabytmq" not in create_config.BROKER_CHOICES
 
 
+def test_nosql_choices_include_none_and_supported_values():
+    """NoSQL choices should mirror UID and broker fallback behavior."""
+    assert create_config.NOSQL_CHOICES == ("none", "mongodb", "neo4j")
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, ()),
+        ("none", ()),
+        ("mongodb", ("mongodb",)),
+        ("mongodb,neo4j", ("mongodb", "neo4j")),
+        (("neo4j", "mongodb", "neo4j"), ("mongodb", "neo4j")),
+        ((" MONGODB ", " neo4j "), ("mongodb", "neo4j")),
+    ],
+)
+def test_normalize_nosql(value, expected):
+    """NoSQL input should become one ordered, de-duplicated provider tuple."""
+    assert create_config._normalize_nosql(value) == expected
+
+
+@pytest.mark.parametrize("value", ("mongodb,none", ("none", "neo4j")))
+def test_normalize_nosql_rejects_none_combined_with_provider(value):
+    """The no-provider sentinel should only be accepted by itself."""
+    with pytest.raises(ValueError, match="'none' cannot be combined"):
+        create_config._normalize_nosql(value)
+
+
+def test_normalize_nosql_rejects_unknown_provider():
+    """Unknown providers should fail before template copying begins."""
+    with pytest.raises(ValueError, match="Unsupported NoSQL provider 'redis'"):
+        create_config._normalize_nosql("redis")
+
+
 def test_get_template_config_includes_uid():
     """Test that the template context preserves the selected UID type."""
     config = create_config._get_template_config(
@@ -92,6 +126,66 @@ def test_get_template_config_uid_defaults_to_none():
         "ddd", "sqlalchemy", "myproj", "uv", "none"
     )
     assert config["uid"] == "none"
+
+
+def test_get_template_config_includes_nosql():
+    """Test that the template context preserves selected NoSQL providers."""
+    config = create_config._get_template_config(
+        "ddd",
+        "sqlalchemy",
+        "myproj",
+        "uv",
+        "none",
+        "none",
+        ("mongodb", "neo4j"),
+    )
+    assert config["nosql"] == ("mongodb", "neo4j")
+
+
+def test_get_template_config_nosql_defaults_to_none():
+    """Test that NoSQL defaults to no generated overlay."""
+    config = create_config._get_template_config(
+        "ddd", "sqlalchemy", "myproj", "uv"
+    )
+    assert config["nosql"] == ()
+
+
+def test_copy_nosql_files_merges_selected_overlays(tmp_path, monkeypatch):
+    """Selected NoSQL overlays should merge without provider collisions."""
+    nosql_dir = tmp_path / "nosql"
+    (nosql_dir / "common").mkdir(parents=True)
+    (nosql_dir / "ddd" / "common").mkdir(parents=True)
+    for provider in ("mongodb", "neo4j"):
+        config_dir = nosql_dir / "ddd" / provider / "config" / "nosql"
+        config_dir.mkdir(parents=True)
+        (config_dir / f"{provider}.py.jinja2").write_text(
+            f'PROVIDER = "{provider}"\n'
+        )
+    destination = tmp_path / "generated"
+
+    monkeypatch.setattr(
+        create_filesystem, "NOSQL_DIR", nosql_dir, raising=False
+    )
+
+    create_filesystem._copy_nosql_files(
+        destination,
+        "ddd",
+        ("mongodb", "neo4j"),
+        {"nosql": ("mongodb", "neo4j")},
+    )
+
+    generated = destination / "src" / "app" / "config" / "nosql"
+    assert (generated / "mongodb.py").read_text() == 'PROVIDER = "mongodb"\n'
+    assert (generated / "neo4j.py").read_text() == 'PROVIDER = "neo4j"\n'
+
+
+def test_copy_nosql_files_none_is_noop(tmp_path):
+    """The none provider should not create application files."""
+    destination = tmp_path / "generated"
+
+    create_filesystem._copy_nosql_files(destination, "ddd", (), {"nosql": ()})
+
+    assert not destination.exists()
 
 
 def test_render_jinja2_in_tree(tmp_path):
