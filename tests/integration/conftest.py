@@ -68,6 +68,9 @@ def run_cli_create(
     app_name: str = "test-app",
     bin_dir: Path | None = None,
     uid: str | None = None,
+    broker: str | None = None,
+    nosql: str | None = None,
+    worker: str | None = None,
 ) -> None:
     """Scaffold a project via the CLI create command."""
     env = os.environ.copy()
@@ -87,6 +90,12 @@ def run_cli_create(
     ]
     if uid is not None:
         cmd.extend(["--uid", uid])
+    if broker is not None:
+        cmd.extend(["--broker", broker])
+    if nosql is not None:
+        cmd.extend(["--nosql", nosql])
+    if worker is not None:
+        cmd.extend(["--worker", worker])
     cmd.append(str(destination))
 
     subprocess.run(

@@ -1,0 +1,15 @@
+{% if scheduler %}from huey import crontab
+{% endif %}
+
+from .app import huey
+
+
+@huey.task()
+def example_task(value: str) -> str:
+    return value
+
+{% if scheduler %}
+@huey.periodic_task(crontab(minute="*/5"))
+def periodic_job() -> None:
+    return None
+{% endif %}

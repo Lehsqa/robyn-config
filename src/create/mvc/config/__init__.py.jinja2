@@ -19,6 +19,9 @@ from . import mailing as _mailing
 from . import nosql as _nosql
 {% endif -%}
 from . import public_api as _public_api
+{% if worker != "none" -%}
+from . import worker as _worker
+{% endif -%}
 
 __all__ = ("settings", "Settings")
 
@@ -39,6 +42,9 @@ class Settings(BaseSettings):
 {% endif %}
 {% if nosql %}
     nosql: _nosql.Settings = _nosql.Settings()
+{% endif %}
+{% if worker != "none" %}
+    worker: _worker.Settings = _worker.Settings()
 {% endif %}
 
     # platform

@@ -1,0 +1,24 @@
+from celery import Celery
+
+from ...config import settings
+
+app = Celery(
+    "app",
+    broker=settings.worker.broker_url,
+    backend=settings.worker.result_backend,
+    include=["app.infrastructure.worker.tasks"],
+)
+app.conf.update(
+    task_default_queue=settings.worker.queue,
+{% if worker_backend == "kafka" %}
+    broker_transport_options={"allow_create_topics": True},
+{% endif %}
+{% if scheduler %}
+    beat_schedule={
+        "periodic-job": {
+            "task": "app.infrastructure.worker.tasks.periodic_job",
+            "schedule": 300.0,
+        },
+    },
+{% endif %}
+)

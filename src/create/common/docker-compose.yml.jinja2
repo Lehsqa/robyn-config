@@ -1,3 +1,4 @@
+{% set worker_runtime = "app.infrastructure.worker" if design == "ddd" else "app.worker" -%}
 version: "3.9"
 
 services:
@@ -49,6 +50,9 @@ services:
     image: rabbitmq:3.13-management-alpine
     container_name: broker
     restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-app}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-app}
     ports:
       - "5672:5672"
       - "15672:15672"
@@ -140,7 +144,7 @@ services:
       - "8025:8025"
 
   app:
-    build:
+    build: &app-build
       context: .
       dockerfile: compose/app/Dockerfile
       target: prod
@@ -153,12 +157,36 @@ services:
       SETTINGS__DATABASE__HOST: postgres
       SETTINGS__CACHE__HOST: valkey
       SETTINGS__MAILING__HOST: mailhog
+{% if worker != "none" %}
+      SETTINGS__WORKER__QUEUE: app.workers
+{% if worker == "celery" %}
+{% if worker_backend == "rabbitmq" %}
+      SETTINGS__WORKER__BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER:-app}:${RABBITMQ_DEFAULT_PASS:-app}@rabbitmq:5672//
+{% elif worker_backend == "kafka" %}
+      SETTINGS__WORKER__BROKER_URL: confluentkafka://kafka:9092
+{% else %}
+      SETTINGS__WORKER__BROKER_URL: redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}
+{% endif %}
+      SETTINGS__WORKER__RESULT_BACKEND: redis://{{ worker_result_redis_service }}:6379/{{ worker_result_redis_db }}
+{% elif worker == "dramatiq" %}
+      SETTINGS__WORKER__BACKEND: {{ worker_backend }}
+{% if worker_backend == "rabbitmq" %}
+      SETTINGS__WORKER__RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-app}:${RABBITMQ_DEFAULT_PASS:-app}@rabbitmq:5672//
+{% else %}
+      SETTINGS__WORKER__REDIS_URL: redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}
+{% endif %}
+{% else %}
+      SETTINGS__WORKER__REDIS_URL: redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}
+{% endif %}
+{% endif %}
 {% if broker == "redis" %}
       SETTINGS__BROKER__HOST: redis-broker
       SETTINGS__BROKER__PORT: 6379
 {% elif broker == "rabbitmq" %}
       SETTINGS__BROKER__HOST: rabbitmq
       SETTINGS__BROKER__PORT: 5672
+      SETTINGS__BROKER__USER: ${RABBITMQ_DEFAULT_USER:-app}
+      SETTINGS__BROKER__PASSWORD: ${RABBITMQ_DEFAULT_PASS:-app}
 {% elif broker == "kafka" %}
       SETTINGS__BROKER__BOOTSTRAP_SERVERS: kafka:9092
 {% endif %}
@@ -199,6 +227,116 @@ services:
     volumes:
       - app-logs:/app/logs
       - ./src/app:/app/src/app
+{% if worker != "none" %}
+
+  worker:
+    build: *app-build
+    env_file:
+      - .env
+    environment:
+      SETTINGS__WORKER__QUEUE: app.workers
+{% if worker == "celery" %}
+{% if worker_backend == "rabbitmq" %}
+      SETTINGS__WORKER__BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER:-app}:${RABBITMQ_DEFAULT_PASS:-app}@rabbitmq:5672//
+{% elif worker_backend == "kafka" %}
+      SETTINGS__WORKER__BROKER_URL: confluentkafka://kafka:9092
+{% else %}
+      SETTINGS__WORKER__BROKER_URL: redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}
+{% endif %}
+      SETTINGS__WORKER__RESULT_BACKEND: redis://{{ worker_result_redis_service }}:6379/{{ worker_result_redis_db }}
+{% elif worker == "dramatiq" %}
+      SETTINGS__WORKER__BACKEND: {{ worker_backend }}
+{% if worker_backend == "rabbitmq" %}
+      SETTINGS__WORKER__RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-app}:${RABBITMQ_DEFAULT_PASS:-app}@rabbitmq:5672//
+{% else %}
+      SETTINGS__WORKER__REDIS_URL: redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}
+{% endif %}
+{% else %}
+      SETTINGS__WORKER__REDIS_URL: redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}
+{% endif %}
+    restart: unless-stopped
+    depends_on:
+{% if worker_backend == "rabbitmq" %}
+      rabbitmq:
+        condition: service_healthy
+{% elif worker_backend == "kafka" %}
+      kafka:
+        condition: service_started
+{% else %}
+      {{ worker_redis_service }}:
+        condition: service_healthy
+{% endif %}
+{% if worker == "celery" and worker_result_redis_service != worker_redis_service %}
+      {{ worker_result_redis_service }}:
+        condition: service_healthy
+{% endif %}
+    entrypoint: []
+{% if worker == "celery" %}
+    command: ["celery", "-A", "{{ worker_runtime }}.app", "worker", "--queues", "app.workers"]
+{% elif worker == "rq" %}
+    command: ["rq", "worker", "app.workers", "--url", "redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}"{% if worker_scheduler == "rq-with-scheduler" %}, "--with-scheduler"{% endif %}]
+{% elif worker == "dramatiq" %}
+    command: ["dramatiq", "{{ worker_runtime }}.tasks", "--queues", "app.workers"]
+{% elif worker == "huey" %}
+    command: ["huey_consumer.py", "{{ worker_runtime }}.tasks.huey"]
+{% endif %}
+    volumes:
+      - ./src/app:/app/src/app
+{% if worker_scheduler in ("celery-beat", "rq-cron", "apscheduler") %}
+
+  worker-scheduler:
+    build: *app-build
+    env_file:
+      - .env
+    environment:
+      SETTINGS__WORKER__QUEUE: app.workers
+{% if worker == "celery" %}
+{% if worker_backend == "rabbitmq" %}
+      SETTINGS__WORKER__BROKER_URL: amqp://${RABBITMQ_DEFAULT_USER:-app}:${RABBITMQ_DEFAULT_PASS:-app}@rabbitmq:5672//
+{% elif worker_backend == "kafka" %}
+      SETTINGS__WORKER__BROKER_URL: confluentkafka://kafka:9092
+{% else %}
+      SETTINGS__WORKER__BROKER_URL: redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}
+{% endif %}
+      SETTINGS__WORKER__RESULT_BACKEND: redis://{{ worker_result_redis_service }}:6379/{{ worker_result_redis_db }}
+{% elif worker == "dramatiq" %}
+      SETTINGS__WORKER__BACKEND: {{ worker_backend }}
+{% if worker_backend == "rabbitmq" %}
+      SETTINGS__WORKER__RABBITMQ_URL: amqp://${RABBITMQ_DEFAULT_USER:-app}:${RABBITMQ_DEFAULT_PASS:-app}@rabbitmq:5672//
+{% else %}
+      SETTINGS__WORKER__REDIS_URL: redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}
+{% endif %}
+{% else %}
+      SETTINGS__WORKER__REDIS_URL: redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}
+{% endif %}
+    restart: unless-stopped
+    depends_on:
+{% if worker_backend == "rabbitmq" %}
+      rabbitmq:
+        condition: service_healthy
+{% elif worker_backend == "kafka" %}
+      kafka:
+        condition: service_started
+{% else %}
+      {{ worker_redis_service }}:
+        condition: service_healthy
+{% endif %}
+{% if worker == "celery" and worker_result_redis_service != worker_redis_service %}
+      {{ worker_result_redis_service }}:
+        condition: service_healthy
+{% endif %}
+    entrypoint: []
+{% if worker == "celery" %}
+    command: ["celery", "-A", "{{ worker_runtime }}.app", "beat"]
+{% elif worker == "rq" %}
+    command: ["rq", "cron", "{{ worker_runtime }}.cron", "--url", "redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}"]
+{% elif worker == "dramatiq" %}
+    command: ["python", "-m", "{{ worker_runtime }}.scheduler"]
+{% endif %}
+    volumes:
+      - ./src/app:/app/src/app
+{% endif %}
+{% endif %}
 
 volumes:
   postgres-data:

@@ -40,6 +40,9 @@ def _stub_create_pipeline(monkeypatch) -> dict[str, object]:
         uid: str,
         broker: str,
         nosql: tuple[str, ...],
+        worker: str,
+        worker_exp_mode: bool,
+        scheduler: bool = False,
     ) -> None:
         calls["copy_template"] = {
             "destination": destination,
@@ -50,6 +53,9 @@ def _stub_create_pipeline(monkeypatch) -> dict[str, object]:
             "uid": uid,
             "broker": broker,
             "nosql": nosql,
+            "worker": worker,
+            "worker_exp_mode": worker_exp_mode,
+            "scheduler": scheduler,
         }
 
     def fake_apply_package_manager(
@@ -110,6 +116,9 @@ def test_create_interactive_uses_selected_values(
             uid="sparkid",
             broker="kafka",
             nosql=("mongodb", "neo4j"),
+            worker="dramatiq",
+            worker_exp_mode=True,
+            scheduler=True,
         ),
     )
 
@@ -132,6 +141,9 @@ def test_create_interactive_uses_selected_values(
         "uid": "sparkid",
         "broker": "kafka",
         "nosql": ("mongodb", "neo4j"),
+        "worker": "dramatiq",
+        "worker_exp_mode": True,
+        "scheduler": True,
     }
 
 
@@ -174,6 +186,10 @@ def test_create_interactive_prefills_from_cli_inputs(
             "rabbitmq",
             "--nosql",
             "mongodb",
+            "--worker",
+            "rq",
+            "--worker-exp-mode",
+            "--scheduler",
             "seed-name",
             str(destination),
         ],
@@ -189,12 +205,65 @@ def test_create_interactive_prefills_from_cli_inputs(
     assert defaults.uid == "sparkid"
     assert defaults.broker == "rabbitmq"
     assert defaults.nosql == ("mongodb",)
+    assert defaults.worker == "rq"
+    assert defaults.worker_exp_mode is True
+    assert defaults.scheduler is True
     assert calls["prepare_destination"] == {
         "destination": destination,
         "orm": "tortoise",
         "design": "mvc",
         "package_manager": "poetry",
     }
+
+
+@pytest.mark.parametrize("enable_experimental_reuse", [False, True])
+def test_create_interactive_celery_kafka_confirms_experimental_reuse(
+    monkeypatch, tmp_path, enable_experimental_reuse
+) -> None:
+    runner = CliRunner()
+    calls = _stub_create_pipeline(monkeypatch)
+    confirm_calls: list[dict[str, object]] = []
+    destination = tmp_path / "celery-kafka-project"
+
+    monkeypatch.setattr(
+        cli_module, "_interactive_terminal_available", lambda: True
+    )
+    monkeypatch.setattr(
+        cli_module,
+        "run_create_interactive",
+        lambda _defaults: InteractiveCreateConfig(
+            name="celery-kafka-app",
+            destination=str(destination),
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+            broker="kafka",
+            nosql=(),
+            worker="celery",
+            worker_exp_mode=False,
+            scheduler=False,
+        ),
+    )
+
+    def fake_confirm(text: str, default: bool) -> bool:
+        confirm_calls.append({"text": text, "default": default})
+        return enable_experimental_reuse
+
+    monkeypatch.setattr(cli_module.click, "confirm", fake_confirm)
+
+    result = runner.invoke(cli_module.cli, ["create", "-i"])
+
+    assert result.exit_code == 0, result.output
+    assert confirm_calls == [
+        {
+            "text": "Enable experimental Kafka reuse for Celery?",
+            "default": False,
+        }
+    ]
+    assert (  # type: ignore[index]
+        calls["copy_template"]["worker_exp_mode"] is enable_experimental_reuse
+    )
 
 
 def test_create_interactive_cancelled(monkeypatch) -> None:
@@ -263,6 +332,191 @@ def test_create_accepts_explicit_no_nosql_like_uid(
 
 
 @pytest.mark.parametrize(
+    ("worker_args", "expected_worker", "expected_exp_mode"),
+    [
+        (["--worker", "celery"], "celery", False),
+        (
+            ["--worker", "celery", "--broker", "kafka", "--worker-exp-mode"],
+            "celery",
+            True,
+        ),
+        (["--worker", "rq", "--worker-exp-mode", "--scheduler"], "rq", True),
+        (
+            ["--worker", "dramatiq", "--worker-exp-mode", "--scheduler"],
+            "dramatiq",
+            True,
+        ),
+    ],
+)
+def test_create_propagates_worker_selection(
+    monkeypatch,
+    tmp_path,
+    worker_args,
+    expected_worker,
+    expected_exp_mode,
+) -> None:
+    runner = CliRunner()
+    calls = _stub_create_pipeline(monkeypatch)
+    destination = tmp_path / "worker-project"
+
+    result = runner.invoke(
+        cli_module.cli,
+        ["create", "worker-app", *worker_args, str(destination)],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls["copy_template"]["worker"] == expected_worker  # type: ignore[index]
+    assert (  # type: ignore[index]
+        calls["copy_template"]["worker_exp_mode"] is expected_exp_mode
+    )
+
+
+def test_create_propagates_scheduler_selection(monkeypatch, tmp_path) -> None:
+    """The CLI should pass scheduler opt-in into scaffold rendering."""
+    runner = CliRunner()
+    calls = _stub_create_pipeline(monkeypatch)
+    destination = tmp_path / "scheduler-project"
+
+    result = runner.invoke(
+        cli_module.cli,
+        [
+            "create",
+            "scheduler-app",
+            "--worker",
+            "celery",
+            "--scheduler",
+            str(destination),
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert calls["copy_template"]["scheduler"] is True  # type: ignore[index]
+
+
+@pytest.mark.parametrize("worker", ("rq", "dramatiq"))
+def test_create_rejects_scheduler_experimental_mode_without_scheduler(
+    monkeypatch, worker
+) -> None:
+    """CLI should reject scheduler-only experimental modes without opt-in."""
+    runner = CliRunner()
+    calls = _stub_create_pipeline(monkeypatch)
+
+    result = runner.invoke(
+        cli_module.cli,
+        [
+            "create",
+            "invalid-scheduler-app",
+            "--worker",
+            worker,
+            "--worker-exp-mode",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "requires --scheduler" in result.output
+    assert "prepare_destination" not in calls
+
+
+@pytest.mark.parametrize(
+    ("worker_args", "message"),
+    [
+        (["--scheduler"], "requires --worker"),
+        (
+            ["--worker", "dramatiq", "--scheduler"],
+            "requires --worker-exp-mode",
+        ),
+    ],
+)
+def test_create_rejects_invalid_scheduler_selection_before_generation(
+    monkeypatch, worker_args, message
+) -> None:
+    """CLI should reject scheduler selections that cannot start a runtime."""
+    runner = CliRunner()
+    calls = _stub_create_pipeline(monkeypatch)
+
+    result = runner.invoke(
+        cli_module.cli,
+        ["create", "invalid-scheduler-app", *worker_args],
+    )
+
+    assert result.exit_code != 0
+    assert message in result.output
+    assert "prepare_destination" not in calls
+
+
+@pytest.mark.parametrize(
+    ("worker_args", "message"),
+    [
+        (["--worker-exp-mode"], "does not support experimental mode"),
+        (
+            ["--worker", "huey", "--worker-exp-mode"],
+            "does not support experimental mode",
+        ),
+        (
+            [
+                "--worker",
+                "celery",
+                "--broker",
+                "redis",
+                "--worker-exp-mode",
+            ],
+            "does not support experimental mode",
+        ),
+    ],
+)
+def test_create_rejects_invalid_worker_experimental_mode_before_generation(
+    monkeypatch, worker_args, message
+) -> None:
+    runner = CliRunner()
+    calls = _stub_create_pipeline(monkeypatch)
+
+    result = runner.invoke(
+        cli_module.cli,
+        ["create", "invalid-worker-app", *worker_args],
+    )
+
+    assert result.exit_code != 0
+    assert message in result.output
+    assert "prepare_destination" not in calls
+
+
+def test_create_interactive_rejects_invalid_worker_exp_mode_before_wizard(
+    monkeypatch,
+) -> None:
+    runner = CliRunner()
+    wizard_called = False
+
+    monkeypatch.setattr(
+        cli_module, "_interactive_terminal_available", lambda: True
+    )
+
+    def fake_run_create_interactive(_defaults):
+        nonlocal wizard_called
+        wizard_called = True
+        return None
+
+    monkeypatch.setattr(
+        cli_module, "run_create_interactive", fake_run_create_interactive
+    )
+
+    result = runner.invoke(
+        cli_module.cli,
+        [
+            "create",
+            "-i",
+            "--worker",
+            "huey",
+            "--worker-exp-mode",
+            "invalid-worker-app",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "does not support experimental mode" in result.output
+    assert wizard_called is False
+
+
+@pytest.mark.parametrize(
     "nosql_args",
     [
         ["--nosql", "mongodb,neo4j"],
@@ -319,6 +573,10 @@ def test_create_help_contains_interactive_flag() -> None:
     assert "-uid, --uid" in result.output
     assert "-broker, --broker" in result.output
     assert "-nosql, --nosql" in result.output
+    assert "-worker, --worker" in result.output
+    assert "--scheduler" in result.output
+    assert "--worker-exp-mode" in result.output
+    assert "[default: none]" in result.output
 
 
 def test_create_interactive_requires_tty(monkeypatch) -> None:
@@ -514,6 +772,9 @@ class TestInteractiveCreateAppScreens:
             uid="uuidv4",
             broker="rabbitmq",
             nosql=("neo4j",),
+            worker="rq",
+            worker_exp_mode=True,
+            scheduler=True,
         )
         app = InteractiveCreateApp(defaults)
         assert app.state["name"] == "test-app"
@@ -524,6 +785,9 @@ class TestInteractiveCreateAppScreens:
         assert app.state["uid"] == "uuidv4"
         assert app.state["broker"] == "rabbitmq"
         assert app.state["nosql"] == ("neo4j",)
+        assert app.state["worker"] == "rq"
+        assert app.state["worker_exp_mode"] is True
+        assert app.state["scheduler"] is True
 
     def test_app_normalizes_defaults(self):
         from create.utils._interactive import (
@@ -540,6 +804,8 @@ class TestInteractiveCreateAppScreens:
             uid="invalid",
             broker="invalid",
             nosql=("invalid",),
+            worker="invalid",
+            worker_exp_mode=True,
         )
         app = InteractiveCreateApp(defaults)
         assert app.state["name"] == "padded"
@@ -550,6 +816,8 @@ class TestInteractiveCreateAppScreens:
         assert app.state["uid"] == "none"
         assert app.state["broker"] == "none"
         assert app.state["nosql"] == ()
+        assert app.state["worker"] == "none"
+        assert app.state["worker_exp_mode"] is False
 
 
 @pytest.mark.skipif(
@@ -583,6 +851,8 @@ class TestInteractiveFlow:
             uid="none",
             broker="none",
             nosql=(),
+            worker="none",
+            worker_exp_mode=False,
         )
         app = InteractiveCreateApp(defaults)
 
@@ -601,6 +871,278 @@ class TestInteractiveFlow:
         assert app.return_value.orm == "sqlalchemy"
         assert app.return_value.broker == "none"
         assert app.return_value.nosql == ()
+        assert app.return_value.worker == "none"
+        assert app.return_value.worker_exp_mode is False
+        assert app.return_value.scheduler is False
+
+    @pytest.mark.asyncio
+    async def test_scheduler_toggle_enables_scheduler_for_worker(self):
+        from create.utils._interactive import (
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
+        from textual.widgets import Switch
+
+        defaults = InteractiveCreateConfig(
+            name="worker-app",
+            destination=".",
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+            broker="none",
+            nosql=(),
+            worker="rq",
+            worker_exp_mode=False,
+            scheduler=False,
+        )
+        app = InteractiveCreateApp(defaults)
+
+        async with app.run_test(size=(100, 48)) as pilot:
+            await pilot.click("#next")
+            await pilot.pause(delay=0.2)
+            switch = app.screen.query_one("#scheduler", Switch)
+            assert switch.value is False
+            assert switch.disabled is False
+            await pilot.click("#scheduler")
+            await pilot.click("#create-btn")
+
+        assert isinstance(app.return_value, InteractiveCreateConfig)
+        assert app.return_value.scheduler is True
+
+    @pytest.mark.asyncio
+    async def test_scheduler_toggle_resets_scheduler_experimental_mode(self):
+        from create.utils._interactive import (
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
+
+        defaults = InteractiveCreateConfig(
+            name="worker-app",
+            destination=".",
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+            broker="none",
+            nosql=(),
+            worker="rq",
+            worker_exp_mode=True,
+            scheduler=True,
+        )
+        app = InteractiveCreateApp(defaults)
+
+        async with app.run_test(size=(100, 48)) as pilot:
+            await pilot.click("#next")
+            await pilot.pause(delay=0.2)
+            await pilot.click("#scheduler")
+            await pilot.click("#create-btn")
+
+        assert isinstance(app.return_value, InteractiveCreateConfig)
+        assert app.return_value.scheduler is False
+        assert app.return_value.worker_exp_mode is False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("worker", ["rq", "dramatiq"])
+    async def test_worker_exp_toggle_is_visible_for_supported_workers(
+        self, worker
+    ):
+        from create.utils._interactive import (
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
+        from textual.widgets import Switch
+
+        defaults = InteractiveCreateConfig(
+            name="worker-app",
+            destination=".",
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+            broker="none",
+            nosql=(),
+            worker=worker,
+            worker_exp_mode=False,
+            scheduler=True,
+        )
+        app = InteractiveCreateApp(defaults)
+
+        async with app.run_test(size=(100, 46)) as pilot:
+            await pilot.click("#next")
+            await pilot.pause(delay=0.2)
+            field = app.screen.query_one("#worker-exp-mode-field")
+            switch = app.screen.query_one("#worker-exp-mode", Switch)
+            assert field.display is True
+            assert switch.disabled is False
+            assert switch.value is False
+            await pilot.click("#worker-exp-mode")
+            await pilot.click("#create-btn")
+
+        assert isinstance(app.return_value, InteractiveCreateConfig)
+        assert app.return_value.worker == worker
+        assert app.return_value.worker_exp_mode is True
+
+    @pytest.mark.asyncio
+    async def test_worker_exp_toggle_resets_when_worker_becomes_unsupported(
+        self,
+    ):
+        from create.utils._interactive import (
+            BulletSelect,
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
+        from textual.widgets import Switch
+
+        defaults = InteractiveCreateConfig(
+            name="worker-app",
+            destination=".",
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+            broker="none",
+            nosql=(),
+            worker="rq",
+            worker_exp_mode=False,
+            scheduler=True,
+        )
+        app = InteractiveCreateApp(defaults)
+
+        async with app.run_test(size=(100, 46)) as pilot:
+            await pilot.click("#next")
+            await pilot.pause(delay=0.2)
+            switch = app.screen.query_one("#worker-exp-mode", Switch)
+            await pilot.click("#worker-exp-mode")
+            worker_select = next(
+                select
+                for select in app.screen.query("BulletSelect")
+                if isinstance(select, BulletSelect)
+                and select.field_id == "worker"
+            )
+            worker_select.cycle()
+            worker_select.cycle()
+            await pilot.pause()
+            field = app.screen.query_one("#worker-exp-mode-field")
+            assert field.display is False
+            assert switch.disabled is True
+            assert switch.value is False
+            await pilot.click("#create-btn")
+
+        assert isinstance(app.return_value, InteractiveCreateConfig)
+        assert app.return_value.worker == "huey"
+        assert app.return_value.worker_exp_mode is False
+
+    @pytest.mark.asyncio
+    async def test_prefilled_celery_kafka_exp_mode_survives_hidden_toggle(
+        self,
+    ):
+        from create.utils._interactive import (
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
+
+        defaults = InteractiveCreateConfig(
+            name="worker-app",
+            destination=".",
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+            broker="kafka",
+            nosql=(),
+            worker="celery",
+            worker_exp_mode=True,
+        )
+        app = InteractiveCreateApp(defaults)
+
+        async with app.run_test(size=(100, 46)) as pilot:
+            await pilot.click("#next")
+            await pilot.pause(delay=0.2)
+            field = app.screen.query_one("#worker-exp-mode-field")
+            assert field.display is False
+            await pilot.click("#create-btn")
+
+        assert isinstance(app.return_value, InteractiveCreateConfig)
+        assert app.return_value.worker == "celery"
+        assert app.return_value.worker_exp_mode is True
+
+    @pytest.mark.asyncio
+    async def test_celery_exp_mode_resets_when_broker_changes_from_kafka(
+        self,
+    ):
+        from create.utils._interactive import (
+            BulletSelect,
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
+
+        defaults = InteractiveCreateConfig(
+            name="worker-app",
+            destination=".",
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+            broker="kafka",
+            nosql=(),
+            worker="celery",
+            worker_exp_mode=True,
+        )
+        app = InteractiveCreateApp(defaults)
+
+        async with app.run_test(size=(100, 46)) as pilot:
+            await pilot.click("#next")
+            await pilot.pause(delay=0.2)
+            broker_select = next(
+                select
+                for select in app.screen.query("BulletSelect")
+                if isinstance(select, BulletSelect)
+                and select.field_id == "broker"
+            )
+            broker_select.cycle()
+            await pilot.pause()
+            await pilot.click("#create-btn")
+
+        assert isinstance(app.return_value, InteractiveCreateConfig)
+        assert app.return_value.broker == "none"
+        assert app.return_value.worker == "celery"
+        assert app.return_value.worker_exp_mode is False
+
+    @pytest.mark.asyncio
+    async def test_celery_exp_mode_is_not_preserved_without_kafka(
+        self,
+    ):
+        from create.utils._interactive import (
+            InteractiveCreateApp,
+            InteractiveCreateConfig,
+        )
+
+        defaults = InteractiveCreateConfig(
+            name="worker-app",
+            destination=".",
+            orm="sqlalchemy",
+            design="ddd",
+            package_manager="uv",
+            uid="none",
+            broker="redis",
+            nosql=(),
+            worker="celery",
+            worker_exp_mode=True,
+        )
+        app = InteractiveCreateApp(defaults)
+
+        async with app.run_test(size=(100, 46)) as pilot:
+            await pilot.click("#next")
+            await pilot.pause(delay=0.2)
+            field = app.screen.query_one("#worker-exp-mode-field")
+            assert field.display is False
+            await pilot.click("#create-btn")
+
+        assert isinstance(app.return_value, InteractiveCreateConfig)
+        assert app.return_value.broker == "redis"
+        assert app.return_value.worker == "celery"
+        assert app.return_value.worker_exp_mode is False
 
     @pytest.mark.asyncio
     async def test_cancel_from_stage1_returns_none(self):
@@ -618,6 +1160,8 @@ class TestInteractiveFlow:
             uid="none",
             broker="none",
             nosql=(),
+            worker="none",
+            worker_exp_mode=False,
         )
         app = InteractiveCreateApp(defaults)
 
@@ -642,6 +1186,9 @@ class TestInteractiveFlow:
             uid="none",
             broker="redis",
             nosql=("mongodb",),
+            worker="rq",
+            worker_exp_mode=True,
+            scheduler=True,
         )
         app = InteractiveCreateApp(defaults)
 
@@ -666,6 +1213,9 @@ class TestInteractiveFlow:
         assert app.return_value.destination == "/tmp/test"
         assert app.return_value.broker == "redis"
         assert app.return_value.nosql == ("mongodb",)
+        assert app.return_value.worker == "rq"
+        assert app.return_value.worker_exp_mode is True
+        assert app.return_value.scheduler is True
 
     @pytest.mark.asyncio
     async def test_empty_name_shows_error_on_stage1(self):
@@ -684,6 +1234,8 @@ class TestInteractiveFlow:
             uid="none",
             broker="none",
             nosql=(),
+            worker="none",
+            worker_exp_mode=False,
         )
         app = InteractiveCreateApp(defaults)
 

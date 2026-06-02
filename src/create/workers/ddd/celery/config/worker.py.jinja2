@@ -1,0 +1,13 @@
+from pydantic import BaseModel
+
+
+class Settings(BaseModel):
+    queue: str = "{{ worker_queue }}"
+{% if worker_backend == "rabbitmq" %}
+    broker_url: str = "amqp://app:app@rabbitmq:5672//"
+{% elif worker_backend == "kafka" %}
+    broker_url: str = "confluentkafka://kafka:9092"
+{% else %}
+    broker_url: str = "redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}"
+{% endif %}
+    result_backend: str = "redis://{{ worker_result_redis_service }}:6379/{{ worker_result_redis_db }}"

@@ -6,8 +6,8 @@ from pydantic import BaseModel
 class Settings(BaseModel):
     host: str = "broker"
     port: int = 5672
-    user: str = "guest"
-    password: str = "guest"
+    user: str = "app"
+    password: str = "app"
     virtual_host: str = "/"
     exchange: str = "app.events"
     url: str | None = None

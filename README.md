@@ -53,6 +53,26 @@ Interactive mode defaults destination to `.` and lets you edit all fields
 before confirmation. If you pass flags (for example `--orm tortoise`),
 those values are prefilled in the form and still editable.
 
+Optional infrastructure can be generated alongside the application:
+
+```bash
+# Add a Redis broker and both supported NoSQL datastores
+robyn-config create analytics --broker redis --nosql mongodb,neo4j ./analytics
+```
+
+```bash
+# Add a Celery worker and its periodic-job scheduler
+robyn-config create jobs --worker celery --scheduler ./jobs
+```
+
+```bash
+# Reuse RabbitMQ for Dramatiq and enable the experimental APScheduler template
+robyn-config create events --broker rabbitmq --worker dramatiq --scheduler --worker-exp-mode ./events
+```
+
+The same broker, NoSQL, worker, scheduler, and experimental-mode controls are
+available as editable fields in interactive mode.
+
 ### ➕ Add Business Logic
 
 Once inside a project, you can easily add new entities (models, routes, repositories, etc.) using the `add` command. This automatically generates all necessary files and wiring based on your project's architecture.
@@ -145,6 +165,22 @@ Commands:
 - `--orm`: Selects the database layer. Options: `sqlalchemy` (default), `tortoise`.
 - `--design`: Toggles between the architecture templates. Options: `ddd` (default), `mvc`.
 - `--package-manager`: Choose how dependencies are locked/installed. Options: `uv` (default), `poetry`.
+- `--broker`: Add message broker settings, infrastructure templates, and a
+  Docker Compose service. Options: `none` (default), `redis`, `rabbitmq`,
+  `kafka`.
+- `--nosql`: Add optional NoSQL datastore templates and Docker Compose
+  services. Supported providers: `mongodb`, `neo4j`. Repeat the flag or pass
+  comma-separated values to select both, for example
+  `--nosql mongodb,neo4j`.
+- `--worker`: Add a background worker template and queue configuration.
+  Options: `none` (default), `celery`, `rq`, `dramatiq`, `huey`. Compatible
+  selected brokers are reused; otherwise the generated worker uses the
+  default Valkey service.
+- `--scheduler`: Generate periodic-job scheduling for the selected worker.
+  For RQ this adds `--with-scheduler` unless experimental mode is enabled.
+- `--worker-exp-mode`: Enable an opt-in worker integration where supported:
+  Celery with Kafka transport, RQ cron with `--scheduler`, or Dramatiq
+  APScheduler with `--scheduler`.
 - `destination`: The target directory. Defaults to `.` (including in
   interactive mode).
 
@@ -178,6 +214,9 @@ Please make sure you have the correct version of Python installed before startin
 - **Architectural Flexibility**: Native support for **Domain-Driven Design (DDD)** and **Model-View-Controller (MVC)** patterns.
 - **ORM Choice**: Seamless integration with **SQLAlchemy** or **Tortoise ORM**.
 - **Package Manager choice**: Lock/install via **uv** (default) or **poetry**, with fresh lock files generated in quiet mode.
+- **Broker Scaffolding**: Generate ready-to-run Redis, RabbitMQ, or Kafka infrastructure with settings, environment defaults, and Docker Compose services.
+- **NoSQL Scaffolding**: Select MongoDB, Neo4j, or both and generate provider-specific infrastructure templates and Docker Compose services.
+- **Worker Scaffolding**: Generate Celery, RQ, Dramatiq, or Huey worker templates with broker-aware queue wiring and optional periodic-job scheduling.
 - **Admin Panel Scaffolding**: `adminpanel` builds an ORM-aware admin module, auto-wires routes, and supports custom superadmin credentials.
 - **Observability Stack**: `monitoring` injects a `/metrics` endpoint and provisions Alloy + Loki + Prometheus + Grafana with pre-built dashboards for logs and metrics.
 - **Resilient operations**: `create` cleans up generated files if it fails; `add`, `adminpanel`, and `monitoring` roll back with a temporary project backup on errors.

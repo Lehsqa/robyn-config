@@ -18,6 +18,7 @@ from create import (
     ORM_CHOICES,
     PACKAGE_MANAGER_CHOICES,
     UID_CHOICES,
+    WORKER_CHOICES,
     InteractiveCreateConfig,
     apply_package_manager,
     collect_existing_items,
@@ -27,7 +28,7 @@ from create import (
     prepare_destination,
     run_create_interactive,
 )
-from create.utils._config import _normalize_nosql
+from create.utils._config import _normalize_nosql, _resolve_worker
 from monitoring import add_monitoring
 
 
@@ -176,6 +177,31 @@ def cli() -> None:
         "comma-separated values."
     ),
 )
+@click.option(
+    "-worker",
+    "--worker",
+    "worker",
+    type=click.Choice(WORKER_CHOICES, case_sensitive=False),
+    default="none",
+    show_default=True,
+    help="Select the background worker implementation.",
+)
+@click.option(
+    "--scheduler",
+    "scheduler",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Enable periodic job scheduling for the selected worker.",
+)
+@click.option(
+    "--worker-exp-mode",
+    "worker_exp_mode",
+    is_flag=True,
+    default=False,
+    show_default=True,
+    help="Enable experimental worker mode where supported.",
+)
 @click.argument(
     "destination",
     type=click.Path(
@@ -197,11 +223,24 @@ def create(
     uid_type: str,
     broker: str,
     nosql: tuple[str, ...],
+    worker: str,
+    worker_exp_mode: bool,
+    scheduler: bool,
 ) -> None:
     """Copy the template into destination with specific configurations."""
     destination = destination or Path(".")
     try:
         normalized_nosql = _normalize_nosql(nosql)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    try:
+        _resolve_worker(
+            worker.lower(),
+            (broker or "none").lower(),
+            worker_exp_mode,
+            scheduler,
+        )
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
 
@@ -224,6 +263,9 @@ def create(
                     uid=uid_type,
                     broker=(broker or "none").lower(),
                     nosql=normalized_nosql,
+                    worker=worker.lower(),
+                    worker_exp_mode=worker_exp_mode,
+                    scheduler=scheduler,
                 )
             )
         except RuntimeError as exc:
@@ -238,6 +280,18 @@ def create(
         package_manager = selected.package_manager
         uid_type = selected.uid
         broker = selected.broker
+        worker = selected.worker
+        worker_exp_mode = selected.worker_exp_mode
+        scheduler = selected.scheduler
+        if (
+            worker.lower() == "celery"
+            and broker.lower() == "kafka"
+            and not worker_exp_mode
+        ):
+            worker_exp_mode = click.confirm(
+                "Enable experimental Kafka reuse for Celery?",
+                default=False,
+            )
         try:
             normalized_nosql = _normalize_nosql(selected.nosql)
         except ValueError as exc:
@@ -251,6 +305,12 @@ def create(
     package_manager = package_manager.lower()
     uid_type = uid_type.lower()
     broker = (broker or "none").lower()
+    worker = worker.lower()
+
+    try:
+        _resolve_worker(worker, broker, worker_exp_mode, scheduler)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
 
     if uid_type == "uuidv7" and sys.version_info < (3, 13):
         raise click.ClickException("uuidv7 requires Python 3.13 or newer.")
@@ -290,6 +350,9 @@ def create(
             uid_type,
             broker,
             normalized_nosql,
+            worker,
+            worker_exp_mode,
+            scheduler,
         )
 
         click.echo("Installing dependencies...")

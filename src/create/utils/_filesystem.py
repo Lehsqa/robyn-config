@@ -22,6 +22,7 @@ COMMON_DIR = (SRC_DIR / "common").resolve()
 COMPOSE_APP_DIR = (COMMON_DIR / "compose" / "app").resolve()
 BROKERS_DIR = (SRC_DIR / "brokers").resolve()
 NOSQL_DIR = (SRC_DIR / "nosql").resolve()
+WORKERS_DIR = (SRC_DIR / "workers").resolve()
 
 JINJA_ENV = Environment(undefined=StrictUndefined, keep_trailing_newline=True)
 
@@ -268,6 +269,27 @@ def _copy_nosql_files(
     _render_jinja2_in_tree(target, context)
 
 
+def _copy_worker_files(
+    destination: Path,
+    design: str,
+    worker: str,
+    context: Mapping[str, object],
+) -> None:
+    """Copy optional worker infrastructure into the generated app."""
+    if worker == "none":
+        return
+
+    source = WORKERS_DIR / design / worker
+    if not source.exists():
+        raise FileNotFoundError(
+            f"Could not find worker template for '{design}/{worker}'."
+        )
+
+    target = destination / "src" / "app"
+    shutil.copytree(source, target, dirs_exist_ok=True)
+    _render_jinja2_in_tree(target, context)
+
+
 def _resolve_compose_file(base: str, extension: str, orm_type: str) -> Path:
     """Resolve the compose file path for the given ORM type."""
     candidates = (
@@ -323,14 +345,27 @@ def copy_template(
     uid: str = "none",
     broker: str | None = None,
     nosql: str | Iterable[str] = "none",
+    worker: str = "none",
+    worker_exp_mode: bool = False,
+    scheduler: bool = False,
 ) -> None:
     """Copy the complete template to the destination directory."""
     context = _get_template_config(
-        design, orm_type, project_name, package_manager, uid, broker, nosql
+        design,
+        orm_type,
+        project_name,
+        package_manager,
+        uid,
+        broker,
+        nosql,
+        worker,
+        worker_exp_mode,
+        scheduler,
     )
     _copy_src_app(destination, orm_type, design, context)
     _copy_broker_files(destination, design, context["broker"], context)
     _copy_nosql_files(destination, design, context["nosql"], context)
+    _copy_worker_files(destination, design, context["worker"], context)
     _copy_compose_app(destination, orm_type, context)
     _copy_common_files(destination, orm_type, package_manager, context)
 
