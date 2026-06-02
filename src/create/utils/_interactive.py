@@ -9,6 +9,7 @@ from ._config import (
     DESIGN_CHOICES,
     INTERACTIVE_BROKER_CHOICES,
     INTERACTIVE_NOSQL_CHOICES,
+    INTERACTIVE_WORKER_CHOICES,
     ORM_CHOICES,
     PACKAGE_MANAGER_CHOICES,
     UID_CHOICES,
@@ -21,8 +22,9 @@ try:
     from textual import events
     from textual.app import App, ComposeResult
     from textual.containers import Horizontal, Vertical
+    from textual.message import Message
     from textual.screen import Screen
-    from textual.widgets import Button, Input, Static
+    from textual.widgets import Button, Input, Static, Switch
 
     TEXTUAL_AVAILABLE = True
 except ModuleNotFoundError as exc:
@@ -56,6 +58,9 @@ class InteractiveCreateConfig:
     uid: str
     broker: str
     nosql: tuple[str, ...]
+    worker: str
+    worker_exp_mode: bool
+    scheduler: bool = False
 
 
 if TEXTUAL_AVAILABLE:
@@ -160,6 +165,13 @@ if TEXTUAL_AVAILABLE:
 
         can_focus = True
 
+        class Changed(Message):
+            """Selection changed after cycling a bullet field."""
+
+            def __init__(self, bullet_select: BulletSelect) -> None:
+                super().__init__()
+                self.bullet_select = bullet_select
+
         DEFAULT_CSS = """
         BulletSelect {
             height: 3;
@@ -224,12 +236,130 @@ if TEXTUAL_AVAILABLE:
             self.query_one(".field-value", Static).update(
                 self._choices[self._index]
             )
+            self.post_message(self.Changed(self))
 
         def on_key(self, event: events.Key) -> None:
             if event.key == "enter":
                 self.cycle()
                 event.prevent_default()
                 event.stop()
+
+    class WorkerSchedulerField(Horizontal):
+        """Scheduler toggle shown when a worker is selected."""
+
+        DEFAULT_CSS = """
+        WorkerSchedulerField {
+            height: 3;
+            margin-bottom: 1;
+            padding: 0 1;
+        }
+        WorkerSchedulerField .field-label {
+            width: 21;
+            color: #a6b3c7;
+            padding-top: 1;
+        }
+        WorkerSchedulerField Switch {
+            width: auto;
+        }
+        """
+
+        def __init__(
+            self,
+            field_id: str,
+            worker: str,
+            value: bool,
+        ) -> None:
+            super().__init__(id=field_id)
+            self.field_id = field_id
+            self._worker = worker
+            self._initial_value = value
+
+        def compose(self) -> ComposeResult:
+            yield Static("Scheduler", classes="field-label")
+            yield Switch(value=self._initial_value, id="scheduler")
+
+        def on_mount(self) -> None:
+            self.set_worker(self._worker)
+
+        @property
+        def value(self) -> bool:
+            return self.query_one(Switch).value
+
+        def set_worker(self, worker: str) -> bool:
+            supported = worker != "none"
+            self.display = supported
+            switch = self.query_one(Switch)
+            switch.disabled = not supported
+            if not supported:
+                switch.value = False
+            return supported
+
+    class WorkerExpModeField(Horizontal):
+        """Experimental worker mode toggle shown for supported workers."""
+
+        SUPPORTED_WORKERS = {"rq", "dramatiq"}
+
+        DEFAULT_CSS = """
+        WorkerExpModeField {
+            height: 3;
+            margin-bottom: 1;
+            padding: 0 1;
+        }
+        WorkerExpModeField .field-label {
+            width: 21;
+            color: #a6b3c7;
+            padding-top: 1;
+        }
+        WorkerExpModeField Switch {
+            width: auto;
+        }
+        """
+
+        def __init__(
+            self,
+            field_id: str,
+            worker: str,
+            scheduler: bool,
+            value: bool,
+        ) -> None:
+            super().__init__(id=field_id)
+            self.field_id = field_id
+            self._worker = worker
+            self._scheduler = scheduler
+            self._initial_value = value
+
+        def compose(self) -> ComposeResult:
+            yield Static("Experimental mode", classes="field-label")
+            yield Switch(
+                value=self._initial_value,
+                id="worker-exp-mode",
+            )
+
+        def on_mount(self) -> None:
+            self.set_context(
+                self._worker,
+                self._scheduler,
+                preserve_hidden_value=self._worker == "celery",
+            )
+
+        @property
+        def value(self) -> bool:
+            return self.query_one(Switch).value
+
+        def set_context(
+            self,
+            worker: str,
+            scheduler: bool,
+            *,
+            preserve_hidden_value: bool = False,
+        ) -> bool:
+            supported = worker in self.SUPPORTED_WORKERS and scheduler
+            self.display = supported
+            switch = self.query_one(Switch)
+            switch.disabled = not supported
+            if not supported and not preserve_hidden_value:
+                switch.value = False
+            return supported
 
     class BulletToggleList(Vertical):
         """A label and independently toggled list of infrastructure options."""
@@ -322,7 +452,7 @@ if TEXTUAL_AVAILABLE:
             event.stop()
 
     class TechnicalScreen(Screen):
-        """Stage 2: ORM, design pattern, package manager, UID, broker."""
+        """Stage 2: technical and infrastructure choices."""
 
         BINDINGS = [
             ("escape", "go_back", "Back"),
@@ -350,6 +480,22 @@ if TEXTUAL_AVAILABLE:
         TechnicalScreen #step {
             color: #91a0b8;
             margin-bottom: 1;
+        }
+        TechnicalScreen BulletSelect {
+            height: 2;
+            margin-bottom: 0;
+            padding: 0 1;
+        }
+        TechnicalScreen WorkerExpModeField {
+            height: 2;
+            margin-bottom: 0;
+        }
+        TechnicalScreen WorkerSchedulerField {
+            height: 2;
+            margin-bottom: 0;
+        }
+        TechnicalScreen BulletToggleList {
+            margin-bottom: 0;
         }
         TechnicalScreen #actions {
             margin-top: 1;
@@ -407,6 +553,23 @@ if TEXTUAL_AVAILABLE:
                     choices=INTERACTIVE_BROKER_CHOICES,
                     value=app.state["broker"],
                 ),
+                BulletSelect(
+                    label="Worker",
+                    field_id="worker",
+                    choices=INTERACTIVE_WORKER_CHOICES,
+                    value=app.state["worker"],
+                ),
+                WorkerSchedulerField(
+                    field_id="scheduler-field",
+                    worker=app.state["worker"],
+                    value=app.state["scheduler"],
+                ),
+                WorkerExpModeField(
+                    field_id="worker-exp-mode-field",
+                    worker=app.state["worker"],
+                    scheduler=app.state["scheduler"],
+                    value=app.state["worker_exp_mode"],
+                ),
                 BulletToggleList(
                     label="NoSQL",
                     field_id="nosql",
@@ -432,6 +595,59 @@ if TEXTUAL_AVAILABLE:
             elif event.button.id == "create-btn":
                 self._submit()
 
+        def on_bullet_select_changed(
+            self, event: BulletSelect.Changed
+        ) -> None:
+            exp_mode = self.query_one(
+                "#worker-exp-mode-field", WorkerExpModeField
+            )
+            scheduler = self.query_one(
+                "#scheduler-field", WorkerSchedulerField
+            )
+            app = self.app
+            assert isinstance(app, InteractiveCreateApp)
+            if event.bullet_select.field_id == "broker":
+                worker = next(
+                    select.value
+                    for select in self.query("BulletSelect")
+                    if isinstance(select, BulletSelect)
+                    and select.field_id == "worker"
+                )
+                if worker == "celery" and event.bullet_select.value != "kafka":
+                    exp_mode.set_context(worker, scheduler.value)
+                    app.state["worker_exp_mode"] = False
+                return
+            if event.bullet_select.field_id != "worker":
+                return
+            if not scheduler.set_worker(event.bullet_select.value):
+                app.state["scheduler"] = False
+            if not exp_mode.set_context(
+                event.bullet_select.value,
+                scheduler.value,
+            ):
+                app.state["worker_exp_mode"] = False
+
+        def on_switch_changed(self, event: Switch.Changed) -> None:
+            if event.switch.id != "scheduler":
+                return
+            app = self.app
+            assert isinstance(app, InteractiveCreateApp)
+            worker = next(
+                select.value
+                for select in self.query("BulletSelect")
+                if isinstance(select, BulletSelect)
+                and select.field_id == "worker"
+            )
+            exp_mode = self.query_one(
+                "#worker-exp-mode-field", WorkerExpModeField
+            )
+            if not exp_mode.set_context(
+                worker,
+                event.value,
+                preserve_hidden_value=worker == "celery",
+            ):
+                app.state["worker_exp_mode"] = False
+
         def action_go_back(self) -> None:
             self._save_and_go_back()
 
@@ -450,6 +666,14 @@ if TEXTUAL_AVAILABLE:
                 app.state[select.field_id] = select.value
             nosql = self.query_one("BulletToggleList", BulletToggleList)
             app.state[nosql.field_id] = nosql.value
+            worker_exp_mode = self.query_one(
+                "#worker-exp-mode-field", WorkerExpModeField
+            )
+            app.state["worker_exp_mode"] = worker_exp_mode.value
+            scheduler = self.query_one(
+                "#scheduler-field", WorkerSchedulerField
+            )
+            app.state["scheduler"] = scheduler.value
 
         def _submit(self) -> None:
             self._save_state()
@@ -465,6 +689,9 @@ if TEXTUAL_AVAILABLE:
                     uid=app.state["uid"],
                     broker=app.state["broker"],
                     nosql=app.state["nosql"],
+                    worker=app.state["worker"],
+                    worker_exp_mode=app.state["worker_exp_mode"],
+                    scheduler=app.state["scheduler"],
                 )
             )
 
@@ -598,7 +825,16 @@ if TEXTUAL_AVAILABLE:
 
         def __init__(self, defaults: InteractiveCreateConfig) -> None:
             super().__init__()
-            self.state: dict[str, str | tuple[str, ...]] = {
+            worker = _pick_choice(
+                defaults.worker,
+                INTERACTIVE_WORKER_CHOICES,
+            )
+            broker = _pick_choice(
+                defaults.broker,
+                INTERACTIVE_BROKER_CHOICES,
+            )
+            scheduler = defaults.scheduler if worker != "none" else False
+            self.state: dict[str, str | bool | tuple[str, ...]] = {
                 "name": defaults.name.strip(),
                 "destination": defaults.destination.strip() or ".",
                 "orm": _pick_choice(defaults.orm, ORM_CHOICES),
@@ -607,13 +843,21 @@ if TEXTUAL_AVAILABLE:
                     defaults.package_manager, PACKAGE_MANAGER_CHOICES
                 ),
                 "uid": _pick_choice(defaults.uid, UID_CHOICES),
-                "broker": _pick_choice(
-                    defaults.broker,
-                    INTERACTIVE_BROKER_CHOICES,
-                ),
+                "broker": broker,
                 "nosql": _pick_nosql(
                     defaults.nosql,
                 ),
+                "worker": worker,
+                "worker_exp_mode": (
+                    defaults.worker_exp_mode
+                    if (
+                        worker in WorkerExpModeField.SUPPORTED_WORKERS
+                        and scheduler
+                    )
+                    or (worker == "celery" and broker == "kafka")
+                    else False
+                ),
+                "scheduler": scheduler,
             }
 
         def on_mount(self) -> None:

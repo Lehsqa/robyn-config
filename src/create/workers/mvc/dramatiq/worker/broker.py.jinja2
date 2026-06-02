@@ -1,0 +1,20 @@
+import dramatiq
+{% if worker_backend == "rabbitmq" %}
+from dramatiq.brokers.rabbitmq import RabbitmqBroker
+{% else %}
+from dramatiq.brokers.redis import RedisBroker
+{% endif %}
+
+from ..config import settings
+
+{% if worker_backend == "rabbitmq" %}
+if settings.worker.rabbitmq_url is None:
+    raise ValueError("RabbitMQ URL is required for the Dramatiq worker.")
+broker = RabbitmqBroker(url=settings.worker.rabbitmq_url)
+{% else %}
+if settings.worker.redis_url is None:
+    raise ValueError("Redis URL is required for the Dramatiq worker.")
+broker = RedisBroker(url=settings.worker.redis_url)
+{% endif %}
+
+dramatiq.set_broker(broker)

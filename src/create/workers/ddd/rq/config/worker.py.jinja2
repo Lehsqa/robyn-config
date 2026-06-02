@@ -1,0 +1,6 @@
+from pydantic import BaseModel
+
+
+class Settings(BaseModel):
+    queue: str = "{{ worker_queue }}"
+    redis_url: str = "redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}"

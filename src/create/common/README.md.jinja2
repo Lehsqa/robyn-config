@@ -1,3 +1,5 @@
+{% set worker_runtime = "app.infrastructure.worker" if design == "ddd" else "app.worker" -%}
+{% set local_worker_redis_url = "redis://localhost:6380/" ~ worker_redis_db if worker_redis_service == "redis-broker" else "redis://localhost:6379/" ~ worker_redis_db -%}
 # {{ name|capitalize }}
 
 A Robyn-based service scaffolded with the {{ design.upper() }} layout and {{ "SQLAlchemy" if orm == "sqlalchemy" else "Tortoise ORM" }}.
@@ -48,6 +50,61 @@ uv pip install -e .[dev]
 The `[dev]` extra adds the linting, formatting, testing, typing, and coverage helpers (`ruff`, `flake8`, `black`, `isort`, `pytest`/`pytest-cov`, `coverage`, `mypy`, and `pyright`) that are configured via `pyproject.toml`.
 
 Copy `.env.example` to `.env` before running the app locally or via Compose; `.env.example` uses host-friendly (`localhost`) infrastructure defaults, and Compose overrides infrastructure hosts to point at its internal containers.
+{% if worker != "none" %}
+
+## Worker runtime
+
+The selected worker is `{{ worker }}` and its queue is `app.workers`.
+{% if worker_backend == "rabbitmq" %}
+The queue uses RabbitMQ at `localhost:5672`; Compose routes it to `rabbitmq:5672`.
+{% elif worker_backend == "kafka" %}
+The queue uses Kafka at `localhost:29092`; Compose routes it to `kafka:9092`.
+{% else %}
+The queue uses {{ "the dedicated Redis broker" if worker_redis_service == "redis-broker" else "Valkey" }} at `{{ local_worker_redis_url }}`.
+{% endif %}
+{% if worker == "celery" %}
+Celery results use {{ "the dedicated Redis broker" if worker_result_redis_service == "redis-broker" else "Valkey" }} DB `{{ worker_result_redis_db }}`.
+{% endif %}
+
+Start the generated runtime locally after sourcing `.env`:
+
+```bash
+{% if worker == "celery" %}
+celery -A {{ worker_runtime }}.app worker --queues app.workers
+{% if worker_scheduler == "celery-beat" %}
+celery -A {{ worker_runtime }}.app beat
+{% endif %}
+{% elif worker == "rq" %}
+rq worker app.workers --url {{ local_worker_redis_url }}{% if worker_scheduler == "rq-with-scheduler" %} --with-scheduler{% endif %}
+{% if worker_scheduler == "rq-cron" %}
+rq cron {{ worker_runtime }}.cron --url {{ local_worker_redis_url }}
+{% endif %}
+{% elif worker == "dramatiq" %}
+dramatiq {{ worker_runtime }}.tasks --queues app.workers
+{% if worker_scheduler == "apscheduler" %}
+python -m {{ worker_runtime }}.scheduler
+{% endif %}
+{% elif worker == "huey" %}
+huey_consumer.py {{ worker_runtime }}.tasks.huey
+{% endif %}
+```
+
+Compose starts the same processes with container-facing queue URLs:
+
+```bash
+docker compose up worker{% if worker_scheduler in ("celery-beat", "rq-cron", "apscheduler") %} worker-scheduler{% endif %}
+```
+{% if worker == "celery" and worker_backend == "kafka" %}
+
+Warning: Kafka transport is experimental and supports only one Celery worker.
+{% elif worker == "rq" and worker_exp_mode %}
+
+Warning: RQ cron is beta.
+{% elif worker == "dramatiq" and worker_exp_mode %}
+
+Warning: APScheduler integration is experimental.
+{% endif %}
+{% endif %}
 
 ## Makefile shortcuts
 
@@ -89,8 +146,8 @@ export SETTINGS__BROKER__TOPIC_PREFIX=app
 {%- elif broker == "rabbitmq" %}
 export SETTINGS__BROKER__HOST=localhost
 export SETTINGS__BROKER__PORT=5672
-export SETTINGS__BROKER__USER=guest
-export SETTINGS__BROKER__PASSWORD=guest
+export SETTINGS__BROKER__USER=app
+export SETTINGS__BROKER__PASSWORD=app
 export SETTINGS__BROKER__VIRTUAL_HOST=/
 export SETTINGS__BROKER__EXCHANGE=app.events
 {%- elif broker == "kafka" %}
@@ -217,6 +274,16 @@ Services:
 {%- endif %}
 {%- if "neo4j" in nosql %}
 - `neo4j` – Neo4j exposed on `localhost:7687` with Browser at <http://localhost:7474>.
+{%- endif %}
+{%- if worker != "none" %}
+- `worker` – {{ worker|capitalize }} consumer for the `app.workers` queue.
+{%- if worker_scheduler == "celery-beat" %}
+- `worker-scheduler` – Celery beat scheduler for periodic jobs.
+{%- elif worker_scheduler == "rq-cron" %}
+- `worker-scheduler` – RQ cron scheduler for periodic jobs.
+{%- elif worker_scheduler == "apscheduler" %}
+- `worker-scheduler` – APScheduler process for Dramatiq periodic jobs.
+{%- endif %}
 {%- endif %}
 - `app` – Robyn service (`python -m app.server`) exposed on <http://localhost:8000>. The `environment` block in `docker-compose.yml` overrides only the infrastructure host entries for container networking; the rest load from `.env` so the same file works for both Docker and local runs.
 

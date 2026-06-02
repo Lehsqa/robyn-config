@@ -26,6 +26,25 @@ pymongo = ">=4.11.0"
 {% if "neo4j" in nosql %}
 neo4j = ">=6.2.0"
 {% endif %}
+{% if worker == "celery" %}
+celery = { version = ">=5.5.0", extras = ["redis"] }
+{% if worker_backend == "kafka" %}
+confluent-kafka = ">=2.3.0"
+{% endif %}
+{% elif worker == "rq" %}
+rq = ">=2.6.0"
+{% elif worker == "dramatiq" %}
+{% if worker_backend == "rabbitmq" %}
+dramatiq = { version = ">=1.18.0", extras = ["rabbitmq"] }
+{% else %}
+dramatiq = { version = ">=1.18.0", extras = ["redis"] }
+{% endif %}
+{% if worker_scheduler == "apscheduler" %}
+apscheduler = ">=3.11.0"
+{% endif %}
+{% elif worker == "huey" %}
+huey = ">=2.5.0"
+{% endif %}
 pydantic = { version = ">=2.6.4", extras = ["email"] }
 pydantic-settings = ">=2.2.1"
 PyJWT = ">=2.8.0"
@@ -82,6 +101,25 @@ dependencies = [
 {% endif %}
 {% if "neo4j" in nosql %}
   "neo4j>=6.2.0",
+{% endif %}
+{% if worker == "celery" %}
+  "celery[redis]>=5.5.0",
+{% if worker_backend == "kafka" %}
+  "confluent-kafka>=2.3.0",
+{% endif %}
+{% elif worker == "rq" %}
+  "rq>=2.6.0",
+{% elif worker == "dramatiq" %}
+{% if worker_backend == "rabbitmq" %}
+  "dramatiq[rabbitmq]>=1.18.0",
+{% else %}
+  "dramatiq[redis]>=1.18.0",
+{% endif %}
+{% if worker_scheduler == "apscheduler" %}
+  "apscheduler>=3.11.0",
+{% endif %}
+{% elif worker == "huey" %}
+  "huey>=2.5.0",
 {% endif %}
   "pydantic[email]>=2.6.4",
   "pydantic-settings>=2.2.1",
@@ -297,6 +335,9 @@ package_manager = "{{ package_manager }}"
 uid = "{{ uid }}"
 broker = "{{ broker }}"
 nosql = [{% for provider in nosql %}"{{ provider }}"{% if not loop.last %}, {% endif %}{% endfor %}]
+worker = "{{ worker }}"
+worker_exp_mode = {{ "true" if worker_exp_mode else "false" }}
+scheduler = {{ "true" if scheduler else "false" }}
 
 {%- if design == "ddd" %}
 [tool.robyn-config.add]

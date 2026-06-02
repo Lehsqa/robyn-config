@@ -823,3 +823,57 @@ def test_generate_app_and_run_endpoints(
                 "-v",
                 "--remove-orphans",
             )
+
+
+@pytest.mark.integration
+def test_generate_app_with_broker_nosql_and_worker_services(
+    tmp_path: Path,
+) -> None:
+    """Generated optional infrastructure should boot alongside the app."""
+    if shutil.which("docker") is None:
+        pytest.skip("Docker is required for this integration test")
+
+    project_dir = tmp_path / "robyn-app-optional-infrastructure"
+    shutil.rmtree(project_dir, ignore_errors=True)
+    run_cli_create(
+        project_dir,
+        design="ddd",
+        orm="sqlalchemy",
+        app_name="integration-infrastructure-app",
+        broker="redis",
+        nosql="mongodb,neo4j",
+        worker="celery",
+    )
+    shutil.copy2(project_dir / ".env.example", project_dir / ".env")
+
+    compose_started = False
+    try:
+        docker_compose(project_dir, "up", "-d", "--build")
+        compose_started = True
+        wait_for_health(project_dir)
+
+        result = subprocess.run(
+            ["docker", "compose", "ps", "--services", "--status", "running"],
+            cwd=project_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        assert set(result.stdout.splitlines()) == {
+            "app",
+            "mailhog",
+            "mongodb",
+            "neo4j",
+            "postgres",
+            "redis-broker",
+            "valkey",
+            "worker",
+        }
+    finally:
+        if compose_started:
+            docker_compose(
+                project_dir,
+                "down",
+                "-v",
+                "--remove-orphans",
+            )

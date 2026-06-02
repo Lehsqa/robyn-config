@@ -1,0 +1,13 @@
+from pydantic import BaseModel
+
+
+class Settings(BaseModel):
+    queue: str = "{{ worker_queue }}"
+    backend: str = "{{ worker_backend }}"
+{% if worker_backend == "redis" %}
+    redis_url: str | None = "redis://{{ worker_redis_service }}:6379/{{ worker_redis_db }}"
+    rabbitmq_url: str | None = None
+{% else %}
+    redis_url: str | None = None
+    rabbitmq_url: str | None = "amqp://app:app@rabbitmq:5672//"
+{% endif %}

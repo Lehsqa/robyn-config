@@ -7,6 +7,7 @@ from ._config import (
     DESIGN_CHOICES,
     INTERACTIVE_BROKER_CHOICES,
     INTERACTIVE_NOSQL_CHOICES,
+    INTERACTIVE_WORKER_CHOICES,
     LOCK_FILE_BY_MANAGER,
     NOSQL_CHOICES,
     ORM_CHOICES,
@@ -14,6 +15,7 @@ from ._config import (
     PACKAGE_MANAGER_DOWNLOAD_URLS,
     TEMPLATE_CONFIGS,
     UID_CHOICES,
+    WORKER_CHOICES,
 )
 from ._filesystem import (
     collect_existing_items,
@@ -32,6 +34,7 @@ __all__ = [
     "BROKER_CHOICES",
     "INTERACTIVE_BROKER_CHOICES",
     "INTERACTIVE_NOSQL_CHOICES",
+    "INTERACTIVE_WORKER_CHOICES",
     "LOCK_FILE_BY_MANAGER",
     "NOSQL_CHOICES",
     "ORM_CHOICES",
@@ -39,6 +42,7 @@ __all__ = [
     "PACKAGE_MANAGER_DOWNLOAD_URLS",
     "TEMPLATE_CONFIGS",
     "UID_CHOICES",
+    "WORKER_CHOICES",
     "apply_package_manager",
     "collect_existing_items",
     "copy_template",

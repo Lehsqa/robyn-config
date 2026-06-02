@@ -1,7 +1,10 @@
 import pytest
+from itertools import product
 from pathlib import Path
 from unittest.mock import patch
 
+import src.create as create_module
+import src.create.utils as create_utils
 from src.create.utils import _config as create_config
 from src.create.utils import _filesystem as create_filesystem
 from src.add import utils as add_utils
@@ -76,6 +79,404 @@ def test_broker_choices_include_none_and_canonical_values():
         "kafka",
     )
     assert "rabytmq" not in create_config.BROKER_CHOICES
+
+
+def test_worker_choices_include_none_and_supported_values():
+    """Worker choices should expose the canonical worker implementations."""
+    expected = ("none", "celery", "rq", "dramatiq", "huey")
+
+    assert create_config.WORKER_CHOICES == expected
+    assert create_config.INTERACTIVE_WORKER_CHOICES == expected
+
+
+def test_worker_config_exports_are_available_from_create_modules():
+    """Create module exports should expose worker config utilities."""
+    assert create_utils.WORKER_CHOICES is create_config.WORKER_CHOICES
+    assert (
+        create_utils.INTERACTIVE_WORKER_CHOICES
+        is create_config.INTERACTIVE_WORKER_CHOICES
+    )
+    assert create_module.WORKER_CHOICES is create_config.WORKER_CHOICES
+    assert (
+        create_module.INTERACTIVE_WORKER_CHOICES
+        is create_config.INTERACTIVE_WORKER_CHOICES
+    )
+
+
+def _expected_worker_config(
+    worker,
+    worker_exp_mode=False,
+    scheduler=False,
+    **overrides,
+):
+    return {
+        "worker": worker,
+        "worker_exp_mode": worker_exp_mode,
+        "scheduler": scheduler,
+        "worker_queue": None,
+        "worker_backend": None,
+        "worker_redis_service": None,
+        "worker_redis_db": None,
+        "worker_result_redis_service": None,
+        "worker_result_redis_db": None,
+        "worker_scheduler": None,
+        **overrides,
+    }
+
+
+@pytest.mark.parametrize(
+    ("worker", "broker", "worker_exp_mode", "scheduler", "expected"),
+    [
+        *[
+            ("none", broker, False, False, _expected_worker_config("none"))
+            for broker in ("none", "redis", "rabbitmq", "kafka")
+        ],
+        (
+            "celery",
+            "none",
+            False,
+            False,
+            _expected_worker_config(
+                "celery",
+                worker_queue="app.workers",
+                worker_backend="redis",
+                worker_redis_service="valkey",
+                worker_redis_db=1,
+                worker_result_redis_service="valkey",
+                worker_result_redis_db=3,
+            ),
+        ),
+        (
+            "celery",
+            "redis",
+            False,
+            False,
+            _expected_worker_config(
+                "celery",
+                worker_queue="app.workers",
+                worker_backend="redis",
+                worker_redis_service="redis-broker",
+                worker_redis_db=2,
+                worker_result_redis_service="redis-broker",
+                worker_result_redis_db=3,
+            ),
+        ),
+        (
+            "celery",
+            "rabbitmq",
+            False,
+            False,
+            _expected_worker_config(
+                "celery",
+                worker_queue="app.workers",
+                worker_backend="rabbitmq",
+                worker_result_redis_service="valkey",
+                worker_result_redis_db=3,
+            ),
+        ),
+        (
+            "celery",
+            "kafka",
+            False,
+            False,
+            _expected_worker_config(
+                "celery",
+                worker_queue="app.workers",
+                worker_backend="redis",
+                worker_redis_service="valkey",
+                worker_redis_db=1,
+                worker_result_redis_service="valkey",
+                worker_result_redis_db=3,
+            ),
+        ),
+        (
+            "celery",
+            "kafka",
+            True,
+            False,
+            _expected_worker_config(
+                "celery",
+                worker_exp_mode=True,
+                worker_queue="app.workers",
+                worker_backend="kafka",
+                worker_result_redis_service="valkey",
+                worker_result_redis_db=3,
+            ),
+        ),
+        *[
+            (
+                "rq",
+                broker,
+                worker_exp_mode,
+                worker_exp_mode,
+                _expected_worker_config(
+                    "rq",
+                    worker_exp_mode=worker_exp_mode,
+                    scheduler=worker_exp_mode,
+                    worker_queue="app.workers",
+                    worker_backend="redis",
+                    worker_redis_service=(
+                        "redis-broker" if broker == "redis" else "valkey"
+                    ),
+                    worker_redis_db=2 if broker == "redis" else 1,
+                    worker_scheduler="rq-cron" if worker_exp_mode else None,
+                ),
+            )
+            for broker in ("none", "redis", "rabbitmq", "kafka")
+            for worker_exp_mode in (False, True)
+        ],
+        *[
+            (
+                "dramatiq",
+                broker,
+                worker_exp_mode,
+                worker_exp_mode,
+                _expected_worker_config(
+                    "dramatiq",
+                    worker_exp_mode=worker_exp_mode,
+                    scheduler=worker_exp_mode,
+                    worker_queue="app.workers",
+                    worker_backend=(
+                        "rabbitmq" if broker == "rabbitmq" else "redis"
+                    ),
+                    worker_redis_service=(
+                        None
+                        if broker == "rabbitmq"
+                        else "redis-broker" if broker == "redis" else "valkey"
+                    ),
+                    worker_redis_db=(
+                        None
+                        if broker == "rabbitmq"
+                        else 2 if broker == "redis" else 1
+                    ),
+                    worker_scheduler=(
+                        "apscheduler" if worker_exp_mode else None
+                    ),
+                ),
+            )
+            for broker in ("none", "redis", "rabbitmq", "kafka")
+            for worker_exp_mode in (False, True)
+        ],
+        *[
+            (
+                "huey",
+                broker,
+                False,
+                False,
+                _expected_worker_config(
+                    "huey",
+                    worker_queue="app.workers",
+                    worker_backend="redis",
+                    worker_redis_service=(
+                        "redis-broker" if broker == "redis" else "valkey"
+                    ),
+                    worker_redis_db=2 if broker == "redis" else 1,
+                ),
+            )
+            for broker in ("none", "redis", "rabbitmq", "kafka")
+        ],
+    ],
+)
+def test_resolve_worker_matrix(
+    worker, broker, worker_exp_mode, scheduler, expected
+):
+    """Worker resolution should follow the approved allocation matrix."""
+    assert (
+        create_config._resolve_worker(
+            worker,
+            broker,
+            worker_exp_mode,
+            scheduler,
+        )
+        == expected
+    )
+
+
+@pytest.mark.parametrize(
+    ("worker", "broker", "worker_exp_mode"),
+    [
+        *[
+            ("none", broker, True)
+            for broker in ("none", "redis", "rabbitmq", "kafka")
+        ],
+        ("celery", "none", True),
+        ("celery", "redis", True),
+        ("celery", "rabbitmq", True),
+        *[
+            ("huey", broker, True)
+            for broker in ("none", "redis", "rabbitmq", "kafka")
+        ],
+    ],
+)
+def test_resolve_worker_rejects_invalid_experimental_combinations(
+    worker, broker, worker_exp_mode
+):
+    """Experimental mode should only be enabled for supported combinations."""
+    with pytest.raises(ValueError, match="experimental mode"):
+        create_config._resolve_worker(worker, broker, worker_exp_mode)
+
+
+@pytest.mark.parametrize(
+    ("worker", "broker", "message"),
+    [
+        ("sidekiq", "none", "Unsupported worker 'sidekiq'"),
+        ("none", "nats", "Unsupported broker 'nats'"),
+    ],
+)
+def test_resolve_worker_rejects_unknown_choices(worker, broker, message):
+    """Unknown worker resolver choices should fail before template copying."""
+    with pytest.raises(ValueError, match=message):
+        create_config._resolve_worker(worker, broker)
+
+
+@pytest.mark.parametrize(
+    ("worker", "broker", "worker_exp_mode"),
+    [
+        ("celery", "none", False),
+        ("rq", "redis", False),
+        ("dramatiq", "rabbitmq", False),
+        ("huey", "none", False),
+        ("celery", "kafka", True),
+    ],
+)
+def test_resolve_worker_without_scheduler_disables_scheduler_logic(
+    worker, broker, worker_exp_mode
+):
+    """Workers should not configure periodic processing without opt-in."""
+    config = create_config._resolve_worker(
+        worker,
+        broker,
+        worker_exp_mode,
+        scheduler=False,
+    )
+
+    assert config["scheduler"] is False
+    assert config["worker_scheduler"] is None
+
+
+@pytest.mark.parametrize(
+    ("worker", "broker", "worker_exp_mode", "worker_scheduler"),
+    [
+        ("celery", "none", False, "celery-beat"),
+        ("rq", "redis", False, "rq-with-scheduler"),
+        ("rq", "none", True, "rq-cron"),
+        ("dramatiq", "rabbitmq", True, "apscheduler"),
+        ("huey", "none", False, "huey-consumer"),
+    ],
+)
+def test_resolve_worker_with_scheduler_enables_selected_scheduler_logic(
+    worker, broker, worker_exp_mode, worker_scheduler
+):
+    """Scheduler opt-in should select the worker-specific periodic runtime."""
+    config = create_config._resolve_worker(
+        worker,
+        broker,
+        worker_exp_mode,
+        scheduler=True,
+    )
+
+    assert config["scheduler"] is True
+    assert config["worker_scheduler"] == worker_scheduler
+
+
+@pytest.mark.parametrize("worker", ("rq", "dramatiq"))
+def test_resolve_worker_rejects_scheduler_experimental_mode_without_scheduler(
+    worker,
+):
+    """Scheduler-only experimental modes should require scheduler opt-in."""
+    with pytest.raises(ValueError, match="requires --scheduler"):
+        create_config._resolve_worker(
+            worker,
+            "none",
+            worker_exp_mode=True,
+            scheduler=False,
+        )
+
+
+def test_resolve_worker_rejects_scheduler_without_worker():
+    """Scheduler opt-in should not be accepted without a worker."""
+    with pytest.raises(ValueError, match="requires --worker"):
+        create_config._resolve_worker("none", "none", scheduler=True)
+
+
+def test_resolve_worker_rejects_dramatiq_scheduler_without_experimental_mode():
+    """Dramatiq scheduler support should stay explicitly experimental."""
+    with pytest.raises(ValueError, match="requires --worker-exp-mode"):
+        create_config._resolve_worker("dramatiq", "none", scheduler=True)
+
+
+@pytest.mark.parametrize(
+    ("worker", "broker", "scheduler", "worker_exp_mode"),
+    product(
+        create_config.WORKER_CHOICES,
+        create_config.BROKER_CHOICES,
+        (False, True),
+        (False, True),
+    ),
+)
+def test_resolve_worker_accepts_only_supported_option_combinations(
+    worker, broker, scheduler, worker_exp_mode
+):
+    """Every worker option combination should be explicitly accepted or rejected."""
+    valid = {
+        "none": not scheduler and not worker_exp_mode,
+        "celery": not worker_exp_mode or broker == "kafka",
+        "rq": scheduler or not worker_exp_mode,
+        "dramatiq": scheduler == worker_exp_mode,
+        "huey": not worker_exp_mode,
+    }[worker]
+
+    if valid:
+        config = create_config._resolve_worker(
+            worker,
+            broker,
+            worker_exp_mode,
+            scheduler,
+        )
+        assert config["worker"] == worker
+        assert config["scheduler"] is scheduler
+    else:
+        with pytest.raises(ValueError):
+            create_config._resolve_worker(
+                worker,
+                broker,
+                worker_exp_mode,
+                scheduler,
+            )
+
+
+def test_get_template_config_includes_resolved_worker_mapping():
+    """Template config should merge the resolved worker context."""
+    config = create_config._get_template_config(
+        "ddd",
+        "sqlalchemy",
+        "myproj",
+        "uv",
+        worker="celery",
+    )
+
+    assert {
+        key: config[key] for key in _expected_worker_config("celery")
+    } == _expected_worker_config(
+        "celery",
+        worker_queue="app.workers",
+        worker_backend="redis",
+        worker_redis_service="valkey",
+        worker_redis_db=1,
+        worker_result_redis_service="valkey",
+        worker_result_redis_db=3,
+    )
+
+
+def test_get_template_config_worker_defaults_to_none():
+    """Template config should preserve existing callers with no worker."""
+    config = create_config._get_template_config(
+        "ddd", "sqlalchemy", "myproj", "uv"
+    )
+
+    assert {
+        key: config[key] for key in _expected_worker_config("none")
+    } == _expected_worker_config("none")
 
 
 def test_nosql_choices_include_none_and_supported_values():
@@ -186,6 +587,149 @@ def test_copy_nosql_files_none_is_noop(tmp_path):
     create_filesystem._copy_nosql_files(destination, "ddd", (), {"nosql": ()})
 
     assert not destination.exists()
+
+
+def test_copy_worker_files_none_is_noop(tmp_path):
+    """The none worker should not create application files."""
+    destination = tmp_path / "generated"
+
+    create_filesystem._copy_worker_files(
+        destination, "ddd", "none", {"worker": "none"}
+    )
+
+    assert not destination.exists()
+
+
+def test_copy_worker_files_renders_selected_overlay(tmp_path, monkeypatch):
+    """The selected worker overlay should be copied and rendered."""
+    workers_dir = tmp_path / "workers"
+    config_dir = workers_dir / "ddd" / "celery" / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "worker.py.jinja2").write_text(
+        'QUEUE = "{{ worker_queue }}"\n'
+    )
+    destination = tmp_path / "generated"
+
+    monkeypatch.setattr(
+        create_filesystem, "WORKERS_DIR", workers_dir, raising=False
+    )
+
+    create_filesystem._copy_worker_files(
+        destination,
+        "ddd",
+        "celery",
+        {"worker": "celery", "worker_queue": "app.workers"},
+    )
+
+    generated = destination / "src" / "app" / "config" / "worker.py"
+    assert generated.read_text() == 'QUEUE = "app.workers"\n'
+    assert not list(destination.rglob("*.jinja2"))
+
+
+@pytest.mark.parametrize(
+    ("design", "backend", "selected_broker", "excluded_broker"),
+    [
+        ("ddd", "redis", "RedisBroker", "RabbitmqBroker"),
+        ("ddd", "rabbitmq", "RabbitmqBroker", "RedisBroker"),
+        ("mvc", "redis", "RedisBroker", "RabbitmqBroker"),
+        ("mvc", "rabbitmq", "RabbitmqBroker", "RedisBroker"),
+    ],
+)
+def test_copy_worker_files_renders_only_selected_dramatiq_broker(
+    tmp_path, design, backend, selected_broker, excluded_broker
+):
+    """Dramatiq overlays should not import an unused optional backend."""
+    destination = tmp_path / f"generated-{design}-{backend}"
+    context = {
+        "worker": "dramatiq",
+        "worker_queue": "app.workers",
+        "worker_backend": backend,
+        "worker_redis_service": "valkey",
+        "worker_redis_db": 1,
+    }
+
+    create_filesystem._copy_worker_files(
+        destination,
+        design,
+        "dramatiq",
+        context,
+    )
+
+    relative_broker = (
+        Path("infrastructure/worker/broker.py")
+        if design == "ddd"
+        else Path("worker/broker.py")
+    )
+    broker_content = (
+        destination / "src" / "app" / relative_broker
+    ).read_text()
+
+    assert f"import {selected_broker}" in broker_content
+    assert f"broker = {selected_broker}(" in broker_content
+    assert excluded_broker not in broker_content
+    assert "dramatiq.set_broker(broker)" in broker_content
+
+
+def test_copy_worker_files_raises_for_missing_overlay(tmp_path, monkeypatch):
+    """A selected worker without templates should fail with a clear error."""
+    workers_dir = tmp_path / "workers"
+    destination = tmp_path / "generated"
+
+    monkeypatch.setattr(
+        create_filesystem, "WORKERS_DIR", workers_dir, raising=False
+    )
+
+    with pytest.raises(FileNotFoundError) as exc_info:
+        create_filesystem._copy_worker_files(
+            destination, "ddd", "celery", {"worker": "celery"}
+        )
+
+    assert str(exc_info.value) == (
+        "Could not find worker template for 'ddd/celery'."
+    )
+
+
+@pytest.mark.parametrize("design", ("ddd", "mvc"))
+def test_copy_template_renders_selected_worker_settings(
+    tmp_path, monkeypatch, design
+):
+    """Worker arguments should reach overlays and root settings templates."""
+    workers_dir = tmp_path / "workers"
+    config_dir = workers_dir / design / "rq" / "config"
+    config_dir.mkdir(parents=True)
+    (config_dir / "worker.py.jinja2").write_text(
+        'WORKER = "{{ worker }}"\nEXPERIMENTAL = {{ worker_exp_mode }}\n'
+    )
+    destination = tmp_path / f"generated-{design}"
+
+    monkeypatch.setattr(
+        create_filesystem, "WORKERS_DIR", workers_dir, raising=False
+    )
+
+    create_filesystem.copy_template(
+        destination,
+        "sqlalchemy",
+        design,
+        "worker-project",
+        "uv",
+        "none",
+        "none",
+        "none",
+        "rq",
+        True,
+        True,
+    )
+
+    config_content = (
+        destination / "src" / "app" / "config" / "__init__.py"
+    ).read_text()
+    worker_content = (
+        destination / "src" / "app" / "config" / "worker.py"
+    ).read_text()
+
+    assert "from . import worker as _worker" in config_content
+    assert "worker: _worker.Settings = _worker.Settings()" in config_content
+    assert worker_content == 'WORKER = "rq"\nEXPERIMENTAL = True\n'
 
 
 def test_render_jinja2_in_tree(tmp_path):
